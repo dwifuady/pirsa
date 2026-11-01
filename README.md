@@ -161,11 +161,11 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
 - Source discovery queries every configured addon that declares a `stream`
   resource for the media type and id prefix, deduplicates URLs, and ranks 1080p
   HLS sources first. Provider request headers are forwarded as VLC media options.
-- **Autoplay** — Settings → Playback can keep the default **Ask** behavior,
-  autoplay the first available source, or autoplay the first source matching a
-  regular expression. The pattern is matched against quality, title, provider,
-  filename and URL; examples: `1080` or `1080|1440`. If nothing matches, the
-  picker opens.
+- **Autoplay** — Settings → Playback has a single **Start playing automatically**
+  switch, off by default. When on, choose a **Preferred quality**: Best
+  available, 4K, 1440p, 1080p, 720p or 480p. If that quality is unavailable,
+  Pirsa uses the best available source. With the switch off, every title opens
+  the source picker. No regex or advanced syntax.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
   fullscreen, **M** mute, **Esc** exits fullscreen or closes the source/subtitle
   panels. Enter activates a focused button. Arrow keys adjust volume when the

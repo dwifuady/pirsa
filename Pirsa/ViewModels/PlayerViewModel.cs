@@ -528,17 +528,6 @@ public sealed class PlaybackSource : ObservableObject
         }
     }
 
-    /// <summary>Text the autoplay pattern is matched against.</summary>
-    public string SearchText => string.Join(" ", new[]
-    {
-        QualityLabel,
-        Title,
-        SubtitleLine,
-        DetailsLine,
-        AddonName,
-        Url,
-    });
-
     public bool HasDetails => !string.IsNullOrWhiteSpace(DetailsLine);
 
     public static PlaybackSource? From(string addonName, StreamItem stream)

@@ -25,6 +25,16 @@ public sealed partial class SettingsPage : Page
     {
         base.OnNavigatedTo(e);
         await ViewModel.InitializeAsync();
+        QualityPanel.Visibility = ViewModel.AutoplayEnabled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void AutoplayToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        QualityPanel.Visibility = AutoplayToggle.IsOn
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private async void Add_Click(object sender, RoutedEventArgs e)

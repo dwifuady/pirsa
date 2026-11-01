@@ -1,15 +1,7 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Windows.Storage;
 
 namespace Pirsa.Services;
-
-public enum AutoplayMode
-{
-    Ask,
-    FirstAvailable,
-    Pattern,
-}
 
 /// <summary>
 /// Player preferences, persisted locally next to the addon list.
@@ -21,9 +13,11 @@ public sealed class AppSettings
     private bool _loaded;
     private string? _path;
 
-    public AutoplayMode AutoplayMode { get; set; } = AutoplayMode.Ask;
+    /// <summary>When false, the player always asks which source to use.</summary>
+    public bool Autoplay { get; set; }
 
-    public string AutoplayPattern { get; set; } = "";
+    /// <summary>Empty means "best available"; otherwise 4K, 1440p, 1080p, 720p or 480p.</summary>
+    public string PreferredQuality { get; set; } = "";
 
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
@@ -50,12 +44,8 @@ public sealed class AppSettings
 
                     if (record is not null)
                     {
-                        if (Enum.TryParse<AutoplayMode>(record.AutoplayMode, true, out var mode))
-                        {
-                            AutoplayMode = mode;
-                        }
-
-                        AutoplayPattern = record.AutoplayPattern ?? "";
+                        Autoplay = record.Autoplay;
+                        PreferredQuality = record.PreferredQuality ?? "";
                     }
                 }
             }
@@ -86,8 +76,8 @@ public sealed class AppSettings
 
             var record = new SettingsRecord
             {
-                AutoplayMode = AutoplayMode.ToString(),
-                AutoplayPattern = AutoplayPattern ?? "",
+                Autoplay = Autoplay,
+                PreferredQuality = PreferredQuality ?? "",
             };
 
             await File.WriteAllTextAsync(
@@ -102,52 +92,6 @@ public sealed class AppSettings
         finally
         {
             _saveGate.Release();
-        }
-    }
-
-    public bool MatchesPattern(string text)
-    {
-        if (string.IsNullOrWhiteSpace(AutoplayPattern) || string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        try
-        {
-            return Regex.IsMatch(
-                text,
-                AutoplayPattern,
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(250));
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return false;
-        }
-    }
-
-    public static bool TryValidatePattern(string? pattern, out string error)
-    {
-        if (string.IsNullOrWhiteSpace(pattern))
-        {
-            error = "Enter a pattern, for example 1080 or 1080|1440.";
-            return false;
-        }
-
-        try
-        {
-            _ = new Regex(pattern, RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(250));
-            error = "";
-            return true;
-        }
-        catch (ArgumentException exception)
-        {
-            error = $"Invalid pattern: {exception.Message}";
-            return false;
         }
     }
 
@@ -175,8 +119,8 @@ public sealed class AppSettings
 
     private sealed class SettingsRecord
     {
-        public string AutoplayMode { get; set; } = nameof(Services.AutoplayMode.Ask);
+        public bool Autoplay { get; set; }
 
-        public string AutoplayPattern { get; set; } = "";
+        public string PreferredQuality { get; set; } = "";
     }
 }

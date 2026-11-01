@@ -19,10 +19,9 @@ public partial class SettingsViewModel : ObservableObject
         _settings = settings;
         NewManifestUrl = "";
         ErrorMessage = "";
-        PatternError = "";
         _loadingSettings = true;
-        AutoplayIndex = 0;
-        AutoplayPattern = "";
+        AutoplayEnabled = false;
+        QualityIndex = 0;
         _loadingSettings = false;
         _registry.Entries.CollectionChanged += (_, _) => RaiseAddonInfo();
     }
@@ -41,19 +40,14 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial string ErrorMessage { get; set; }
 
-    /// <summary>0 = ask, 1 = first source, 2 = pattern.</summary>
     [ObservableProperty]
-    public partial int AutoplayIndex { get; set; }
+    public partial bool AutoplayEnabled { get; set; }
 
+    /// <summary>0 = best, 1 = 4K, 2 = 1440p, 3 = 1080p, 4 = 720p, 5 = 480p.</summary>
     [ObservableProperty]
-    public partial string AutoplayPattern { get; set; }
+    public partial int QualityIndex { get; set; }
 
-    [ObservableProperty]
-    public partial string PatternError { get; set; }
-
-    public bool IsPatternMode => AutoplayIndex == 2;
-
-    public bool HasPatternError => IsPatternMode && !string.IsNullOrWhiteSpace(PatternError);
+    public static readonly string[] QualityCodes = ["", "4K", "1440p", "1080p", "720p", "480p"];
 
     public bool IsEmpty => Addons.Count == 0;
 
@@ -75,15 +69,10 @@ public partial class SettingsViewModel : ObservableObject
             await _settings.EnsureLoadedAsync(cancellationToken);
 
             _loadingSettings = true;
-            AutoplayIndex = _settings.AutoplayMode switch
-            {
-                AutoplayMode.FirstAvailable => 1,
-                AutoplayMode.Pattern => 2,
-                _ => 0,
-            };
-            AutoplayPattern = _settings.AutoplayPattern;
+            AutoplayEnabled = _settings.Autoplay;
+            var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
+            QualityIndex = qualityIndex < 0 ? 0 : qualityIndex;
             _loadingSettings = false;
-            ValidatePattern();
 
             await _registry.LoadManifestsAsync(cancellationToken);
         }
@@ -170,52 +159,24 @@ public partial class SettingsViewModel : ObservableObject
         RaiseAddonInfo();
     }
 
-    partial void OnAutoplayIndexChanged(int value)
-    {
-        OnPropertyChanged(nameof(IsPatternMode));
-        OnPropertyChanged(nameof(HasPatternError));
-
-        if (!_loadingSettings)
-        {
-            _settings.AutoplayMode = value switch
-            {
-                1 => AutoplayMode.FirstAvailable,
-                2 => AutoplayMode.Pattern,
-                _ => AutoplayMode.Ask,
-            };
-            _ = _settings.SaveAsync();
-        }
-
-        ValidatePattern();
-    }
-
-    partial void OnAutoplayPatternChanged(string value)
+    partial void OnAutoplayEnabledChanged(bool value)
     {
         if (!_loadingSettings)
         {
-            _settings.AutoplayPattern = value ?? "";
+            _settings.Autoplay = value;
             _ = _settings.SaveAsync();
         }
-
-        ValidatePattern();
     }
 
-    private void ValidatePattern()
+    partial void OnQualityIndexChanged(int value)
     {
-        if (!IsPatternMode)
+        if (!_loadingSettings)
         {
-            PatternError = "";
+            _settings.PreferredQuality = value >= 0 && value < QualityCodes.Length
+                ? QualityCodes[value]
+                : "";
+            _ = _settings.SaveAsync();
         }
-        else if (!AppSettings.TryValidatePattern(AutoplayPattern, out var error))
-        {
-            PatternError = error;
-        }
-        else
-        {
-            PatternError = "";
-        }
-
-        OnPropertyChanged(nameof(HasPatternError));
     }
 
     private void SetError(string message)

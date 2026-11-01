@@ -310,14 +310,23 @@ public sealed partial class PlayerPage : Page
         OpenSources();
     }
 
-    private PlaybackSource? SelectAutoplaySource() =>
-        App.Settings.AutoplayMode switch
+    private PlaybackSource? SelectAutoplaySource()
+    {
+        if (!App.Settings.Autoplay)
         {
-            AutoplayMode.FirstAvailable => ViewModel.Sources.FirstOrDefault(),
-            AutoplayMode.Pattern => ViewModel.Sources.FirstOrDefault(
-                source => App.Settings.MatchesPattern(source.SearchText)),
-            _ => null,
-        };
+            return null;
+        }
+
+        var preferred = App.Settings.PreferredQuality;
+        if (string.IsNullOrWhiteSpace(preferred))
+        {
+            return ViewModel.Sources.FirstOrDefault();
+        }
+
+        return ViewModel.Sources.FirstOrDefault(
+                   source => source.QualityLabel.Equals(preferred, StringComparison.OrdinalIgnoreCase))
+               ?? ViewModel.Sources.FirstOrDefault();
+    }
 
     private void TryStartPlayback()
     {

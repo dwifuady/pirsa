@@ -323,34 +323,41 @@
                         BorderThickness="1"
                         CornerRadius="12">
                         <StackPanel Spacing="12">
-                            <TextBlock
-                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                Text="When a video opens" />
-
-                            <RadioButtons SelectedIndex="{x:Bind ViewModel.AutoplayIndex, Mode=TwoWay}">
-                                <x:String>Ask — show the source picker</x:String>
-                                <x:String>Autoplay the first available source</x:String>
-                                <x:String>Autoplay the first source matching a pattern</x:String>
-                            </RadioButtons>
-
-                            <TextBox
-                                Header="Source pattern"
-                                PlaceholderText="1080|1440"
-                                IsEnabled="{x:Bind ViewModel.IsPatternMode, Mode=OneWay}"
-                                Text="{x:Bind ViewModel.AutoplayPattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <ToggleSwitch
+                                x:Name="AutoplayToggle"
+                                Header="Start playing automatically"
+                                IsOn="{x:Bind ViewModel.AutoplayEnabled, Mode=TwoWay}"
+                                OffContent="Off"
+                                OnContent="On"
+                                Toggled="AutoplayToggle_Toggled" />
 
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="A regular expression matched against quality, title, provider, filename and URL. Examples: 1080 or 1080|1440."
+                                Text="When this is off, Pirsa shows the source picker every time."
                                 TextWrapping="Wrap" />
 
-                            <InfoBar
-                                Title="Pattern problem"
-                                IsClosable="False"
-                                IsOpen="{x:Bind ViewModel.HasPatternError, Mode=OneWay}"
-                                Message="{x:Bind ViewModel.PatternError, Mode=OneWay}"
-                                Severity="Warning" />
+                            <StackPanel
+                                x:Name="QualityPanel"
+                                Spacing="8"
+                                Visibility="Collapsed">
+                                <ComboBox
+                                    Header="Preferred quality"
+                                    SelectedIndex="{x:Bind ViewModel.QualityIndex, Mode=TwoWay}">
+                                    <ComboBoxItem Content="Best available" />
+                                    <ComboBoxItem Content="4K" />
+                                    <ComboBoxItem Content="1440p" />
+                                    <ComboBoxItem Content="1080p" />
+                                    <ComboBoxItem Content="720p" />
+                                    <ComboBoxItem Content="480p" />
+                                </ComboBox>
+
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="If the preferred quality isn't available, Pirsa uses the best available source."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
