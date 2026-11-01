@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.Services;
 
@@ -20,9 +21,22 @@ public partial class PlayerViewModel : ObservableObject
         _registry = registry;
         ErrorMessage = "";
         StatusText = "";
+        SubtitleStatus = "";
+
+        OffSubtitle = new SubtitleChoice(
+            "Off",
+            "No subtitles",
+            null,
+            "",
+            isOff: true);
+        Subtitles.Add(OffSubtitle);
     }
 
     public ObservableCollection<PlaybackSource> Sources { get; } = [];
+
+    public ObservableCollection<SubtitleChoice> Subtitles { get; } = [];
+
+    public SubtitleChoice OffSubtitle { get; }
 
     [ObservableProperty]
     public partial PlaybackRequest? Request { get; set; }
@@ -41,6 +55,17 @@ public partial class PlayerViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string StatusText { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsLoadingSubtitles { get; set; }
+
+    [ObservableProperty]
+    public partial string SubtitleStatus { get; set; }
+
+    [ObservableProperty]
+    public partial SubtitleChoice? SelectedSubtitle { get; set; }
+
+    public bool HasSubtitles => Subtitles.Count > 1;
 
     public string Title => Request?.Title ?? "";
 
@@ -148,6 +173,104 @@ public partial class PlayerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Queries every configured addon for subtitle tracks and groups the
+    /// results by language. One representative track per language keeps the
+    /// picker short; Off is always the first row.
+    /// </summary>
+    public async Task LoadSubtitlesAsync(
+        PlaybackRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        IsLoadingSubtitles = true;
+        SubtitleStatus = "Loading subtitles…";
+        OnPropertyChanged(nameof(HasSubtitles));
+
+        try
+        {
+            await _registry.EnsureLoadedAsync(cancellationToken);
+
+            var found = new List<(SubtitleItem Item, string AddonName)>();
+
+            foreach (var entry in _registry.Entries)
+            {
+                try
+                {
+                    var tracks = await entry.Client.GetSubtitlesAsync(
+                        request.Type,
+                        request.VideoId,
+                        cancellationToken);
+
+                    foreach (var track in tracks.Where(track => track.HasUrl))
+                    {
+                        found.Add((track, entry.Name));
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // One subtitle addon failing must not hide the others.
+                }
+            }
+
+            var languages = found
+                .GroupBy(item => NormalizeLanguage(item.Item.Lang))
+                .Select(group =>
+                {
+                    var first = group.First();
+                    var count = group.Count();
+                    var name = SubtitleLanguages.DisplayName(group.Key);
+                    var detail = count > 1
+                        ? $"{count} versions · {first.AddonName}"
+                        : first.AddonName;
+
+                    return new SubtitleChoice(
+                        name,
+                        detail,
+                        first.Item.Url,
+                        group.Key,
+                        count: count);
+                })
+                .OrderByDescending(choice => choice.Count)
+                .ThenBy(choice => choice.LanguageName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            Subtitles.Clear();
+            Subtitles.Add(OffSubtitle);
+            foreach (var choice in languages)
+            {
+                Subtitles.Add(choice);
+            }
+
+                SelectedSubtitle = OffSubtitle;
+            OnPropertyChanged(nameof(HasSubtitles));
+
+            SubtitleStatus = HasSubtitles ? "" : "No subtitles found";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            SubtitleStatus = "Couldn't load subtitles";
+        }
+        finally
+        {
+            IsLoadingSubtitles = false;
+        }
+    }
+
+    public void SelectSubtitle(SubtitleChoice choice)
+    {
+        SelectedSubtitle = choice;
+    }
+
+    private static string NormalizeLanguage(string? lang) =>
+        string.IsNullOrWhiteSpace(lang) ? "unknown" : lang.Trim().ToLowerInvariant();
+
     private static async Task<AddonFetchResult> FetchSourcesAsync(
         StremioAddonClient addon,
         PlaybackRequest request,
@@ -192,6 +315,43 @@ public partial class PlayerViewModel : ObservableObject
         string AddonName,
         string? Error,
         List<PlaybackSource> Sources);
+}
+
+/// <summary>
+/// One row in the subtitle picker: either the Off choice or the best track for
+/// a language. <see cref="IsSelected"/> drives the check mark in the list.
+/// </summary>
+public sealed partial class SubtitleChoice : ObservableObject
+{
+    public SubtitleChoice(
+        string languageName,
+        string detail,
+        string? url,
+        string languageCode,
+        bool isOff = false,
+        int count = 0)
+    {
+        LanguageName = languageName;
+        Detail = detail;
+        Url = url;
+        LanguageCode = languageCode;
+        IsOff = isOff;
+        Count = count;
+    }
+
+    public string LanguageName { get; }
+
+    public string Detail { get; }
+
+    public string? Url { get; }
+
+    public string LanguageCode { get; }
+
+    public bool IsOff { get; }
+
+    public int Count { get; }
+
+    public override string ToString() => LanguageName;
 }
 
 /// <summary>

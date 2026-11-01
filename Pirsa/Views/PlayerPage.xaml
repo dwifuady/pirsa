@@ -21,6 +21,28 @@
     </Page.KeyboardAccelerators>
 
     <Page.Resources>
+        <Style x:Key="SubtitleListItemStyle" TargetType="ListViewItem">
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <DataTemplate x:Key="SubtitleChoiceTemplate" x:DataType="vm:SubtitleChoice">
+            <StackPanel Spacing="1">
+                <TextBlock
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource PlayerForegroundBrush}"
+                    Text="{x:Bind LanguageName}" />
+                <TextBlock
+                    FontSize="11"
+                    Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                    Text="{x:Bind Detail}"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </DataTemplate>
+
+
         <DataTemplate x:Key="SourceItemTemplate" x:DataType="vm:PlaybackSource">
             <Grid Padding="2" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
@@ -286,6 +308,37 @@
                                 TextAlignment="Right"
                                 Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
                                 Text="0:00 / 0:00" />
+                            <Button
+                                x:Name="SubtitlesButton"
+                                AutomationProperties.Name="Subtitles"
+                                Style="{StaticResource PlayerIconButtonStyle}"
+                                ToolTipService.ToolTip="Subtitles">
+                                <Button.Flyout>
+                                    <Flyout x:Name="SubtitlesFlyout" Opened="SubtitlesFlyout_Opened" Closed="SubtitlesFlyout_Closed" Placement="TopEdgeAlignedRight">
+                                        <Border Width="320" Padding="14" Background="{ThemeResource PlayerPanelBackgroundBrush}" CornerRadius="12" RequestedTheme="Dark">
+                                            <StackPanel Spacing="8">
+                                            <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource PlayerForegroundBrush}" Text="Subtitles" />
+                                            <StackPanel x:Name="SubtitleStatusPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                                                <ProgressRing x:Name="SubtitleLoadingRing" Width="14" Height="14" VerticalAlignment="Center" IsActive="False" Visibility="Collapsed" />
+                                                <TextBlock x:Name="SubtitleStatusText" VerticalAlignment="Center" FontSize="12" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <ListView
+                                                x:Name="SubtitleList"
+                                                MaxHeight="360"
+                                                ItemContainerStyle="{StaticResource SubtitleListItemStyle}"
+                                                ItemTemplate="{StaticResource SubtitleChoiceTemplate}"
+                                                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                SelectionChanged="SubtitleList_SelectionChanged"
+                                                SelectionMode="Single" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Flyout>
+                                </Button.Flyout>
+                                <Grid>
+                                    <TextBlock Text="CC" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Ellipse x:Name="SubtitleActiveDot" Width="5" Height="5" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Fill="{ThemeResource BrandPrimaryBrush}" />
+                                </Grid>
+                            </Button>
                             <Button
                                 x:Name="SpeedButton"
                                 AutomationProperties.Name="Playback speed"

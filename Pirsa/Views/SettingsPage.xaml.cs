@@ -76,8 +76,8 @@ public sealed partial class SettingsPage : Page
         {
             XamlRoot = XamlRoot,
             Title = "Restore default addon?",
-            Content = "This removes your configured addons and restores Cinemeta. You can add the others again later.",
-            PrimaryButtonText = "Restore Cinemeta",
+            Content = "This removes your configured addons and restores Cinemeta and OpenSubtitles v3. You can add the others again later.",
+            PrimaryButtonText = "Restore defaults",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
         };

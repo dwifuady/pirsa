@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Models;
 using Pirsa.Services;
 using Pirsa.ViewModels;
+using Windows.Storage;
 
 namespace Pirsa.Views;
 
@@ -22,6 +23,7 @@ public sealed partial class PlayerPage : Page
 {
     private static readonly object CoreLock = new();
     private static bool _coreReady;
+    private static readonly HttpClient SubtitleHttp = CreateSubtitleHttpClient();
 
     private readonly PlayerViewModel _viewModel = new(App.Addons);
     private readonly DispatcherTimer _chromeTimer;
@@ -30,8 +32,12 @@ public sealed partial class PlayerPage : Page
     private MediaPlayer? _mediaPlayer;
     private Media? _media;
     private CancellationTokenSource? _sourceCts;
+    private CancellationTokenSource? _subtitleCts;
     private PlaybackSource? _pendingSource;
     private PlaybackSource? _currentSource;
+    private SubtitleChoice? _selectedSubtitle;
+    private string? _selectedSubtitlePath;
+    private string? _subtitleDirectory;
 
     private bool _disposed;
     private bool _vlcReady;
@@ -40,6 +46,9 @@ public sealed partial class PlayerPage : Page
     private bool _switching;
     private bool _errorVisible;
     private bool _sourcePanelOpen;
+    private bool _subtitlesFlyoutOpen;
+    private bool _subtitleApplied;
+    private bool _suppressSubtitleSelection;
     private bool _draggingSeek;
     private bool _suppressSeek;
     private bool _suppressVolume;
@@ -87,7 +96,9 @@ public sealed partial class PlayerPage : Page
         }
 
         ViewModel.Request = request;
+        _selectedSubtitle = ViewModel.OffSubtitle;
         _ = LoadSourcesAsync(request);
+        _ = LoadSubtitlesAsync(request);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -185,6 +196,47 @@ public sealed partial class PlayerPage : Page
         _mediaPlayer.Buffering -= MediaPlayer_Buffering;
     }
 
+    private async Task LoadSubtitlesAsync(PlaybackRequest request)
+    {
+        _subtitleCts?.Cancel();
+        _subtitleCts?.Dispose();
+        _subtitleCts = new CancellationTokenSource();
+
+        try
+        {
+            await ViewModel.LoadSubtitlesAsync(request, _subtitleCts.Token);
+            if (SubtitlesFlyout.IsOpen)
+            {
+                RefreshSubtitleFlyout();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void RefreshSubtitleFlyout()
+    {
+        SubtitleList.ItemsSource ??= ViewModel.Subtitles;
+
+        var status = ViewModel.SubtitleStatus;
+        SubtitleStatusText.Text = status;
+        SubtitleStatusPanel.Visibility = string.IsNullOrWhiteSpace(status)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        SubtitleLoadingRing.IsActive = ViewModel.IsLoadingSubtitles;
+        SubtitleLoadingRing.Visibility = ViewModel.IsLoadingSubtitles
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (_selectedSubtitle is not null && SubtitleList.SelectedItem is null)
+        {
+            _suppressSubtitleSelection = true;
+            SubtitleList.SelectedItem = _selectedSubtitle;
+            _suppressSubtitleSelection = false;
+        }
+    }
+
     // ------------------------------------------------------------- source loading
 
     private async Task LoadSourcesAsync(PlaybackRequest request)
@@ -272,6 +324,7 @@ public sealed partial class PlayerPage : Page
             ApplyRequestHeaders(media, source.Headers);
             _media = media;
             _currentSource = source;
+            _subtitleApplied = false;
 
             foreach (var candidate in ViewModel.Sources)
             {
@@ -389,6 +442,13 @@ public sealed partial class PlayerPage : Page
         }
 
         _resumeMs = 0;
+
+        if (!_subtitleApplied &&
+            _selectedSubtitle is { IsOff: false } &&
+            !string.IsNullOrWhiteSpace(_selectedSubtitlePath))
+        {
+            ApplyLocalSubtitle(_selectedSubtitlePath);
+        }
     }
 
     private void HandlePaused()
@@ -666,7 +726,7 @@ public sealed partial class PlayerPage : Page
 
     private void HideChrome()
     {
-        if (!_playing || _sourcePanelOpen || _errorVisible || _ended || _draggingSeek)
+        if (!_playing || _sourcePanelOpen || _subtitlesFlyoutOpen || _errorVisible || _ended || _draggingSeek)
         {
             return;
         }
@@ -686,7 +746,7 @@ public sealed partial class PlayerPage : Page
 
     private void StartChromeTimer()
     {
-        if (_chromeHidden || !_playing || _sourcePanelOpen || _errorVisible)
+        if (_chromeHidden || !_playing || _sourcePanelOpen || _subtitlesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -803,6 +863,187 @@ public sealed partial class PlayerPage : Page
         }
 
         PlaySource(source);
+    }
+
+    private void SubtitlesFlyout_Opened(object? sender, object e)
+    {
+        _subtitlesFlyoutOpen = true;
+        _chromeTimer.Stop();
+        ShowChrome();
+
+        RefreshSubtitleFlyout();
+        _suppressSubtitleSelection = true;
+        SubtitleList.SelectedItem = _selectedSubtitle ?? ViewModel.OffSubtitle;
+        _suppressSubtitleSelection = false;
+    }
+
+    private void SubtitlesFlyout_Closed(object? sender, object e)
+    {
+        _subtitlesFlyoutOpen = false;
+        ShowChrome();
+        if (_playing)
+        {
+            StartChromeTimer();
+        }
+    }
+
+    private async void SubtitleList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressSubtitleSelection ||
+            SubtitleList.SelectedItem is not SubtitleChoice choice)
+        {
+            return;
+        }
+
+        var previous = _selectedSubtitle;
+        ViewModel.SelectSubtitle(choice);
+
+        if (await ApplySelectedSubtitleAsync(choice))
+        {
+            SubtitlesFlyout.Hide();
+            return;
+        }
+
+        var restore = previous ?? ViewModel.OffSubtitle;
+        _selectedSubtitle = restore;
+        ViewModel.SelectSubtitle(restore);
+        SubtitleActiveDot.Visibility = restore.IsOff ? Visibility.Collapsed : Visibility.Visible;
+        RefreshSubtitleFlyout();
+        _suppressSubtitleSelection = true;
+        SubtitleList.SelectedItem = restore;
+        _suppressSubtitleSelection = false;
+    }
+
+    private async Task<bool> ApplySelectedSubtitleAsync(SubtitleChoice choice)
+    {
+        _selectedSubtitle = choice;
+        SubtitleActiveDot.Visibility = choice.IsOff ? Visibility.Collapsed : Visibility.Visible;
+
+        if (choice.IsOff)
+        {
+            _selectedSubtitlePath = null;
+            _mediaPlayer?.SetSpu(-1);
+            _subtitleApplied = true;
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(choice.Url))
+        {
+            ViewModel.SubtitleStatus = "That subtitle has no download link.";
+            return false;
+        }
+
+        ViewModel.SubtitleStatus = $"Loading {choice.LanguageName} subtitles…";
+        RefreshSubtitleFlyout();
+
+        var path = await DownloadSubtitleAsync(choice.Url);
+        if (_disposed)
+        {
+            return false;
+        }
+
+        if (path is null)
+        {
+            ViewModel.SubtitleStatus = "Couldn't download that subtitle.";
+            return false;
+        }
+
+        _selectedSubtitlePath = path;
+        ViewModel.SubtitleStatus = "";
+        return ApplyLocalSubtitle(path);
+    }
+
+    /// <summary>
+    /// VLC 3.0.24's GnuTLS plugin can crash when remote subtitle downloads
+    /// overlap with stream TLS sessions. Download the .srt with .NET instead
+    /// and hand VLC a local file, which also avoids extension sniffing issues.
+    /// </summary>
+    private async Task<string?> DownloadSubtitleAsync(string url)
+    {
+        try
+        {
+            using var response = await SubtitleHttp.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            if (bytes.Length == 0)
+            {
+                return null;
+            }
+
+            var directory = EnsureSubtitleDirectory();
+
+            var extension = Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant();
+            if (extension is not (".srt" or ".vtt" or ".ass" or ".ssa" or ".sub"))
+            {
+                extension = ".srt";
+            }
+
+            var path = Path.Combine(directory, $"{Guid.NewGuid():N}{extension}");
+            await File.WriteAllBytesAsync(path, bytes);
+            return path;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string EnsureSubtitleDirectory()
+    {
+        if (_subtitleDirectory is null)
+        {
+            _subtitleDirectory = Path.Combine(
+                ApplicationData.Current.TemporaryFolder.Path,
+                "PirsaSubtitles",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_subtitleDirectory);
+        }
+
+        return _subtitleDirectory;
+    }
+
+    private bool ApplyLocalSubtitle(string path)
+    {
+        if (_mediaPlayer is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            if (!_mediaPlayer.AddSlave(MediaSlaveType.Subtitle, new Uri(path).AbsoluteUri, true))
+            {
+                ViewModel.SubtitleStatus = "Couldn't load that subtitle.";
+                return false;
+            }
+
+            _subtitleApplied = true;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            ViewModel.SubtitleStatus = $"Couldn't load that subtitle. {exception.Message}";
+            return false;
+        }
+    }
+
+    private static HttpClient CreateSubtitleHttpClient()
+    {
+        var handler = new HttpClientHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+        };
+
+        var client = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(20),
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Pirsa/1.0");
+        return client;
     }
 
     private void NextSource_Click(object sender, RoutedEventArgs e)
@@ -980,6 +1221,22 @@ public sealed partial class PlayerPage : Page
         _sourceCts?.Cancel();
         _sourceCts?.Dispose();
         _sourceCts = null;
+        _subtitleCts?.Cancel();
+        _subtitleCts?.Dispose();
+        _subtitleCts = null;
+
+        if (_subtitleDirectory is not null)
+        {
+            try
+            {
+                Directory.Delete(_subtitleDirectory, recursive: true);
+            }
+            catch
+            {
+            }
+
+            _subtitleDirectory = null;
+        }
 
         UnhookMediaPlayer();
 

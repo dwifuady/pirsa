@@ -42,6 +42,8 @@ public sealed class AddonManifest
 
     public bool SupportsStream(string type, string id) => SupportsResource("stream", type, id);
 
+    public bool SupportsSubtitles(string type, string id) => SupportsResource("subtitles", type, id);
+
     /// <summary>
     /// Resources may be declared as plain strings or as objects that scope the
     /// resource to certain media types and id prefixes (PenguPlay does the latter).
@@ -303,6 +305,36 @@ public sealed class StreamProxyHeaders
 {
     [JsonPropertyName("request")]
     public Dictionary<string, string>? Request { get; set; }
+}
+
+internal sealed class SubtitleResponse
+{
+    [JsonPropertyName("subtitles")]
+    public List<SubtitleItem> Subtitles { get; set; } = [];
+}
+
+/// <summary>One subtitle track advertised by an addon.</summary>
+public sealed class SubtitleItem
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    [JsonPropertyName("lang")]
+    public string? Lang { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("subtitleFileName")]
+    public string? FileName { get; set; }
+
+    [JsonIgnore]
+    public bool HasUrl =>
+        Uri.TryCreate(Url, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
 }
 
 /// <summary>

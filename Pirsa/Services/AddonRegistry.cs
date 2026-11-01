@@ -49,7 +49,7 @@ public sealed partial class AddonEntry : ObservableObject
 
     public bool HasError => !string.IsNullOrWhiteSpace(LoadError);
 
-    public bool IsDefault => AddonRegistry.UrlEquals(ManifestUrl, AddonRegistry.DefaultManifestUrl);
+    public bool IsDefault => AddonRegistry.IsDefaultUrl(ManifestUrl);
 
     public bool HasCatalogs => Manifest?.Catalogs is { Count: > 0 };
 
@@ -171,6 +171,15 @@ public sealed class AddonRegistry
 {
     public const string DefaultManifestUrl = "https://v3-cinemeta.strem.io/manifest.json";
 
+    public const string SubtitleManifestUrl =
+        "https://opensubtitles-v3.strem.io/manifest.json";
+
+    private static readonly string[] DefaultManifestUrls =
+    [
+        DefaultManifestUrl,
+        SubtitleManifestUrl,
+    ];
+
     private readonly object _gate = new();
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private Task? _loadTask;
@@ -261,15 +270,23 @@ public sealed class AddonRegistry
         await EnsureLoadedAsync(cancellationToken);
 
         Entries.Clear();
-        var entry = new AddonEntry(DefaultManifestUrl);
-        await entry.LoadManifestAsync(cancellationToken);
-        Entries.Add(entry);
+
+        foreach (var manifestUrl in DefaultManifestUrls)
+        {
+            var entry = new AddonEntry(manifestUrl);
+            await entry.LoadManifestAsync(cancellationToken);
+            Entries.Add(entry);
+        }
+
         Revision++;
         await SaveAsync(cancellationToken);
     }
 
     public static bool UrlEquals(string left, string right) =>
         left.TrimEnd('/').Equals(right.TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsDefaultUrl(string manifestUrl) =>
+        DefaultManifestUrls.Any(url => UrlEquals(url, manifestUrl));
 
     private async Task LoadCoreAsync()
     {
@@ -286,13 +303,13 @@ public sealed class AddonRegistry
             }
             else
             {
-                urls = [DefaultManifestUrl];
+                urls = [.. DefaultManifestUrls];
                 shouldSave = true;
             }
         }
         catch
         {
-            urls = [DefaultManifestUrl];
+            urls = [.. DefaultManifestUrls];
             shouldSave = true;
         }
 

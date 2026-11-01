@@ -332,7 +332,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="Video engine: libVLC 3.0.24 (LGPL-2.1). Metadata defaults to Cinemeta."
+                                Text="Video engine: libVLC 3.0.24 (LGPL-2.1). Defaults: Cinemeta + OpenSubtitles v3."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>

@@ -10,7 +10,7 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
 ## What it does
 
 - **Store-style shell** — a collapsible left navigation pane with **Home** and
-  **Settings**, plus a custom title bar and Mica chrome.
+  **Settings**, a title-bar hamburger, and Mica chrome.
 - **Home** — a Top 10 hero carousel (movie/top when available) followed by every
   catalog exposed by the user's configured addons, with the source addon shown
   on each rail.
@@ -24,16 +24,18 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
   locally and can be restored to the default at any time.
 - **Native player** — LibVLCSharp + libvlc in a WinUI SwapChainPanel, with a
   custom Windows 11-style chrome: seek bar, 10-second skips, volume, speed,
-  fullscreen, auto-hiding controls, and a source picker.
+  fullscreen, auto-hiding controls, a source picker, and a **CC subtitle
+  picker**.
 - **Playback sources** — every configured addon that declares a `stream`
   resource is queried in parallel; sources are ranked for a sensible default
   (1080p HLS first), with headers from `behaviorHints.proxyHeaders` forwarded to
   VLC when needed.
 
-The default metadata addon is Cinemeta:
+A fresh install includes two addons:
 
 ```
-https://v3-cinemeta.strem.io/manifest.json
+Cinemeta          https://v3-cinemeta.strem.io/manifest.json
+OpenSubtitles v3  https://opensubtitles-v3.strem.io/manifest.json
 ```
 
 Catalogs and streams from any configured addon are picked up automatically.
@@ -90,6 +92,21 @@ Configuration lives in the app's local data:
 If a manifest URL contains a token, treat it like a password: it is only stored
 on this machine, and you should rotate it if it is ever exposed.
 
+## Subtitles
+
+- The **CC** button in the player opens a simple description-list: **Off** at
+  the top, then one row per language. Languages are grouped across all subtitle
+  addons, sorted by how many tracks are available, with the addon name shown
+  underneath. Selecting a language downloads the best track and closes the
+  list; **Off** disables subtitles immediately.
+- The current subtitle stays selected across source switches.
+- Subtitle files are downloaded with .NET first and handed to VLC as local
+  files. This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote
+  subtitle downloads overlap with stream TLS sessions.
+- Adding another subtitle addon in Settings automatically adds its languages to
+  the same picker.
+- Embedded subtitle tracks are not listed yet; only addon-provided tracks.
+
 ## Choosing the hero catalog
 
 The hero source is intentionally a constant for this version. It looks for
@@ -110,6 +127,7 @@ Pirsa/
   Services/StremioAddonClient.cs  Stremio addon HTTP client
   Services/AddonRegistry.cs       persisted addon list, manifest loading, add/remove
   Services/VideoEngine.cs         background libvlc warm-up
+  Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   ViewModels/HomeViewModel.cs     hero + rails across addons
   ViewModels/DetailsViewModel.cs  meta routing, facts, seasons, episodes
   ViewModels/PlayerViewModel.cs   stream discovery, ranking, dedupe
@@ -148,7 +166,7 @@ licensed LGPL-2.1; review your distribution obligations if you publish it.
 
 ## Limitations (initial version)
 
-- No subtitle-track UI yet (the addon `subtitles` resource is not wired).
+- Embedded subtitle tracks are not exposed in the CC list; only addon tracks.
 - No audio-track picker, episode auto-advance, or watch progress.
 - No addon enable/disable toggle; addons are either configured or removed.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only

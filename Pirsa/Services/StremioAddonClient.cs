@@ -134,6 +134,28 @@ public sealed class StremioAddonClient
         return response?.Streams ?? [];
     }
 
+    /// <summary>
+    /// Fetches subtitle tracks for a movie or episode id. Subtitle addons such
+    /// as OpenSubtitles v3 return { subtitles: [{ id, url, lang }] }.
+    /// </summary>
+    public async Task<IReadOnlyList<SubtitleItem>> GetSubtitlesAsync(
+        string type,
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        var manifest = await GetManifestAsync(cancellationToken);
+        if (!manifest.SupportsSubtitles(type, id))
+        {
+            return [];
+        }
+
+        var url = new Uri(BaseUri,
+            $"subtitles/{Uri.EscapeDataString(type)}/{Uri.EscapeDataString(id)}.json");
+
+        var response = await GetJsonAsync<SubtitleResponse>(url, cancellationToken);
+        return response?.Subtitles ?? [];
+    }
+
     /// <summary>Fetches full details (episodes, cast, artwork) for one item.</summary>
     public async Task<MetaItem> GetMetaAsync(
         string type,
