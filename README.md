@@ -19,9 +19,9 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
   the catalog item. Posters animate into the details hero with a native
   connected animation.
 - **Settings → Addons** — add and remove Stremio addon manifest URLs. A fresh
-  install contains **only Cinemeta**; the app is fully usable without any stream
-  addon, and stream sources appear as soon as one is added. Addons are persisted
-  locally and can be restored to the default at any time.
+  install contains **Cinemeta and OpenSubtitles v3**; the app is fully usable
+  without any stream addon, and stream sources appear as soon as one is added.
+  Addons are persisted locally and can be restored to the defaults at any time.
 - **Native player** — LibVLCSharp + libvlc in a WinUI SwapChainPanel, with a
   custom Windows 11-style chrome: seek bar, 10-second skips, volume, speed,
   fullscreen, auto-hiding controls, a source picker, and a **CC subtitle
@@ -75,11 +75,12 @@ https://v3-cinemeta.strem.io/manifest.json
 
 - Catalog resources appear on Home on the next visit.
 - Stream resources are used by the player.
+- Subtitles resources feed the CC picker in the player.
 - Each card shows the addon name, version, capabilities, types and host. The
   full manifest URL (which may contain a private token) is stored locally in
   `addons.json` and is deliberately not rendered in the UI.
 - **Remove addon** asks for confirmation. **Restore default** removes custom
-  addons and puts Cinemeta back.
+  addons and restores Cinemeta and OpenSubtitles v3.
 - Changing the list bumps the registry revision; Home reloads when you return
   to it.
 
