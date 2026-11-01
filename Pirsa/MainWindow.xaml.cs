@@ -59,12 +59,14 @@ public sealed partial class MainWindow : Window
         if (args.IsSettingsInvoked)
         {
             NavigateSection(typeof(SettingsPage));
+            NavView.IsPaneOpen = false;
             return;
         }
 
         if (ReferenceEquals(args.InvokedItemContainer, HomeNavItem))
         {
             NavigateSection(typeof(HomePage));
+            NavView.IsPaneOpen = false;
         }
     }
 

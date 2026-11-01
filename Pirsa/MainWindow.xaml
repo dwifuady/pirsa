@@ -35,11 +35,12 @@
             AlwaysShowHeader="False"
             CompactPaneLength="52"
             IsBackButtonVisible="Collapsed"
+            IsPaneOpen="False"
             IsPaneToggleButtonVisible="False"
             IsSettingsVisible="True"
             ItemInvoked="NavView_ItemInvoked"
             OpenPaneLength="260"
-            PaneDisplayMode="Auto"
+            PaneDisplayMode="LeftMinimal"
             SelectionFollowsFocus="Disabled">
             <NavigationView.MenuItems>
                 <NavigationViewItem
