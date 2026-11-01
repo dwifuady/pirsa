@@ -95,11 +95,15 @@ on this machine, and you should rotate it if it is ever exposed.
 
 ## Subtitles
 
-- The **CC** button in the player opens a simple description-list: **Off** at
-  the top, then one row per language. Languages are grouped across all subtitle
-  addons, sorted by how many tracks are available, with the addon name shown
-  underneath. Selecting a language downloads the best track and closes the
-  list; **Off** disables subtitles immediately.
+- The **CC** button in the player opens a two-step picker:
+  1. **Off** plus one row per language. Languages are grouped across all
+     subtitle addons and sorted by how many tracks are available.
+  2. For a language with multiple tracks, a version list opens. Every row shows
+     the release group, file name, addon, frame rate and encoding, so you can
+     pick the version that matches your release. The active version is shown
+     above the list and remains selected when you reopen the picker.
+- Languages with a single track apply immediately. **Off** disables subtitles
+  immediately. Selecting a different version is how you test subtitle sync.
 - The current subtitle stays selected across source switches.
 - Subtitle files are downloaded with .NET first and handed to VLC as local
   files. This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote

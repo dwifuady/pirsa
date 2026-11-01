@@ -28,7 +28,7 @@
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
-        <DataTemplate x:Key="SubtitleChoiceTemplate" x:DataType="vm:SubtitleChoice">
+        <DataTemplate x:Key="SubtitleLanguageTemplate" x:DataType="vm:SubtitleLanguageChoice">
             <StackPanel Spacing="1">
                 <TextBlock
                     FontWeight="SemiBold"
@@ -39,6 +39,23 @@
                     Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
                     Text="{x:Bind Detail}"
                     TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="SubtitleVersionTemplate" x:DataType="vm:SubtitleVersionChoice">
+            <StackPanel Spacing="1">
+                <TextBlock
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource PlayerForegroundBrush}"
+                    Text="{x:Bind Label}"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    MaxLines="2"
+                    FontSize="11"
+                    Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                    Text="{x:Bind Detail}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap" />
             </StackPanel>
         </DataTemplate>
 
@@ -315,21 +332,39 @@
                                 ToolTipService.ToolTip="Subtitles">
                                 <Button.Flyout>
                                     <Flyout x:Name="SubtitlesFlyout" Opened="SubtitlesFlyout_Opened" Closed="SubtitlesFlyout_Closed" Placement="TopEdgeAlignedRight">
-                                        <Border Width="320" Padding="14" Background="{ThemeResource PlayerPanelBackgroundBrush}" CornerRadius="12" RequestedTheme="Dark">
+                                        <Border Width="360" Padding="14" Background="{ThemeResource PlayerPanelBackgroundBrush}" CornerRadius="12" RequestedTheme="Dark">
                                             <StackPanel Spacing="8">
-                                            <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource PlayerForegroundBrush}" Text="Subtitles" />
-                                            <StackPanel x:Name="SubtitleStatusPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-                                                <ProgressRing x:Name="SubtitleLoadingRing" Width="14" Height="14" VerticalAlignment="Center" IsActive="False" Visibility="Collapsed" />
-                                                <TextBlock x:Name="SubtitleStatusText" VerticalAlignment="Center" FontSize="12" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <ListView
-                                                x:Name="SubtitleList"
-                                                MaxHeight="360"
-                                                ItemContainerStyle="{StaticResource SubtitleListItemStyle}"
-                                                ItemTemplate="{StaticResource SubtitleChoiceTemplate}"
-                                                ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                                SelectionChanged="SubtitleList_SelectionChanged"
-                                                SelectionMode="Single" />
+                                                <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{ThemeResource PlayerForegroundBrush}" Text="Subtitles" />
+                                                <TextBlock x:Name="SubtitleCurrentText" FontSize="11" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+                                                <StackPanel x:Name="SubtitleStatusPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                                                    <ProgressRing x:Name="SubtitleLoadingRing" Width="14" Height="14" VerticalAlignment="Center" IsActive="False" Visibility="Collapsed" />
+                                                    <TextBlock x:Name="SubtitleStatusText" VerticalAlignment="Center" FontSize="12" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" TextWrapping="Wrap" />
+                                                </StackPanel>
+
+                                                <Grid>
+                                                    <Grid x:Name="SubtitleLanguageView">
+                                                        <ListView x:Name="SubtitleLanguageList" MaxHeight="360" IsItemClickEnabled="True" ItemClick="SubtitleLanguageList_ItemClick" ItemContainerStyle="{StaticResource SubtitleListItemStyle}" ItemTemplate="{StaticResource SubtitleLanguageTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionMode="None" />
+                                                    </Grid>
+
+                                                    <Grid x:Name="SubtitleVersionView" Visibility="Collapsed">
+                                                        <StackPanel Spacing="8">
+                                                            <Grid ColumnSpacing="8">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <Button x:Name="SubtitleVersionBackButton" Width="36" Height="36" AutomationProperties.Name="Back to subtitle languages" Click="SubtitleVersionBack_Click" Style="{StaticResource PlayerIconButtonStyle}" ToolTipService.ToolTip="Back to languages">
+                                                                    <FontIcon FontSize="14" Glyph="&#xE72B;" />
+                                                                </Button>
+                                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                                    <TextBlock x:Name="SubtitleVersionTitle" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource PlayerForegroundBrush}" TextWrapping="Wrap" />
+                                                                    <TextBlock x:Name="SubtitleVersionHint" FontSize="11" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" TextWrapping="Wrap" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                            <ListView x:Name="SubtitleVersionList" MaxHeight="320" ItemContainerStyle="{StaticResource SubtitleListItemStyle}" ItemTemplate="{StaticResource SubtitleVersionTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionChanged="SubtitleVersionList_SelectionChanged" SelectionMode="Single" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
                                             </StackPanel>
                                         </Border>
                                     </Flyout>

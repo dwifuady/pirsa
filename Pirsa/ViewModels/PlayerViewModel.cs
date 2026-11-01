@@ -23,20 +23,21 @@ public partial class PlayerViewModel : ObservableObject
         StatusText = "";
         SubtitleStatus = "";
 
-        OffSubtitle = new SubtitleChoice(
+        OffSubtitle = new SubtitleLanguageChoice(
             "Off",
-            "No subtitles",
-            null,
             "",
-            isOff: true);
-        Subtitles.Add(OffSubtitle);
+            isOff: true,
+            [],
+            "No subtitles");
+        SubtitleMenu.Add(OffSubtitle);
     }
 
     public ObservableCollection<PlaybackSource> Sources { get; } = [];
 
-    public ObservableCollection<SubtitleChoice> Subtitles { get; } = [];
+    /// <summary>Off + one entry per available language.</summary>
+    public ObservableCollection<SubtitleLanguageChoice> SubtitleMenu { get; } = [];
 
-    public SubtitleChoice OffSubtitle { get; }
+    public SubtitleLanguageChoice OffSubtitle { get; }
 
     [ObservableProperty]
     public partial PlaybackRequest? Request { get; set; }
@@ -63,9 +64,9 @@ public partial class PlayerViewModel : ObservableObject
     public partial string SubtitleStatus { get; set; }
 
     [ObservableProperty]
-    public partial SubtitleChoice? SelectedSubtitle { get; set; }
+    public partial SubtitleVersionChoice? SelectedSubtitle { get; set; }
 
-    public bool HasSubtitles => Subtitles.Count > 1;
+    public bool HasSubtitles => SubtitleMenu.Count > 1;
 
     public string Title => Request?.Title ?? "";
 
@@ -174,9 +175,9 @@ public partial class PlayerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Queries every configured addon for subtitle tracks and groups the
-    /// results by language. One representative track per language keeps the
-    /// picker short; Off is always the first row.
+    /// Queries every configured addon for subtitle tracks and groups them by
+    /// language while keeping every version. The picker shows languages first,
+    /// then the individual release/file versions for the chosen language.
     /// </summary>
     public async Task LoadSubtitlesAsync(
         PlaybackRequest request,
@@ -220,34 +221,40 @@ public partial class PlayerViewModel : ObservableObject
                 .GroupBy(item => NormalizeLanguage(item.Item.Lang))
                 .Select(group =>
                 {
-                    var first = group.First();
-                    var count = group.Count();
                     var name = SubtitleLanguages.DisplayName(group.Key);
-                    var detail = count > 1
-                        ? $"{count} versions · {first.AddonName}"
-                        : first.AddonName;
+                    var versions = group
+                        .Select((entry, index) => SubtitleVersionChoice.Create(
+                            name,
+                            group.Key,
+                            entry.Item,
+                            entry.AddonName,
+                            index + 1))
+                        .ToList();
 
-                    return new SubtitleChoice(
+                    var detail = versions.Count == 1
+                        ? $"1 version · {versions[0].AddonName}"
+                        : $"{versions.Count} versions · {versions[0].AddonName}";
+
+                    return new SubtitleLanguageChoice(
                         name,
-                        detail,
-                        first.Item.Url,
                         group.Key,
-                        count: count);
+                        isOff: false,
+                        versions,
+                        detail);
                 })
-                .OrderByDescending(choice => choice.Count)
-                .ThenBy(choice => choice.LanguageName, StringComparer.CurrentCultureIgnoreCase)
+                .OrderByDescending(language => language.Count)
+                .ThenBy(language => language.LanguageName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
-            Subtitles.Clear();
-            Subtitles.Add(OffSubtitle);
-            foreach (var choice in languages)
+            SubtitleMenu.Clear();
+            SubtitleMenu.Add(OffSubtitle);
+            foreach (var language in languages)
             {
-                Subtitles.Add(choice);
+                SubtitleMenu.Add(language);
             }
 
-                SelectedSubtitle = OffSubtitle;
+            SelectedSubtitle = null;
             OnPropertyChanged(nameof(HasSubtitles));
-
             SubtitleStatus = HasSubtitles ? "" : "No subtitles found";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -263,9 +270,9 @@ public partial class PlayerViewModel : ObservableObject
         }
     }
 
-    public void SelectSubtitle(SubtitleChoice choice)
+    public void SelectSubtitle(SubtitleVersionChoice? version)
     {
-        SelectedSubtitle = choice;
+        SelectedSubtitle = version;
     }
 
     private static string NormalizeLanguage(string? lang) =>
@@ -318,40 +325,118 @@ public partial class PlayerViewModel : ObservableObject
 }
 
 /// <summary>
-/// One row in the subtitle picker: either the Off choice or the best track for
-/// a language. <see cref="IsSelected"/> drives the check mark in the list.
+/// One row in the first subtitle step: Off or a language with all of its
+/// available versions.
 /// </summary>
-public sealed partial class SubtitleChoice : ObservableObject
+public sealed class SubtitleLanguageChoice : ObservableObject
 {
-    public SubtitleChoice(
+    public SubtitleLanguageChoice(
         string languageName,
-        string detail,
-        string? url,
         string languageCode,
-        bool isOff = false,
-        int count = 0)
+        bool isOff,
+        IReadOnlyList<SubtitleVersionChoice> versions,
+        string detail)
     {
         LanguageName = languageName;
-        Detail = detail;
-        Url = url;
         LanguageCode = languageCode;
         IsOff = isOff;
-        Count = count;
+        Versions = versions;
+        Detail = detail;
     }
 
     public string LanguageName { get; }
-
-    public string Detail { get; }
-
-    public string? Url { get; }
 
     public string LanguageCode { get; }
 
     public bool IsOff { get; }
 
-    public int Count { get; }
+    public IReadOnlyList<SubtitleVersionChoice> Versions { get; }
+
+    public string Detail { get; }
+
+    public int Count => Versions.Count;
+
+    public bool HasVersions => Versions.Count > 1;
 
     public override string ToString() => LanguageName;
+}
+
+/// <summary>
+/// One selectable subtitle file for a language. Release group, file name,
+/// frame rate and encoding help identify the version that matches the video.
+/// </summary>
+public sealed class SubtitleVersionChoice : ObservableObject
+{
+    public required string LanguageName { get; init; }
+
+    public required string LanguageCode { get; init; }
+
+    public required string Url { get; init; }
+
+    public required string AddonName { get; init; }
+
+    public required string Label { get; init; }
+
+    public required string Detail { get; init; }
+
+    public string? FileName { get; init; }
+
+    public string? ReleaseGroup { get; init; }
+
+    public double? Fps { get; init; }
+
+    public override string ToString() => Label;
+
+    public static SubtitleVersionChoice Create(
+        string languageName,
+        string languageCode,
+        SubtitleItem item,
+        string addonName,
+        int ordinal)
+    {
+        var fileName = string.IsNullOrWhiteSpace(item.FileName)
+            ? null
+            : Path.GetFileName(item.FileName);
+        var fileBase = fileName is null ? null : Path.GetFileNameWithoutExtension(fileName);
+        var group = string.IsNullOrWhiteSpace(item.ReleaseGroup) ? null : item.ReleaseGroup.Trim();
+
+        var label = group
+            ?? (string.IsNullOrWhiteSpace(item.Name) ? null : item.Name.Trim())
+            ?? fileBase
+            ?? $"Version {ordinal}";
+
+        var detail = new List<string>();
+        if (fileName is not null &&
+            !fileName.Equals(label, StringComparison.OrdinalIgnoreCase))
+        {
+            detail.Add(fileName);
+        }
+
+        detail.Add(addonName);
+
+        if (item.FpsMilli is > 0)
+        {
+            detail.Add($"{item.FpsMilli.Value / 1000.0:0.###} fps");
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.Encoding))
+        {
+            detail.Add(item.Encoding.Trim());
+        }
+
+        return new SubtitleVersionChoice
+        {
+            LanguageName = languageName,
+            LanguageCode = languageCode,
+            Url = item.Url!,
+            AddonName = addonName,
+            Label = label,
+            Detail = string.Join(" · ", detail),
+            FileName = fileName,
+            ReleaseGroup = group,
+            Fps = item.FpsMilli is > 0 ? item.FpsMilli.Value / 1000.0 : null,
+        };
+    }
 }
 
 /// <summary>

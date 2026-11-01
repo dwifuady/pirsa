@@ -35,7 +35,8 @@ public sealed partial class PlayerPage : Page
     private CancellationTokenSource? _subtitleCts;
     private PlaybackSource? _pendingSource;
     private PlaybackSource? _currentSource;
-    private SubtitleChoice? _selectedSubtitle;
+    private SubtitleVersionChoice? _selectedSubtitle;
+    private SubtitleLanguageChoice? _versionsLanguage;
     private string? _selectedSubtitlePath;
     private string? _subtitleDirectory;
 
@@ -96,7 +97,7 @@ public sealed partial class PlayerPage : Page
         }
 
         ViewModel.Request = request;
-        _selectedSubtitle = ViewModel.OffSubtitle;
+        _selectedSubtitle = null;
         _ = LoadSourcesAsync(request);
         _ = LoadSubtitlesAsync(request);
     }
@@ -217,7 +218,12 @@ public sealed partial class PlayerPage : Page
 
     private void RefreshSubtitleFlyout()
     {
-        SubtitleList.ItemsSource ??= ViewModel.Subtitles;
+        SubtitleLanguageList.ItemsSource ??= ViewModel.SubtitleMenu;
+
+        if (_versionsLanguage is not null)
+        {
+            SubtitleVersionList.ItemsSource ??= _versionsLanguage.Versions;
+        }
 
         var status = ViewModel.SubtitleStatus;
         SubtitleStatusText.Text = status;
@@ -229,11 +235,28 @@ public sealed partial class PlayerPage : Page
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        if (_selectedSubtitle is not null && SubtitleList.SelectedItem is null)
+        UpdateSubtitleCurrent();
+    }
+
+    private void UpdateSubtitleCurrent()
+    {
+        if (_selectedSubtitle is null)
         {
-            _suppressSubtitleSelection = true;
-            SubtitleList.SelectedItem = _selectedSubtitle;
-            _suppressSubtitleSelection = false;
+            SubtitleCurrentText.Text = "";
+            SubtitleCurrentText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            SubtitleCurrentText.Text = $"Current: {_selectedSubtitle.LanguageName} · {_selectedSubtitle.Label}";
+            SubtitleCurrentText.Visibility = Visibility.Visible;
+        }
+
+        if (SubtitleVersionView.Visibility == Visibility.Visible && _versionsLanguage is not null)
+        {
+            SubtitleVersionHint.Text = _selectedSubtitle is not null &&
+                                       _selectedSubtitle.LanguageCode == _versionsLanguage.LanguageCode
+                ? $"Current: {_selectedSubtitle.Label}"
+                : "Choose the version that matches your release.";
         }
     }
 
@@ -444,7 +467,7 @@ public sealed partial class PlayerPage : Page
         _resumeMs = 0;
 
         if (!_subtitleApplied &&
-            _selectedSubtitle is { IsOff: false } &&
+            _selectedSubtitle is not null &&
             !string.IsNullOrWhiteSpace(_selectedSubtitlePath))
         {
             ApplyLocalSubtitle(_selectedSubtitlePath);
@@ -871,10 +894,8 @@ public sealed partial class PlayerPage : Page
         _chromeTimer.Stop();
         ShowChrome();
 
+        ShowSubtitleLanguages();
         RefreshSubtitleFlyout();
-        _suppressSubtitleSelection = true;
-        SubtitleList.SelectedItem = _selectedSubtitle ?? ViewModel.OffSubtitle;
-        _suppressSubtitleSelection = false;
     }
 
     private void SubtitlesFlyout_Closed(object? sender, object e)
@@ -887,56 +908,141 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private async void SubtitleList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void SubtitleLanguageList_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not SubtitleLanguageChoice language)
+        {
+            return;
+        }
+
+        if (language.IsOff)
+        {
+            if (await ApplySelectedSubtitleAsync(null))
+            {
+                SubtitlesFlyout.Hide();
+            }
+
+            return;
+        }
+
+        if (language.Versions.Count == 1)
+        {
+            var previous = _selectedSubtitle;
+            if (await ApplySelectedSubtitleAsync(language.Versions[0]))
+            {
+                SubtitlesFlyout.Hide();
+            }
+            else
+            {
+                RestoreSubtitleSelection(previous);
+            }
+
+            return;
+        }
+
+        ShowSubtitleVersions(language);
+    }
+
+    private void ShowSubtitleLanguages()
+    {
+        _versionsLanguage = null;
+        _suppressSubtitleSelection = true;
+        SubtitleVersionList.SelectedItem = null;
+        SubtitleVersionList.ItemsSource = null;
+        _suppressSubtitleSelection = false;
+        SubtitleVersionView.Visibility = Visibility.Collapsed;
+        SubtitleLanguageView.Visibility = Visibility.Visible;
+    }
+
+    private void ShowSubtitleVersions(SubtitleLanguageChoice language)
+    {
+        _versionsLanguage = language;
+
+        SubtitleVersionTitle.Text = language.LanguageName;
+        SubtitleVersionHint.Text = _selectedSubtitle is not null &&
+                                   _selectedSubtitle.LanguageCode == language.LanguageCode
+            ? $"Current: {_selectedSubtitle.Label}"
+            : "Choose the version that matches your release.";
+        SubtitleVersionList.ItemsSource = language.Versions;
+
+        _suppressSubtitleSelection = true;
+        SubtitleVersionList.SelectedItem = _selectedSubtitle is not null &&
+                                           _selectedSubtitle.LanguageCode == language.LanguageCode
+            ? _selectedSubtitle
+            : null;
+        _suppressSubtitleSelection = false;
+
+        SubtitleLanguageView.Visibility = Visibility.Collapsed;
+        SubtitleVersionView.Visibility = Visibility.Visible;
+    }
+
+    private void SubtitleVersionBack_Click(object sender, RoutedEventArgs e)
+    {
+        ShowSubtitleLanguages();
+        RefreshSubtitleFlyout();
+    }
+
+    private async void SubtitleVersionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressSubtitleSelection ||
-            SubtitleList.SelectedItem is not SubtitleChoice choice)
+            SubtitleVersionList.SelectedItem is not SubtitleVersionChoice version)
         {
             return;
         }
 
         var previous = _selectedSubtitle;
-        ViewModel.SelectSubtitle(choice);
 
-        if (await ApplySelectedSubtitleAsync(choice))
+        if (await ApplySelectedSubtitleAsync(version))
         {
             SubtitlesFlyout.Hide();
             return;
         }
 
-        var restore = previous ?? ViewModel.OffSubtitle;
-        _selectedSubtitle = restore;
-        ViewModel.SelectSubtitle(restore);
-        SubtitleActiveDot.Visibility = restore.IsOff ? Visibility.Collapsed : Visibility.Visible;
-        RefreshSubtitleFlyout();
+        RestoreSubtitleSelection(previous);
         _suppressSubtitleSelection = true;
-        SubtitleList.SelectedItem = restore;
+        SubtitleVersionList.SelectedItem = previous is not null &&
+                                           previous.LanguageCode == version.LanguageCode
+            ? previous
+            : null;
         _suppressSubtitleSelection = false;
     }
 
-    private async Task<bool> ApplySelectedSubtitleAsync(SubtitleChoice choice)
+    private void RestoreSubtitleSelection(SubtitleVersionChoice? version)
     {
-        _selectedSubtitle = choice;
-        SubtitleActiveDot.Visibility = choice.IsOff ? Visibility.Collapsed : Visibility.Visible;
+        _selectedSubtitle = version;
+        ViewModel.SelectSubtitle(version);
+        SubtitleActiveDot.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateSubtitleCurrent();
+        RefreshSubtitleFlyout();
+    }
 
-        if (choice.IsOff)
+    private async Task<bool> ApplySelectedSubtitleAsync(SubtitleVersionChoice? version)
+    {
+        _selectedSubtitle = version;
+        SubtitleActiveDot.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
+        ViewModel.SelectSubtitle(version);
+
+        if (version is null)
         {
             _selectedSubtitlePath = null;
             _mediaPlayer?.SetSpu(-1);
             _subtitleApplied = true;
+            ViewModel.SubtitleStatus = "";
+            UpdateSubtitleCurrent();
             return true;
         }
 
-        if (string.IsNullOrWhiteSpace(choice.Url))
+        if (string.IsNullOrWhiteSpace(version.Url))
         {
             ViewModel.SubtitleStatus = "That subtitle has no download link.";
             return false;
         }
 
-        ViewModel.SubtitleStatus = $"Loading {choice.LanguageName} subtitles…";
+        ViewModel.SubtitleStatus = $"Loading {version.LanguageName} · {version.Label}…";
+        UpdateSubtitleCurrent();
         RefreshSubtitleFlyout();
 
-        var path = await DownloadSubtitleAsync(choice.Url);
+        var path = await DownloadSubtitleAsync(version.Url);
         if (_disposed)
         {
             return false;
@@ -950,13 +1056,28 @@ public sealed partial class PlayerPage : Page
 
         _selectedSubtitlePath = path;
         ViewModel.SubtitleStatus = "";
+        UpdateSubtitleCurrent();
         return ApplyLocalSubtitle(path);
+    }
+
+    private string EnsureSubtitleDirectory()
+    {
+        if (_subtitleDirectory is null)
+        {
+            _subtitleDirectory = Path.Combine(
+                ApplicationData.Current.TemporaryFolder.Path,
+                "PirsaSubtitles",
+                Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_subtitleDirectory);
+        }
+
+        return _subtitleDirectory;
     }
 
     /// <summary>
     /// VLC 3.0.24's GnuTLS plugin can crash when remote subtitle downloads
-    /// overlap with stream TLS sessions. Download the .srt with .NET instead
-    /// and hand VLC a local file, which also avoids extension sniffing issues.
+    /// overlap with stream TLS sessions. Download the subtitle with .NET and
+    /// hand VLC a local file instead.
     /// </summary>
     private async Task<string?> DownloadSubtitleAsync(string url)
     {
@@ -975,7 +1096,6 @@ public sealed partial class PlayerPage : Page
             }
 
             var directory = EnsureSubtitleDirectory();
-
             var extension = Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant();
             if (extension is not (".srt" or ".vtt" or ".ass" or ".ssa" or ".sub"))
             {
@@ -990,20 +1110,6 @@ public sealed partial class PlayerPage : Page
         {
             return null;
         }
-    }
-
-    private string EnsureSubtitleDirectory()
-    {
-        if (_subtitleDirectory is null)
-        {
-            _subtitleDirectory = Path.Combine(
-                ApplicationData.Current.TemporaryFolder.Path,
-                "PirsaSubtitles",
-                Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_subtitleDirectory);
-        }
-
-        return _subtitleDirectory;
     }
 
     private bool ApplyLocalSubtitle(string path)

@@ -331,6 +331,18 @@ public sealed class SubtitleItem
     [JsonPropertyName("subtitleFileName")]
     public string? FileName { get; set; }
 
+    [JsonPropertyName("movieReleaseName")]
+    public string? ReleaseName { get; set; }
+
+    [JsonPropertyName("releaseGroup")]
+    public string? ReleaseGroup { get; set; }
+
+    [JsonPropertyName("fpsMilli")]
+    public int? FpsMilli { get; set; }
+
+    [JsonPropertyName("SubEncoding")]
+    public string? Encoding { get; set; }
+
     [JsonIgnore]
     public bool HasUrl =>
         Uri.TryCreate(Url, UriKind.Absolute, out var uri) &&
