@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.DetailsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Pirsa.Models"
+    xmlns:vm="using:Pirsa.ViewModels"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    mc:Ignorable="d">
+
+    <Grid>
+        <ScrollViewer
+            x:Name="DetailsScrollViewer"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!--  Backdrop hero  -->
+                <Grid MinHeight="560">
+                    <Border Background="{ThemeResource PosterPlaceholderBrush}" />
+                    <Border Opacity="{ThemeResource HeroImageOpacity}">
+                        <Border.Background>
+                            <ImageBrush
+                                ImageSource="{x:Bind ViewModel.BackdropImage, Mode=OneWay}"
+                                Stretch="UniformToFill" />
+                        </Border.Background>
+                    </Border>
+
+                    <Border Background="{ThemeResource HeroLeftScrimBrush}" />
+                    <Border
+                        Height="120"
+                        VerticalAlignment="Top"
+                        Background="{ThemeResource HeroTopScrimBrush}" />
+                    <Border
+                        Height="360"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource HeroBottomScrimBrush}" />
+                    <Border
+                        Height="56"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource HeroPageBlendBrush}" />
+
+                    <Grid
+                        Margin="64,84,64,64"
+                        VerticalAlignment="Bottom"
+                        ColumnSpacing="36">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!--  Poster  -->
+                        <Border
+                            x:Name="PosterHost"
+                            Width="216"
+                            Height="324"
+                            VerticalAlignment="Bottom"
+                            Background="{ThemeResource PosterPlaceholderBrush}"
+                            BorderBrush="{ThemeResource CardStrokeBrush}"
+                            BorderThickness="1"
+                            CornerRadius="14">
+                            <Grid>
+                                <FontIcon
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    FontSize="30"
+                                    Foreground="{ThemeResource PosterPlaceholderForegroundBrush}"
+                                    Glyph="&#xE8B2;"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.NoPoster), Mode=OneWay}" />
+                                <Image
+                                    x:Name="PosterImage"
+                                    AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                    Source="{x:Bind ViewModel.PosterImage, Mode=OneWay}"
+                                    Stretch="UniformToFill" />
+                            </Grid>
+                        </Border>
+
+                        <!--  Title block  -->
+                        <StackPanel
+                            Grid.Column="1"
+                            MaxWidth="820"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Spacing="12">
+                            <Border
+                                Padding="8,3"
+                                HorizontalAlignment="Left"
+                                Background="{ThemeResource HeroBadgeBackgroundBrush}"
+                                CornerRadius="4">
+                                <TextBlock
+                                    CharacterSpacing="110"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource HeroBadgeForegroundBrush}"
+                                    Text="{x:Bind ViewModel.TypeLabel, Mode=OneWay}" />
+                            </Border>
+
+                            <Image
+                                MaxWidth="460"
+                                MaxHeight="82"
+                                Margin="0,2,0,2"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                Source="{x:Bind ViewModel.LogoImage, Mode=OneWay}"
+                                Stretch="Uniform"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasLogo), Mode=OneWay}" />
+
+                            <TextBlock
+                                Style="{StaticResource HeroTitleTextBlockStyle}"
+                                Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.NoLogo), Mode=OneWay}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <StackPanel
+                                    Orientation="Horizontal"
+                                    Spacing="6"
+                                    VerticalAlignment="Center"
+                                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasRating), Mode=OneWay}">
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource HeroTextBrush}"
+                                        Glyph="&#xE735;" />
+                                    <TextBlock
+                                        Style="{StaticResource HeroMetaTextBlockStyle}"
+                                        Text="{x:Bind ViewModel.RatingText, Mode=OneWay}" />
+                                </StackPanel>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource HeroOverlineTextBlockStyle}"
+                                    Text="{x:Bind ViewModel.MetaLine, Mode=OneWay}" />
+                            </StackPanel>
+
+                            <TextBlock
+                                MaxWidth="760"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource HeroBodyTextBlockStyle}"
+                                Text="{x:Bind ViewModel.Description, Mode=OneWay}"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasDescription), Mode=OneWay}" />
+
+                            <StackPanel Margin="0,6,0,0" Orientation="Horizontal" Spacing="10">
+                                <Button
+                                    AutomationProperties.Name="Play"
+                                    Click="Play_Click"
+                                    Style="{StaticResource HeroPrimaryButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon
+                                            FontSize="14"
+                                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                            Glyph="&#xE768;" />
+                                        <TextBlock Text="Play" />
+                                    </StackPanel>
+                                </Button>
+
+                                <HyperlinkButton
+                                    AutomationProperties.Name="Open on IMDb"
+                                    Click="Imdb_Click"
+                                    Style="{StaticResource BrandHyperlinkButtonStyle}"
+                                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasImdb), Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon FontSize="13" Glyph="&#xE8A7;" />
+                                        <TextBlock Text="IMDb" />
+                                    </StackPanel>
+                                </HyperlinkButton>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!--  Facts + episodes  -->
+                <StackPanel
+                    Margin="64,12,64,80"
+                    Spacing="36">
+
+                    <Border
+                        Padding="22,10"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasFacts), Mode=OneWay}">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Facts}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="vm:MetaFact">
+                                    <Grid Padding="0,12" ColumnSpacing="24">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource BodyTextBlockStyle}"
+                                            Text="{x:Bind Label}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            MaxWidth="900"
+                                            HorizontalAlignment="Left"
+                                            Style="{StaticResource BodyTextBlockStyle}"
+                                            Text="{x:Bind Value}"
+                                            TextWrapping="Wrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </Border>
+
+                    <StackPanel
+                        Spacing="14"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasSeasons), Mode=OneWay}">
+                        <Grid>
+                            <StackPanel
+                                Orientation="Horizontal"
+                                Spacing="10"
+                                VerticalAlignment="Center">
+                                <Border
+                                    Width="4"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    Background="{ThemeResource BrandPrimaryBrush}"
+                                    CornerRadius="2" />
+                                <TextBlock
+                                    Style="{StaticResource SectionTitleTextBlockStyle}"
+                                    Text="Episodes" />
+                            </StackPanel>
+
+                            <StackPanel
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasSeasonPicker), Mode=OneWay}">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="Season" />
+                                <ComboBox
+                                    MinWidth="150"
+                                    AutomationProperties.Name="Season"
+                                    DisplayMemberPath="Label"
+                                    ItemsSource="{x:Bind ViewModel.Seasons}"
+                                    SelectedItem="{x:Bind ViewModel.SelectedSeason, Mode=TwoWay}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Episodes}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:MetaVideo">
+                                    <Button
+                                        AutomationProperties.Name="{x:Bind AccessibleTitle}"
+                                        Click="Episode_Click"
+                                        Style="{StaticResource EpisodeButtonStyle}">
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border
+                                                Width="168"
+                                                Height="94"
+                                                Background="{ThemeResource PosterPlaceholderBrush}"
+                                                CornerRadius="8">
+                                                <Grid>
+                                                    <FontIcon
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        FontSize="22"
+                                                        Foreground="{ThemeResource PosterPlaceholderForegroundBrush}"
+                                                        Glyph="&#xE714;"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center" />
+                                                    <Image
+                                                        AutomationProperties.AccessibilityView="Raw"
+                                                        Source="{x:Bind ThumbnailImage}"
+                                                        Stretch="UniformToFill" />
+                                                    <Border
+                                                        Margin="6"
+                                                        Padding="6,2"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Top"
+                                                        Background="{ThemeResource OverlayChipBackgroundBrush}"
+                                                        CornerRadius="4"
+                                                        Visibility="{x:Bind helpers:XamlHelpers.Visible(HasNumber)}">
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="{ThemeResource OverlayChipForegroundBrush}"
+                                                            Text="{x:Bind EpisodeTag}" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <StackPanel
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Spacing="5">
+                                                <TextBlock
+                                                    MaxLines="1"
+                                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                    Text="{x:Bind Title}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <TextBlock
+                                                    MaxLines="2"
+                                                    MaxWidth="900"
+                                                    HorizontalAlignment="Left"
+                                                    FontSize="13"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{x:Bind DescriptionText}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    TextWrapping="Wrap"
+                                                    Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(DescriptionText)}" />
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Text="{x:Bind AirDateText}"
+                                                    Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(AirDateText)}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock
+                            Margin="8,8,0,0"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="No episodes listed for this season."
+                            Visibility="{x:Bind helpers:XamlHelpers.Collapsed(ViewModel.HasEpisodes), Mode=OneWay}" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  Non-blocking status  -->
+        <InfoBar
+            x:Name="ErrorBar"
+            MaxWidth="720"
+            Margin="24,16,24,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            IsClosable="True"
+            IsOpen="{x:Bind ViewModel.ShowWarning, Mode=OneWay}"
+            Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+            Severity="Warning"
+            Title="Couldn't refresh details">
+            <InfoBar.ActionButton>
+                <Button Content="Retry" Command="{x:Bind ViewModel.ReloadCommand}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!--  Loading  -->
+        <Grid
+            Background="{ThemeResource AppBackgroundBrush}"
+            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowLoading), Mode=OneWay}">
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="18">
+                <Image
+                    Width="60"
+                    Height="60"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Source="ms-appx:///Assets/BrandMark.png" />
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Loading title…" />
+                <ProgressRing
+                    Width="24"
+                    Height="24"
+                    HorizontalAlignment="Center"
+                    IsActive="{x:Bind ViewModel.ShowLoading, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!--  Fatal error  -->
+        <Grid
+            Background="{ThemeResource AppBackgroundBrush}"
+            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowErrorState), Mode=OneWay}">
+            <StackPanel
+                MaxWidth="480"
+                Margin="32"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="14">
+                <FontIcon
+                    FontSize="34"
+                    Foreground="{ThemeResource BrandPrimaryBrush}"
+                    Glyph="&#xE774;" />
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Couldn't load this title" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+                <StackPanel Margin="0,8,0,0" Orientation="Horizontal" Spacing="10">
+                    <Button
+                        Command="{x:Bind ViewModel.ReloadCommand}"
+                        Content="Try again"
+                        Style="{StaticResource AccentButtonStyle}" />
+                    <Button Click="Back_Click" Content="Go back" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

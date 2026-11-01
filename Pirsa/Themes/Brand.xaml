@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Pirsa brand + surface palette.
+        Every custom brush is named by purpose and defined for Light, Dark and
+        HighContrast so the app never falls back to a hard-coded literal.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FFF7F5F2" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#1F000000" />
+            <SolidColorBrush x:Key="PosterPlaceholderBrush" Color="#FFE9E4DD" />
+            <SolidColorBrush x:Key="PosterPlaceholderForegroundBrush" Color="#FF8E8479" />
+            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#FFC2410C" />
+            <SolidColorBrush x:Key="BrandSubtleBrush" Color="#1FEA580C" />
+
+            <!-- Imagery surfaces always carry light text, so these stay light in both themes. -->
+            <SolidColorBrush x:Key="HeroTextBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroSecondaryTextBrush" Color="#E8FFFFFF" />
+            <SolidColorBrush x:Key="HeroBadgeBackgroundBrush" Color="#CC000000" />
+            <SolidColorBrush x:Key="HeroBadgeForegroundBrush" Color="#FFFFD7B5" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonBackgroundBrush" Color="#E6FFFFFF" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonForegroundBrush" Color="#FF141414" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonBorderBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="OverlayChipBackgroundBrush" Color="#CC0A0A0C" />
+            <SolidColorBrush x:Key="OverlayChipForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroPipForegroundBrush" Color="#8CFFFFFF" />
+            <SolidColorBrush x:Key="HeroPipHoverBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroPipSelectedBrush" Color="#FFFFFFFF" />
+
+            <x:Double x:Key="HeroImageOpacity">1</x:Double>
+
+            <LinearGradientBrush x:Key="HeroLeftScrimBrush" StartPoint="0,0.5" EndPoint="1,0.5">
+                <GradientStop Offset="0" Color="#F2000000" />
+                <GradientStop Offset="0.32" Color="#C7000000" />
+                <GradientStop Offset="0.8" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="HeroTopScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#73000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="HeroBottomScrimBrush" StartPoint="0.5,1" EndPoint="0.5,0.12">
+                <GradientStop Offset="0" Color="#CC000000" />
+                <GradientStop Offset="0.35" Color="#99000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="HeroPageBlendBrush" StartPoint="0.5,1" EndPoint="0.5,0">
+                <GradientStop Offset="0" Color="#FFF7F5F2" />
+                <GradientStop Offset="0.55" Color="#B3F7F5F2" />
+                <GradientStop Offset="1" Color="#00F7F5F2" />
+            </LinearGradientBrush>
+            <!--  Player (always dark chrome over video)  -->
+            <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="#FF000000" />
+            <SolidColorBrush x:Key="PlayerForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="PlayerSecondaryForegroundBrush" Color="#B3FFFFFF" />
+            <SolidColorBrush x:Key="PlayerTertiaryForegroundBrush" Color="#80FFFFFF" />
+            <SolidColorBrush x:Key="PlayerControlHoverBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="PlayerControlPressedBrush" Color="#3DFFFFFF" />
+            <SolidColorBrush x:Key="PlayerControlBackgroundBrush" Color="#66000000" />
+            <SolidColorBrush x:Key="PlayerPanelBackgroundBrush" Color="#F20E0E10" />
+            <SolidColorBrush x:Key="PlayerPanelBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="PlayerBadgeBackgroundBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="PlayerBadgeForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="PlayerOverlayScrimBrush" Color="#A6000000" />
+            <LinearGradientBrush x:Key="PlayerTopScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#CC000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="PlayerBottomScrimBrush" StartPoint="0.5,1" EndPoint="0.5,0">
+                <GradientStop Offset="0" Color="#E6000000" />
+                <GradientStop Offset="0.65" Color="#99000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FF0E0E10" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="PosterPlaceholderBrush" Color="#FF1B1B1F" />
+            <SolidColorBrush x:Key="PosterPlaceholderForegroundBrush" Color="#FF6D6D75" />
+            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="#FFFB923C" />
+            <SolidColorBrush x:Key="BrandSubtleBrush" Color="#33FB923C" />
+
+            <SolidColorBrush x:Key="HeroTextBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroSecondaryTextBrush" Color="#E8FFFFFF" />
+            <SolidColorBrush x:Key="HeroBadgeBackgroundBrush" Color="#CC000000" />
+            <SolidColorBrush x:Key="HeroBadgeForegroundBrush" Color="#FFFFD7B5" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonBackgroundBrush" Color="#4D000000" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonBorderBrush" Color="#4DFFFFFF" />
+            <SolidColorBrush x:Key="OverlayChipBackgroundBrush" Color="#CC0A0A0C" />
+            <SolidColorBrush x:Key="OverlayChipForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroPipForegroundBrush" Color="#8CFFFFFF" />
+            <SolidColorBrush x:Key="HeroPipHoverBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="HeroPipSelectedBrush" Color="#FFFFFFFF" />
+
+            <x:Double x:Key="HeroImageOpacity">1</x:Double>
+
+            <LinearGradientBrush x:Key="HeroLeftScrimBrush" StartPoint="0,0.5" EndPoint="1,0.5">
+                <GradientStop Offset="0" Color="#F2000000" />
+                <GradientStop Offset="0.32" Color="#C7000000" />
+                <GradientStop Offset="0.8" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="HeroTopScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#73000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="HeroBottomScrimBrush" StartPoint="0.5,1" EndPoint="0.5,0.12">
+                <GradientStop Offset="0" Color="#CC000000" />
+                <GradientStop Offset="0.35" Color="#99000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="HeroPageBlendBrush" StartPoint="0.5,1" EndPoint="0.5,0">
+                <GradientStop Offset="0" Color="#FF0E0E10" />
+                <GradientStop Offset="0.55" Color="#B30E0E10" />
+                <GradientStop Offset="1" Color="#000E0E10" />
+            </LinearGradientBrush>
+            <!--  Player (always dark chrome over video)  -->
+            <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="#FF000000" />
+            <SolidColorBrush x:Key="PlayerForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="PlayerSecondaryForegroundBrush" Color="#B3FFFFFF" />
+            <SolidColorBrush x:Key="PlayerTertiaryForegroundBrush" Color="#80FFFFFF" />
+            <SolidColorBrush x:Key="PlayerControlHoverBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="PlayerControlPressedBrush" Color="#3DFFFFFF" />
+            <SolidColorBrush x:Key="PlayerControlBackgroundBrush" Color="#66000000" />
+            <SolidColorBrush x:Key="PlayerPanelBackgroundBrush" Color="#F20E0E10" />
+            <SolidColorBrush x:Key="PlayerPanelBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="PlayerBadgeBackgroundBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="PlayerBadgeForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="PlayerOverlayScrimBrush" Color="#A6000000" />
+            <LinearGradientBrush x:Key="PlayerTopScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#CC000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="PlayerBottomScrimBrush" StartPoint="0.5,1" EndPoint="0.5,0">
+                <GradientStop Offset="0" Color="#E6000000" />
+                <GradientStop Offset="0.65" Color="#99000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PosterPlaceholderBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PosterPlaceholderForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="BrandPrimaryBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="BrandSubtleBrush" Color="{ThemeResource SystemColorWindowColor}" />
+
+            <SolidColorBrush x:Key="HeroTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="HeroSecondaryTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="HeroBadgeBackgroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="HeroBadgeForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonBackgroundBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="HeroSecondaryButtonBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OverlayChipBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OverlayChipForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="HeroPipForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="HeroPipHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="HeroPipSelectedBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <x:Double x:Key="HeroImageOpacity">0.04</x:Double>
+
+            <SolidColorBrush x:Key="HeroLeftScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="HeroTopScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="HeroBottomScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="HeroPageBlendBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <!--  Player: system colors so controls stay legible in contrast themes  -->
+            <SolidColorBrush x:Key="PlayerSurfaceBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PlayerSecondaryForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PlayerTertiaryForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PlayerControlHoverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PlayerControlPressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PlayerControlBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerPanelBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerPanelBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="PlayerBadgeBackgroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="PlayerBadgeForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="PlayerOverlayScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerTopScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerBottomScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ===== Typography ===== -->
+
+    <Style x:Key="SectionTitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <Style x:Key="SectionSubtitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
+
+    <Style x:Key="HeroOverlineTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CharacterSpacing" Value="70" />
+        <Setter Property="Foreground" Value="{ThemeResource HeroSecondaryTextBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style x:Key="HeroTitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+        <Setter Property="FontSize" Value="42" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="LineHeight" Value="46" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="Foreground" Value="{ThemeResource HeroTextBrush}" />
+    </Style>
+
+    <Style x:Key="HeroBodyTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="LineHeight" Value="21" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{ThemeResource HeroSecondaryTextBrush}" />
+    </Style>
+
+    <Style x:Key="HeroMetaTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource HeroTextBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- ===== Buttons ===== -->
+
+    <Style x:Key="HeroSecondaryButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource HeroSecondaryButtonBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource HeroSecondaryButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource HeroSecondaryButtonBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="20,8" />
+        <Setter Property="MinHeight" Value="38" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="HeroPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="24,8" />
+        <Setter Property="MinHeight" Value="38" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="BrandHyperlinkButtonStyle" TargetType="HyperlinkButton">
+        <Setter Property="Foreground" Value="{ThemeResource BrandPrimaryBrush}" />
+        <Setter Property="Padding" Value="8,6" />
+    </Style>
+
+    <!-- ===== Collections ===== -->
+
+    <Style x:Key="PosterListItemStyle" TargetType="ListViewItem">
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="Margin" Value="0,0,2,0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+
+    <Style x:Key="PlayerIconButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="44" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style x:Key="PlayerTextButtonStyle" TargetType="Button">
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Background" Value="{ThemeResource PlayerControlBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="PlayerCenterButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="84" />
+        <Setter Property="Height" Value="84" />
+        <Setter Property="CornerRadius" Value="42" />
+        <Setter Property="Background" Value="{ThemeResource PlayerControlBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style x:Key="PlayerSourceItemStyle" TargetType="ListViewItem">
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="EpisodeButtonStyle" TargetType="Button">
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+</ResourceDictionary>

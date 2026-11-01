@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Pirsa (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Pirsa (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
