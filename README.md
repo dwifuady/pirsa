@@ -9,12 +9,22 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
 
 ## What it does
 
-- **Store-style shell** — an icon-only navigation rail with **Home** and
-  **Settings** by default. The title-bar hamburger expands it to labels as an
-  overlay; the rail hides completely while a video is playing.
+- **Store-style shell** — an icon-only navigation rail with **Home**,
+  **Discover** and **Settings** by default. The title-bar hamburger expands it to
+  labels as an overlay; the rail hides completely while a video is playing.
 - **Home** — a Top 10 hero carousel (movie/top when available) followed by every
   catalog exposed by the user's configured addons, with the source addon shown
   on each rail.
+- **Discover** — browse what your addons provide without typing: pick a **type**
+  (All, Movies, Series, Live TV, or any custom type an addon declares), a
+  **catalog** from those addons, and the catalog's own **genre/year filter**.
+  Browse results load as a poster grid with **Load more** paging via `skip`.
+- **Search** — the search box sits centered in the title bar on every page.
+  It searches **every addon that declares a `search` extra**, in parallel — not
+  just the selected catalog — and groups the hits by **addon + media type**
+  (Cinemeta · Movies, Cinemeta · Series), with a title count per section. The
+  type/catalog/genre dropdowns apply to browsing only and hide during search.
+  Typing from Home or Settings switches to Discover automatically.
 - **Details** — full-bleed backdrop, poster, overview, fact sheet, IMDb link,
   and season/episode browsing. Metadata is fetched from the addon that supplied
   the catalog item. Posters animate into the details hero with a native
@@ -75,7 +85,7 @@ addon manifest URL, for example:
 https://v3-cinemeta.strem.io/manifest.json
 ```
 
-- Catalog resources appear on Home on the next visit.
+- Catalog resources appear on Home and in Discover on the next visit.
 - Stream resources are used by the player.
 - Subtitles resources feed the CC picker in the player.
 - Each card shows the addon name, version, capabilities, types and host. The
@@ -136,15 +146,18 @@ Pirsa/
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   ViewModels/HomeViewModel.cs     hero + rails across addons
+  ViewModels/DiscoverViewModel.cs type/catalog/genre filters, search and paging
   ViewModels/DetailsViewModel.cs  meta routing, facts, seasons, episodes
   ViewModels/PlayerViewModel.cs   stream discovery, ranking, dedupe
   ViewModels/SettingsViewModel.cs addon manager state
   Views/HomePage.xaml             hero carousel + catalog rails
+  Views/DiscoverPage.xaml         catalog browser filters, search and poster grid
   Views/DetailsPage.xaml          backdrop hero + facts + episodes
   Views/PlayerPage.xaml           LibVLC surface + transport chrome
   Views/SettingsPage.xaml         addons + about
   MainWindow.xaml                 title bar + NavigationView shell
   Themes/Brand.xaml               Light / Dark / HighContrast palette and styles
+  Themes/PosterCard.xaml          shared poster card template + grid item style
   Assets/                         Pirsa app icon, tiles, splash, title-bar mark
 ```
 

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -5,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using Pirsa.ViewModels;
 using Pirsa.Views;
 using Windows.Graphics;
 
@@ -12,7 +14,7 @@ namespace Pirsa;
 
 /// <summary>
 /// The app window: custom title bar, Store-style navigation pane, and the
-/// frame that hosts Home, Details, Settings and the player.
+/// frame that hosts Home, Discover, Details, Settings and the player.
 /// </summary>
 public sealed partial class MainWindow : Window
 {
@@ -21,6 +23,7 @@ public sealed partial class MainWindow : Window
 
     private bool _playerFullscreen;
     private bool _initialNavigation = true;
+    private DiscoverViewModel? _discoverViewModel;
 
     public MainWindow()
     {
@@ -57,13 +60,102 @@ public sealed partial class MainWindow : Window
         {
             NavView.SelectedItem = HomeNavItem;
         }
+        else if (pageType == typeof(DiscoverPage))
+        {
+            NavView.SelectedItem = DiscoverNavItem;
+        }
 
         AppTitleBar.IsBackButtonVisible = RootFrame.CanGoBack;
+
+        AttachDiscoverSearch();
+        SyncTitleBarSearch();
 
         if (_initialNavigation)
         {
             _initialNavigation = false;
             DispatcherQueue.TryEnqueue(() => NavView.IsPaneOpen = false);
+        }
+    }
+
+    /// <summary>
+    /// The title-bar search box is app-wide. It follows the cached Discover
+    /// page's view model so results, placeholder and text stay in sync.
+    /// </summary>
+    private void AttachDiscoverSearch()
+    {
+        if (RootFrame.Content is not DiscoverPage page ||
+            ReferenceEquals(page.ViewModel, _discoverViewModel))
+        {
+            return;
+        }
+
+        if (_discoverViewModel is not null)
+        {
+            _discoverViewModel.PropertyChanged -= DiscoverViewModel_PropertyChanged;
+        }
+
+        _discoverViewModel = page.ViewModel;
+        _discoverViewModel.PropertyChanged += DiscoverViewModel_PropertyChanged;
+    }
+
+    private void DiscoverViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(DiscoverViewModel.SearchText)
+            or nameof(DiscoverViewModel.SearchPlaceholderText)
+            or nameof(DiscoverViewModel.CanSearch))
+        {
+            SyncTitleBarSearch();
+        }
+    }
+
+    private void SyncTitleBarSearch()
+    {
+        AppSearchBox.Visibility = RootFrame.CurrentSourcePageType == typeof(PlayerPage)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        if (_discoverViewModel is not { } viewModel)
+        {
+            return;
+        }
+
+        if (!string.Equals(AppSearchBox.Text, viewModel.SearchText, StringComparison.Ordinal))
+        {
+            AppSearchBox.Text = viewModel.SearchText;
+        }
+
+        AppSearchBox.PlaceholderText = viewModel.SearchPlaceholderText;
+    }
+
+    private void AppSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            SubmitSearch(sender.Text);
+        }
+    }
+
+    private void AppSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        SubmitSearch(sender.Text, immediate: true);
+    }
+
+    /// <summary>
+    /// Search results live on Discover, so typing from any page switches there
+    /// before applying the query. The view model holds the text, which lets a
+    /// freshly created page search as part of its first load.
+    /// </summary>
+    private void SubmitSearch(string? text, bool immediate = false)
+    {
+        if (RootFrame.CurrentSourcePageType != typeof(DiscoverPage))
+        {
+            NavigateSection(typeof(DiscoverPage));
+            AttachDiscoverSearch();
+        }
+
+        if (RootFrame.Content is DiscoverPage page)
+        {
+            page.ViewModel.SubmitSearch(text, immediate);
         }
     }
 
@@ -79,6 +171,13 @@ public sealed partial class MainWindow : Window
         if (ReferenceEquals(args.InvokedItemContainer, HomeNavItem))
         {
             NavigateSection(typeof(HomePage));
+            NavView.IsPaneOpen = false;
+            return;
+        }
+
+        if (ReferenceEquals(args.InvokedItemContainer, DiscoverNavItem))
+        {
+            NavigateSection(typeof(DiscoverPage));
             NavView.IsPaneOpen = false;
         }
     }

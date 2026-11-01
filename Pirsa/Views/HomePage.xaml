@@ -12,7 +12,6 @@
     Background="{ThemeResource AppBackgroundBrush}"
     NavigationCacheMode="Required"
     mc:Ignorable="d">
-
     <Page.Resources>
         <DataTemplate x:Key="PosterCardTemplate" x:DataType="models:MetaItem">
             <Grid Width="168">

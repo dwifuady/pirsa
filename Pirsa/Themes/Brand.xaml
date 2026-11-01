@@ -270,6 +270,16 @@
         <Setter Property="VerticalContentAlignment" Value="Top" />
     </Style>
 
+    <Style x:Key="PosterGridViewItemStyle" TargetType="GridViewItem">
+        <Setter Property="Padding" Value="6" />
+        <Setter Property="Margin" Value="0,0,6,18" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+    </Style>
+
     <Style x:Key="PlayerIconButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="44" />
         <Setter Property="Height" Value="44" />

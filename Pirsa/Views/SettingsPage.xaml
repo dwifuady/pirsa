@@ -66,7 +66,7 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Add a Stremio addon manifest URL. Catalog resources appear on Home; stream resources power the player. Only Cinemeta is included by default."
+                        Text="Add a Stremio addon manifest URL. Catalog resources appear on Home and Discover; stream resources power the player. Only Cinemeta is included by default."
                         TextWrapping="Wrap" />
 
                     <Border

@@ -76,13 +76,12 @@ public sealed class StremioAddonClient
     }
 
     /// <summary>
-    /// Fetches one catalog page. <paramref name="genre"/> is used for catalogs
-    /// such as Cinemeta's "New" rows that require a year value.
+    /// Fetches one catalog page with the supplied extras. A null or empty
+    /// <see cref="CatalogQuery"/> returns the catalog's default first page.
     /// </summary>
     public async Task<IReadOnlyList<MetaItem>> GetCatalogAsync(
         AddonCatalog catalog,
-        string? genre = null,
-        int skip = 0,
+        CatalogQuery? query = null,
         CancellationToken cancellationToken = default)
     {
         var manifest = await GetManifestAsync(cancellationToken);
@@ -92,14 +91,19 @@ public sealed class StremioAddonClient
         }
 
         var extras = new List<string>();
-        if (!string.IsNullOrWhiteSpace(genre))
+        if (!string.IsNullOrWhiteSpace(query?.Genre))
         {
-            extras.Add($"genre={Uri.EscapeDataString(genre)}");
+            extras.Add($"genre={Uri.EscapeDataString(query.Genre)}");
         }
 
-        if (skip > 0)
+        if (!string.IsNullOrWhiteSpace(query?.Search))
         {
-            extras.Add($"skip={skip}");
+            extras.Add($"search={Uri.EscapeDataString(query.Search.Trim())}");
+        }
+
+        if (query?.Skip > 0)
+        {
+            extras.Add($"skip={query.Skip}");
         }
 
         var extraPath = extras.Count > 0 ? "/" + string.Join('&', extras) : "";

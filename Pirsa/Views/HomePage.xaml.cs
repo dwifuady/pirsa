@@ -1,9 +1,9 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.ViewModels;
 
@@ -131,7 +131,7 @@ public sealed partial class HomePage : Page
         if (sender is ListView listView &&
             listView.ContainerFromItem(meta) is ListViewItem container)
         {
-            poster = FindDescendant<Image>(container);
+            poster = VisualTreeHelpers.FindDescendant<Image>(container);
         }
 
         OpenDetails(meta, poster);
@@ -167,26 +167,5 @@ public sealed partial class HomePage : Page
         {
             Frame.Navigate(typeof(DetailsPage), meta, new DrillInNavigationTransitionInfo());
         }
-    }
-
-    private static T? FindDescendant<T>(DependencyObject root)
-        where T : DependencyObject
-    {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match)
-            {
-                return match;
-            }
-
-            if (FindDescendant<T>(child) is { } nested)
-            {
-                return nested;
-            }
-        }
-
-        return null;
     }
 }

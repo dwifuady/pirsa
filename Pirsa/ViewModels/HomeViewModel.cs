@@ -140,8 +140,7 @@ public partial class HomeViewModel : ObservableObject
 
             var heroMetas = await heroRef.Entry.Client.GetCatalogAsync(
                 heroRef.Catalog,
-                heroGenre,
-                0,
+                new CatalogQuery { Genre = heroGenre },
                 cancellationToken);
 
             if (heroMetas.Count == 0)
@@ -216,8 +215,7 @@ public partial class HomeViewModel : ObservableObject
             var genre = ResolveGenre(catalogRef.Catalog, out var subtitle);
             var metas = await catalogRef.Entry.Client.GetCatalogAsync(
                 catalogRef.Catalog,
-                genre,
-                0,
+                new CatalogQuery { Genre = genre },
                 cancellationToken);
 
             if (metas.Count == 0)

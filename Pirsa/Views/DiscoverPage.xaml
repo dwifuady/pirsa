@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.DiscoverPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Pirsa.Models"
+    xmlns:vm="using:Pirsa.ViewModels"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Required"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <DataTemplate x:Key="PosterCardTemplate" x:DataType="models:MetaItem">
+            <Grid Width="168">
+                <StackPanel Spacing="7">
+                    <Border
+                        Width="168"
+                        Height="252"
+                        Background="{ThemeResource PosterPlaceholderBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                        <Grid>
+                            <FontIcon
+                                AutomationProperties.AccessibilityView="Raw"
+                                FontSize="28"
+                                Foreground="{ThemeResource PosterPlaceholderForegroundBrush}"
+                                Glyph="&#xE8B2;"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(HasNoPoster)}" />
+
+                            <Image
+                                AutomationProperties.AccessibilityView="Raw"
+                                Source="{x:Bind PosterCardImage}"
+                                Stretch="UniformToFill" />
+
+                            <Border
+                                Margin="8"
+                                Padding="6,2"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Bottom"
+                                Background="{ThemeResource OverlayChipBackgroundBrush}"
+                                CornerRadius="4"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(HasRating)}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon
+                                        FontSize="9"
+                                        Foreground="{ThemeResource OverlayChipForegroundBrush}"
+                                        Glyph="&#xE735;" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource OverlayChipForegroundBrush}"
+                                        Text="{x:Bind RatingText}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock
+                        MaxLines="2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind Name}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="WrapWholeWords" />
+
+                    <TextBlock
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind CardMeta}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Filters  -->
+        <StackPanel
+            Grid.Row="0"
+            Padding="40,26,40,14"
+            Spacing="16">
+            <StackPanel Spacing="4">
+                <TextBlock
+                    FontSize="32"
+                    FontWeight="SemiBold"
+                    Style="{StaticResource TitleTextBlockStyle}"
+                    Text="Discover" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Text="Browse the catalogs your addons provide, or search for something specific."
+                    TextWrapping="Wrap" />
+            </StackPanel>
+
+            <StackPanel
+                Orientation="Horizontal"
+                Spacing="12"
+                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowBrowseFilters), Mode=OneWay}">
+                <ComboBox
+                    MinWidth="180"
+                    Header="Type"
+                    ItemsSource="{x:Bind ViewModel.Types}"
+                    SelectedItem="{x:Bind ViewModel.SelectedType, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DiscoverTypeOption">
+                            <TextBlock Text="{x:Bind Label, Mode=OneTime}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <ComboBox
+                    MinWidth="280"
+                    MaxWidth="380"
+                    Header="Catalog"
+                    ItemsSource="{x:Bind ViewModel.Catalogs}"
+                    SelectedItem="{x:Bind ViewModel.SelectedCatalog, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DiscoverCatalogOption">
+                            <TextBlock Text="{x:Bind Label, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <ComboBox
+                    MinWidth="180"
+                    Header="{x:Bind ViewModel.FilterLabel, Mode=OneWay}"
+                    ItemsSource="{x:Bind ViewModel.Filters}"
+                    SelectedItem="{x:Bind ViewModel.SelectedFilter, Mode=TwoWay}"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowGenreFilter), Mode=OneWay}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!--  Results  -->
+        <Grid
+            Grid.Row="1"
+            Margin="40,0,40,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <StackPanel
+                Grid.Row="0"
+                Margin="2,0,2,10"
+                Spacing="10">
+                <Grid Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowResultsHeader), Mode=OneWay}">
+                    <TextBlock
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Text="{x:Bind ViewModel.ResultsHeading, Mode=OneWay}" />
+                    <TextBlock
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource SectionSubtitleTextBlockStyle}"
+                        Text="{x:Bind ViewModel.ResultsCountText, Mode=OneWay}" />
+                </Grid>
+
+                <ProgressBar
+                    Height="2"
+                    Foreground="{ThemeResource BrandPrimaryBrush}"
+                    IsIndeterminate="True"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsLoading), Mode=OneWay}" />
+
+                <InfoBar
+                    Title="Couldn't load results"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasLoadError, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.LoadErrorMessage, Mode=OneWay}"
+                    Severity="Warning">
+                    <InfoBar.ActionButton>
+                        <Button Command="{x:Bind ViewModel.RetryCommand}" Content="Retry" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+            </StackPanel>
+
+            <GridView
+                x:Name="ResultsGrid"
+                Grid.Row="1"
+                Padding="0"
+                AutomationProperties.Name="Catalog results"
+                IsItemClickEnabled="True"
+                ItemClick="Results_ItemClick"
+                ItemContainerStyle="{StaticResource PosterGridViewItemStyle}"
+                ItemTemplate="{StaticResource PosterCardTemplate}"
+                ItemsSource="{x:Bind ViewModel.Results}"
+                SelectionMode="None"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.HorizontalScrollMode="Disabled"
+                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsBrowsing), Mode=OneWay}">
+                <GridView.Footer>
+                    <StackPanel
+                        Margin="0,2,0,32"
+                        HorizontalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanLoadMore), Mode=OneWay}">
+                        <Button
+                            MinWidth="132"
+                            Command="{x:Bind ViewModel.LoadMoreCommand}"
+                            Content="Load more"
+                            IsEnabled="{x:Bind helpers:XamlHelpers.Not(ViewModel.IsLoadingMore), Mode=OneWay}" />
+                        <ProgressRing
+                            Width="18"
+                            Height="18"
+                            VerticalAlignment="Center"
+                            IsActive="{x:Bind ViewModel.IsLoadingMore, Mode=OneWay}" />
+                    </StackPanel>
+                </GridView.Footer>
+            </GridView>
+
+            <!--  Search results, grouped by addon and type  -->
+            <GridView
+                x:Name="SearchResultsGrid"
+                Grid.Row="1"
+                Padding="0"
+                AutomationProperties.Name="Search results"
+                IsItemClickEnabled="True"
+                ItemClick="Results_ItemClick"
+                ItemContainerStyle="{StaticResource PosterGridViewItemStyle}"
+                ItemTemplate="{StaticResource PosterCardTemplate}"
+                ItemsSource="{x:Bind ViewModel.SearchView, Mode=OneTime}"
+                SelectionMode="None"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.HorizontalScrollMode="Disabled"
+                ScrollViewer.VerticalScrollBarVisibility="Auto"
+                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowSearchResults), Mode=OneWay}">
+                <GridView.GroupStyle>
+                    <GroupStyle HidesIfEmpty="True">
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="vm:DiscoverResultGroup">
+                                <StackPanel
+                                    Margin="2,16,2,10"
+                                    Orientation="Horizontal"
+                                    Spacing="10"
+                                    VerticalAlignment="Center">
+                                    <Border
+                                        Width="4"
+                                        Height="20"
+                                        VerticalAlignment="Center"
+                                        Background="{ThemeResource BrandPrimaryBrush}"
+                                        CornerRadius="2" />
+                                    <TextBlock
+                                        Style="{StaticResource SubtitleTextBlockStyle}"
+                                        Text="{x:Bind AddonName, Mode=OneTime}" />
+                                    <Border
+                                        Padding="7,2"
+                                        VerticalAlignment="Center"
+                                        Background="{ThemeResource BrandSubtleBrush}"
+                                        CornerRadius="4">
+                                        <TextBlock
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            Foreground="{ThemeResource BrandPrimaryBrush}"
+                                            Text="{x:Bind TypeName, Mode=OneTime}" />
+                                    </Border>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource SectionSubtitleTextBlockStyle}"
+                                        Text="&#xB7;" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource SectionSubtitleTextBlockStyle}"
+                                        Text="{x:Bind CountLabel, Mode=OneTime}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </GridView.GroupStyle>
+            </GridView>
+        </Grid>
+
+        <!--  First page load  -->
+        <Grid
+            Grid.Row="1"
+            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowLoadingState), Mode=OneWay}">
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="14">
+                <ProgressRing
+                    Width="26"
+                    Height="26"
+                    HorizontalAlignment="Center"
+                    IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Text="Loading catalog…" />
+            </StackPanel>
+        </Grid>
+
+        <!--  Empty results  -->
+        <Grid
+            Grid.Row="1"
+            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.ShowEmptyState), Mode=OneWay}">
+            <StackPanel
+                MaxWidth="420"
+                Margin="32"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="10">
+                <FontIcon
+                    FontSize="30"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE721;" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="{x:Bind ViewModel.EmptyTitle, Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Text="{x:Bind ViewModel.EmptyMessage, Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <!--  Initial setup  -->
+        <Grid
+            Grid.RowSpan="2"
+            Background="{ThemeResource AppBackgroundBrush}"
+            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsInitializing), Mode=OneWay}">
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="18">
+                <Image
+                    Width="60"
+                    Height="60"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Source="ms-appx:///Assets/BrandMark.png" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="Loading your catalogs…" />
+                <ProgressRing
+                    Width="24"
+                    Height="24"
+                    HorizontalAlignment="Center"
+                    IsActive="{x:Bind ViewModel.IsInitializing, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!--  Fatal error  -->
+        <Grid
+            Grid.RowSpan="2"
+            Background="{ThemeResource AppBackgroundBrush}"
+            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasError), Mode=OneWay}">
+            <StackPanel
+                MaxWidth="480"
+                Margin="32"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="14">
+                <FontIcon
+                    FontSize="34"
+                    Foreground="{ThemeResource BrandPrimaryBrush}"
+                    Glyph="&#xE774;" />
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Couldn't load your catalogs" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+                <StackPanel
+                    Margin="0,8,0,0"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <Button
+                        Command="{x:Bind ViewModel.InitializeCommand}"
+                        Content="Try again"
+                        Style="{StaticResource AccentButtonStyle}" />
+                    <Button Click="ManageAddons_Click" Content="Manage addons" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

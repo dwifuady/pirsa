@@ -192,6 +192,51 @@ public sealed class AddonCatalog
     [JsonIgnore]
     public CatalogExtra? RequiredGenre =>
         Extra.FirstOrDefault(e => e.IsRequired && e.IsGenre && e.Options.Count > 0);
+
+    /// <summary>True when the catalog declares a <c>search</c> extra.</summary>
+    [JsonIgnore]
+    public bool SupportsSearch =>
+        Extra.Any(extra => extra.IsSearch);
+
+    /// <summary>True when the catalog can return more than one page.</summary>
+    [JsonIgnore]
+    public bool SupportsSkip =>
+        Extra.Any(extra => extra.IsSkip);
+
+    /// <summary>
+    /// The extra behind the Discover filter dropdown: genre, or a year list
+    /// published under the genre extra (Cinemeta's "New" catalogs do this).
+    /// </summary>
+    [JsonIgnore]
+    public CatalogExtra? FilterExtra =>
+        Extra.FirstOrDefault(e => e.IsGenre && e.Options.Count > 0)
+        ?? Extra.FirstOrDefault(e => e.IsYear && e.Options.Count > 0);
+
+    /// <summary>"Genre" or "Year", matching <see cref="FilterExtra"/>.</summary>
+    [JsonIgnore]
+    public string FilterLabel
+    {
+        get
+        {
+            var extra = FilterExtra;
+            if (extra is null)
+            {
+                return "Genre";
+            }
+
+            return extra.IsYear || extra.Options.All(CatalogExtra.IsYearValue) ? "Year" : "Genre";
+        }
+    }
+
+    /// <summary>
+    /// True when every required extra is a filter the Discover page can fill
+    /// (genre/year) or can be omitted (search, skip). Catalogs that need ids
+    /// supplied by another addon (Cinemeta's lastVideosIds) are not browsable.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsBrowsable =>
+        Extra.Where(extra => extra.IsRequired).All(extra =>
+            (extra.IsFilterExtra && extra.Options.Count > 0) || extra.IsSkip);
 }
 
 /// <summary>
@@ -210,6 +255,35 @@ public sealed class CatalogExtra
 
     [JsonIgnore]
     public bool IsGenre => Name.Equals("genre", StringComparison.OrdinalIgnoreCase);
+
+    [JsonIgnore]
+    public bool IsSearch => Name.Equals("search", StringComparison.OrdinalIgnoreCase);
+
+    [JsonIgnore]
+    public bool IsSkip => Name.Equals("skip", StringComparison.OrdinalIgnoreCase);
+
+    [JsonIgnore]
+    public bool IsYear => Name.Equals("year", StringComparison.OrdinalIgnoreCase);
+
+    [JsonIgnore]
+    public bool IsFilterExtra => IsGenre || IsYear;
+
+    internal static bool IsYearValue(string value) =>
+        value.Length == 4 &&
+        int.TryParse(value, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out _);
+}
+
+/// <summary>
+/// The extras sent with a catalog request. Null or empty fields are omitted.
+/// </summary>
+public sealed class CatalogQuery
+{
+    public string? Genre { get; set; }
+
+    public string? Search { get; set; }
+
+    public int Skip { get; set; }
 }
 
 internal sealed class CatalogResponse

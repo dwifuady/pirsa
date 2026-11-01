@@ -19,6 +19,7 @@
 
         <TitleBar
             x:Name="AppTitleBar"
+            Height="48"
             BackRequested="AppTitleBar_BackRequested"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
@@ -28,6 +29,19 @@
                 <ImageIconSource ImageSource="ms-appx:///Assets/BrandMark.png" />
             </TitleBar.IconSource>
         </TitleBar>
+
+        <!--  Centered in the window (not just in the title-bar content slot).  -->
+        <AutoSuggestBox
+            x:Name="AppSearchBox"
+            Grid.Row="0"
+            Width="460"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="Search titles"
+            PlaceholderText="Search across your addons"
+            QueryIcon="Find"
+            QuerySubmitted="AppSearchBox_QuerySubmitted"
+            TextChanged="AppSearchBox_TextChanged" />
 
         <NavigationView
             x:Name="NavView"
@@ -49,6 +63,14 @@
                     Tag="home">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Home" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="DiscoverNavItem"
+                    Content="Discover"
+                    Tag="discover">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Find" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
