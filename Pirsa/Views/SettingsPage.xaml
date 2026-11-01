@@ -300,6 +300,61 @@
                     </Border>
                 </StackPanel>
 
+                <!--  Playback  -->
+                <StackPanel Spacing="10">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Border
+                            Width="4"
+                            Height="20"
+                            Background="{ThemeResource BrandPrimaryBrush}"
+                            CornerRadius="2" />
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="Playback" />
+                    </StackPanel>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <StackPanel Spacing="12">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="When a video opens" />
+
+                            <RadioButtons SelectedIndex="{x:Bind ViewModel.AutoplayIndex, Mode=TwoWay}">
+                                <x:String>Ask — show the source picker</x:String>
+                                <x:String>Autoplay the first available source</x:String>
+                                <x:String>Autoplay the first source matching a pattern</x:String>
+                            </RadioButtons>
+
+                            <TextBox
+                                Header="Source pattern"
+                                PlaceholderText="1080|1440"
+                                IsEnabled="{x:Bind ViewModel.IsPatternMode, Mode=OneWay}"
+                                Text="{x:Bind ViewModel.AutoplayPattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="A regular expression matched against quality, title, provider, filename and URL. Examples: 1080 or 1080|1440."
+                                TextWrapping="Wrap" />
+
+                            <InfoBar
+                                Title="Pattern problem"
+                                IsClosable="False"
+                                IsOpen="{x:Bind ViewModel.HasPatternError, Mode=OneWay}"
+                                Message="{x:Bind ViewModel.PatternError, Mode=OneWay}"
+                                Severity="Warning" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!--  About  -->
                 <StackPanel Spacing="10">
                     <StackPanel

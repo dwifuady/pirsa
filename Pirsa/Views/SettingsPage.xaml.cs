@@ -14,7 +14,7 @@ namespace Pirsa.Views;
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
-    public SettingsViewModel ViewModel { get; } = new(App.Addons);
+    public SettingsViewModel ViewModel { get; } = new(App.Addons, App.Settings);
 
     public SettingsPage()
     {

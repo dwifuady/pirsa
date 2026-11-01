@@ -27,6 +27,9 @@ public partial class App : Application
     /// </summary>
     public static AddonRegistry Addons { get; } = new();
 
+    /// <summary>Player and app preferences, persisted in settings.json.</summary>
+    public static AppSettings Settings { get; } = new();
+
     /// <summary>
     /// The native window handle (HWND). Use for file pickers,
     /// <c>DataTransferManager</c>, and any WinRT interop that requires
@@ -46,6 +49,7 @@ public partial class App : Application
         DispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         Window.Activate();
         _ = Addons.EnsureLoadedAsync();
+        _ = Settings.EnsureLoadedAsync();
         _ = VideoEngine.WarmUpAsync();
     }
 }

@@ -28,9 +28,10 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
   fullscreen, auto-hiding controls, a source picker, and a **CC subtitle
   picker**.
 - **Playback sources** — every configured addon that declares a `stream`
-  resource is queried in parallel; sources are ranked for a sensible default
-  (1080p HLS first), with headers from `behaviorHints.proxyHeaders` forwarded to
-  VLC when needed.
+  resource is queried in parallel, deduplicated and grouped by addon in the
+  source picker. By default, pressing Play opens this picker; choose a source to
+  start. Headers from `behaviorHints.proxyHeaders` are forwarded to VLC when
+  needed.
 
 A fresh install includes two addons:
 
@@ -160,6 +161,11 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
 - Source discovery queries every configured addon that declares a `stream`
   resource for the media type and id prefix, deduplicates URLs, and ranks 1080p
   HLS sources first. Provider request headers are forwarded as VLC media options.
+- **Autoplay** — Settings → Playback can keep the default **Ask** behavior,
+  autoplay the first available source, or autoplay the first source matching a
+  regular expression. The pattern is matched against quality, title, provider,
+  filename and URL; examples: `1080` or `1080|1440`. If nothing matches, the
+  picker opens.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
   fullscreen, **M** mute, **Esc** exits fullscreen or closes the source/subtitle
   panels. Enter activates a focused button. Arrow keys adjust volume when the

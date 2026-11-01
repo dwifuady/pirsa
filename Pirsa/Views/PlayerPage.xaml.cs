@@ -295,11 +295,29 @@ public sealed partial class PlayerPage : Page
         LoadingOverlay.Visibility = Visibility.Collapsed;
         SourcesButton.IsEnabled = true;
         ShowChrome();
-        ShowBuffer("Starting stream…");
 
-        _pendingSource = ViewModel.SelectedSource;
-        TryStartPlayback();
+        await App.Settings.EnsureLoadedAsync();
+
+        var autoplay = SelectAutoplaySource();
+        if (autoplay is not null)
+        {
+            _pendingSource = autoplay;
+            TryStartPlayback();
+            return;
+        }
+
+        // Default: let the user pick a source. Grouped by addon.
+        OpenSources();
     }
+
+    private PlaybackSource? SelectAutoplaySource() =>
+        App.Settings.AutoplayMode switch
+        {
+            AutoplayMode.FirstAvailable => ViewModel.Sources.FirstOrDefault(),
+            AutoplayMode.Pattern => ViewModel.Sources.FirstOrDefault(
+                source => App.Settings.MatchesPattern(source.SearchText)),
+            _ => null,
+        };
 
     private void TryStartPlayback()
     {
@@ -929,7 +947,7 @@ public sealed partial class PlayerPage : Page
 
     private void SourceList_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not PlaybackSource source)
+        if (e.ClickedItem is not SourceListItem { IsHeader: false, Source: { } source })
         {
             return;
         }

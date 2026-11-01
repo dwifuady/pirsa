@@ -10,12 +10,20 @@ namespace Pirsa.ViewModels;
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
+    private readonly AppSettings _settings;
+    private bool _loadingSettings;
 
-    public SettingsViewModel(AddonRegistry registry)
+    public SettingsViewModel(AddonRegistry registry, AppSettings settings)
     {
         _registry = registry;
+        _settings = settings;
         NewManifestUrl = "";
         ErrorMessage = "";
+        PatternError = "";
+        _loadingSettings = true;
+        AutoplayIndex = 0;
+        AutoplayPattern = "";
+        _loadingSettings = false;
         _registry.Entries.CollectionChanged += (_, _) => RaiseAddonInfo();
     }
 
@@ -32,6 +40,20 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string ErrorMessage { get; set; }
+
+    /// <summary>0 = ask, 1 = first source, 2 = pattern.</summary>
+    [ObservableProperty]
+    public partial int AutoplayIndex { get; set; }
+
+    [ObservableProperty]
+    public partial string AutoplayPattern { get; set; }
+
+    [ObservableProperty]
+    public partial string PatternError { get; set; }
+
+    public bool IsPatternMode => AutoplayIndex == 2;
+
+    public bool HasPatternError => IsPatternMode && !string.IsNullOrWhiteSpace(PatternError);
 
     public bool IsEmpty => Addons.Count == 0;
 
@@ -50,6 +72,19 @@ public partial class SettingsViewModel : ObservableObject
         {
             await _registry.EnsureLoadedAsync(cancellationToken);
             RaiseAddonInfo();
+            await _settings.EnsureLoadedAsync(cancellationToken);
+
+            _loadingSettings = true;
+            AutoplayIndex = _settings.AutoplayMode switch
+            {
+                AutoplayMode.FirstAvailable => 1,
+                AutoplayMode.Pattern => 2,
+                _ => 0,
+            };
+            AutoplayPattern = _settings.AutoplayPattern;
+            _loadingSettings = false;
+            ValidatePattern();
+
             await _registry.LoadManifestsAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -133,6 +168,54 @@ public partial class SettingsViewModel : ObservableObject
     {
         await entry.LoadManifestAsync(cancellationToken);
         RaiseAddonInfo();
+    }
+
+    partial void OnAutoplayIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(IsPatternMode));
+        OnPropertyChanged(nameof(HasPatternError));
+
+        if (!_loadingSettings)
+        {
+            _settings.AutoplayMode = value switch
+            {
+                1 => AutoplayMode.FirstAvailable,
+                2 => AutoplayMode.Pattern,
+                _ => AutoplayMode.Ask,
+            };
+            _ = _settings.SaveAsync();
+        }
+
+        ValidatePattern();
+    }
+
+    partial void OnAutoplayPatternChanged(string value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoplayPattern = value ?? "";
+            _ = _settings.SaveAsync();
+        }
+
+        ValidatePattern();
+    }
+
+    private void ValidatePattern()
+    {
+        if (!IsPatternMode)
+        {
+            PatternError = "";
+        }
+        else if (!AppSettings.TryValidatePattern(AutoplayPattern, out var error))
+        {
+            PatternError = error;
+        }
+        else
+        {
+            PatternError = "";
+        }
+
+        OnPropertyChanged(nameof(HasPatternError));
     }
 
     private void SetError(string message)

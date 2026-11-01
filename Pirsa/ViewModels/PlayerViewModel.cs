@@ -34,6 +34,9 @@ public partial class PlayerViewModel : ObservableObject
 
     public ObservableCollection<PlaybackSource> Sources { get; } = [];
 
+    /// <summary>Flat picker rows: addon group headers interleaved with sources.</summary>
+    public ObservableCollection<SourceListItem> SourceItems { get; } = [];
+
     /// <summary>Off + one entry per available language.</summary>
     public ObservableCollection<SubtitleLanguageChoice> SubtitleMenu { get; } = [];
 
@@ -96,6 +99,7 @@ public partial class PlayerViewModel : ObservableObject
         Request = request;
         SelectedSource = null;
         Sources.Clear();
+        SourceItems.Clear();
         HasError = false;
         ErrorMessage = "";
         StatusText = "Finding sources…";
@@ -135,6 +139,21 @@ public partial class PlayerViewModel : ObservableObject
             foreach (var source in ranked)
             {
                 Sources.Add(source);
+            }
+
+            foreach (var group in ranked.GroupBy(source => source.AddonName))
+            {
+                SourceItems.Add(new SourceListItem
+                {
+                    IsHeader = true,
+                    HeaderTitle = group.Key,
+                    HeaderDetail = group.Count() == 1 ? "1 source" : $"{group.Count()} sources",
+                });
+
+                foreach (var source in group)
+                {
+                    SourceItems.Add(new SourceListItem { Source = source });
+                }
             }
 
             if (Sources.Count == 0)
@@ -439,6 +458,21 @@ public sealed class SubtitleVersionChoice : ObservableObject
     }
 }
 
+/// <summary>A picker row: either an addon group header or one playable source.</summary>
+public sealed class SourceListItem : ObservableObject
+{
+    public bool IsHeader { get; init; }
+
+    public string HeaderTitle { get; init; } = "";
+
+    public string HeaderDetail { get; init; } = "";
+
+    public PlaybackSource? Source { get; init; }
+
+    public override string ToString() =>
+        IsHeader ? HeaderTitle : Source?.Title ?? "";
+}
+
 /// <summary>
 /// A source the user can play, with normalized quality/provider metadata.
 /// </summary>
@@ -493,6 +527,17 @@ public sealed class PlaybackSource : ObservableObject
             return string.Join(" · ", parts);
         }
     }
+
+    /// <summary>Text the autoplay pattern is matched against.</summary>
+    public string SearchText => string.Join(" ", new[]
+    {
+        QualityLabel,
+        Title,
+        SubtitleLine,
+        DetailsLine,
+        AddonName,
+        Url,
+    });
 
     public bool HasDetails => !string.IsNullOrWhiteSpace(DetailsLine);
 
