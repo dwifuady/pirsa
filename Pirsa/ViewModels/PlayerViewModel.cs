@@ -540,11 +540,18 @@ public sealed class PlaybackSource : ObservableObject
 
         var haystack = $"{stream.Name} {stream.Description} {stream.BehaviorHints?.Filename}";
         var height = ParseHeight(haystack);
+
+        // Some addons omit resolution text but include it in the URL path.
+        if (height == 0)
+        {
+            height = ParseHeight(stream.Url ?? "");
+        }
+
         var quality = height switch
         {
             >= 2000 => "4K",
             > 0 => $"{height}p",
-            _ => "Auto",
+            _ => "Unknown",
         };
 
         var extension = Path.GetExtension(uri.AbsolutePath).TrimStart('.').ToUpperInvariant();
@@ -584,7 +591,7 @@ public sealed class PlaybackSource : ObservableObject
 
         return new PlaybackSource
         {
-            Url = stream.Url,
+            Url = stream.Url!,
             AddonName = addonName,
             QualityLabel = quality,
             ProviderLine = provider,

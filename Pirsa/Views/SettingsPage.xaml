@@ -355,7 +355,7 @@
                                 <TextBlock
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="If the preferred quality isn't available, Pirsa uses the best available source."
+                                    Text="Quality comes from each addon's source metadata. Sources that don't declare a resolution are shown as Unknown and won't match; Pirsa then falls back to the best available source."
                                     TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>

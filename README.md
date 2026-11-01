@@ -163,9 +163,11 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   HLS sources first. Provider request headers are forwarded as VLC media options.
 - **Autoplay** — Settings → Playback has a single **Start playing automatically**
   switch, off by default. When on, choose a **Preferred quality**: Best
-  available, 4K, 1440p, 1080p, 720p or 480p. If that quality is unavailable,
-  Pirsa uses the best available source. With the switch off, every title opens
-  the source picker. No regex or advanced syntax.
+  available, 4K, 1440p, 1080p, 720p or 480p. Quality labels come from each
+  addon's source metadata; sources that don't declare a resolution are shown as
+  **Unknown**. If the preferred quality isn't available, Pirsa uses the best
+  available source. With the switch off, every title opens the source picker.
+  No regex or advanced syntax.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
   fullscreen, **M** mute, **Esc** exits fullscreen or closes the source/subtitle
   panels. Enter activates a focused button. Arrow keys adjust volume when the
