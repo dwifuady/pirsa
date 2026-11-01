@@ -40,6 +40,7 @@ public sealed partial class MainWindow : Window
         var pageType = RootFrame.CurrentSourcePageType;
 
         NavView.IsPaneVisible = pageType != typeof(PlayerPage);
+        AppTitleBar.IsPaneToggleButtonVisible = pageType != typeof(PlayerPage);
 
         if (pageType == typeof(SettingsPage))
         {
@@ -89,6 +90,11 @@ public sealed partial class MainWindow : Window
         {
             RootFrame.GoBack();
         }
+    }
+
+    private void AppTitleBar_PaneToggleRequested(TitleBar sender, object args)
+    {
+        NavView.IsPaneOpen = !NavView.IsPaneOpen;
     }
 
     /// <summary>

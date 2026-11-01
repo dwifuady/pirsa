@@ -21,6 +21,8 @@
             x:Name="AppTitleBar"
             BackRequested="AppTitleBar_BackRequested"
             IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="True"
+            PaneToggleRequested="AppTitleBar_PaneToggleRequested"
             Title="Pirsa">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/BrandMark.png" />
@@ -33,6 +35,7 @@
             AlwaysShowHeader="False"
             CompactPaneLength="52"
             IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
             IsSettingsVisible="True"
             ItemInvoked="NavView_ItemInvoked"
             OpenPaneLength="260"
