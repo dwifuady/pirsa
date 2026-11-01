@@ -9,8 +9,9 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
 
 ## What it does
 
-- **Store-style shell** — a hidden-by-default navigation pane with **Home** and
-  **Settings**, opened from the title-bar hamburger, plus Mica chrome.
+- **Store-style shell** — an icon-only navigation rail with **Home** and
+  **Settings** by default. The title-bar hamburger expands it to labels as an
+  overlay; the rail hides completely while a video is playing.
 - **Home** — a Top 10 hero carousel (movie/top when available) followed by every
   catalog exposed by the user's configured addons, with the source addon shown
   on each rail.

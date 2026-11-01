@@ -40,7 +40,7 @@
             IsSettingsVisible="True"
             ItemInvoked="NavView_ItemInvoked"
             OpenPaneLength="260"
-            PaneDisplayMode="LeftMinimal"
+            PaneDisplayMode="LeftCompact"
             SelectionFollowsFocus="Disabled">
             <NavigationView.MenuItems>
                 <NavigationViewItem

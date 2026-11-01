@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     private static extern uint GetDpiForWindow(IntPtr hWnd);
 
     private bool _playerFullscreen;
+    private bool _initialNavigation = true;
 
     public MainWindow()
     {
@@ -42,6 +43,12 @@ public sealed partial class MainWindow : Window
         NavView.IsPaneVisible = pageType != typeof(PlayerPage);
         AppTitleBar.IsPaneToggleButtonVisible = pageType != typeof(PlayerPage);
 
+        if (pageType == typeof(PlayerPage))
+        {
+            // Playback is immersive; return to the icon rail afterwards.
+            NavView.IsPaneOpen = false;
+        }
+
         if (pageType == typeof(SettingsPage))
         {
             NavView.SelectedItem = NavView.SettingsItem;
@@ -52,6 +59,12 @@ public sealed partial class MainWindow : Window
         }
 
         AppTitleBar.IsBackButtonVisible = RootFrame.CanGoBack;
+
+        if (_initialNavigation)
+        {
+            _initialNavigation = false;
+            DispatcherQueue.TryEnqueue(() => NavView.IsPaneOpen = false);
+        }
     }
 
     private void NavView_ItemInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
