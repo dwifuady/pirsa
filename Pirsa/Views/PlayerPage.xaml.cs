@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Models;
 using Pirsa.Services;
 using Pirsa.ViewModels;
+using Windows.System;
 using Windows.Storage;
 
 namespace Pirsa.Views;
@@ -78,6 +79,9 @@ public sealed partial class PlayerPage : Page
         Root.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(Root_PointerMoved), true);
         Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(Root_PointerPressed), true);
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Root_KeyDown), true);
+        Root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Root_PreviewKeyDown), true);
+
+        Loaded += (_, _) => VideoSurface.Focus(FocusState.Programmatic);
 
         VolumeSlider.Value = 80;
     }
@@ -141,6 +145,7 @@ public sealed partial class PlayerPage : Page
             HookMediaPlayer();
             VideoSurface.MediaPlayer = _mediaPlayer;
             _vlcReady = true;
+            VideoSurface.Focus(FocusState.Programmatic);
             TryStartPlayback();
         }
         catch (Exception exception)
@@ -550,6 +555,8 @@ public sealed partial class PlayerPage : Page
 
     private void InputLayer_Tapped(object sender, TappedRoutedEventArgs e)
     {
+        VideoSurface.Focus(FocusState.Pointer);
+
         if (_sourcePanelOpen)
         {
             CloseSources();
@@ -812,6 +819,56 @@ public sealed partial class PlayerPage : Page
         _keyboardActive = true;
         ShowChrome();
         StartChromeTimer();
+    }
+
+    /// <summary>
+    /// Player-wide media shortcuts. PreviewKeyDown runs before the focused
+    /// control, so Space doesn't activate the focused button and arrows don't
+    /// move focus. The volume slider keeps its normal arrow behaviour.
+    /// </summary>
+    private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (_sourcePanelOpen || _subtitlesFlyoutOpen)
+        {
+            return;
+        }
+
+        var focused = FocusManager.GetFocusedElement(XamlRoot);
+        var volumeFocused = ReferenceEquals(focused, VolumeSlider);
+
+        switch (e.Key)
+        {
+            case VirtualKey.Space:
+                if (e.KeyStatus.WasKeyDown)
+                {
+                    e.Handled = true;
+                    break;
+                }
+
+                TogglePlayPause();
+                e.Handled = true;
+                break;
+
+            case VirtualKey.Left:
+                if (volumeFocused)
+                {
+                    return;
+                }
+
+                SeekRelative(-10_000);
+                e.Handled = true;
+                break;
+
+            case VirtualKey.Right:
+                if (volumeFocused)
+                {
+                    return;
+                }
+
+                SeekRelative(10_000);
+                e.Handled = true;
+                break;
+        }
     }
 
     private static bool IsDescendantOf(DependencyObject element, DependencyObject ancestor)
@@ -1231,6 +1288,11 @@ public sealed partial class PlayerPage : Page
         else if (_sourcePanelOpen)
         {
             CloseSources();
+            args.Handled = true;
+        }
+        else if (_subtitlesFlyoutOpen)
+        {
+            SubtitlesFlyout.Hide();
             args.Handled = true;
         }
     }

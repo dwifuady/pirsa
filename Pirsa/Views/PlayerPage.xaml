@@ -137,6 +137,7 @@
         <vlc:VideoView
             x:Name="VideoSurface"
             AutomationProperties.Name="Video"
+            IsTabStop="True"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             Initialized="VideoSurface_Initialized" />
@@ -225,6 +226,7 @@
                     AutomationProperties.Name="Play"
                     Click="PlayPause_Click"
                     Style="{StaticResource PlayerCenterButtonStyle}"
+                    ToolTipService.ToolTip="Play / pause (Space)"
                     Visibility="Collapsed">
                     <FontIcon x:Name="CenterPlayIcon" FontSize="34" Glyph="&#xE768;" />
                 </Button>
@@ -276,21 +278,21 @@
                                 AutomationProperties.Name="Play"
                                 Click="PlayPause_Click"
                                 Style="{StaticResource PlayerIconButtonStyle}"
-                                ToolTipService.ToolTip="Play / pause">
+                                ToolTipService.ToolTip="Play / pause (Space)">
                                 <FontIcon x:Name="PlayPauseIcon" FontSize="22" Glyph="&#xE768;" />
                             </Button>
                             <Button
                                 AutomationProperties.Name="Back 10 seconds"
                                 Click="Back10_Click"
                                 Style="{StaticResource PlayerIconButtonStyle}"
-                                ToolTipService.ToolTip="Back 10 seconds">
+                                ToolTipService.ToolTip="Back 10 seconds (Left arrow)">
                                 <FontIcon FontSize="18" Glyph="&#xE100;" />
                             </Button>
                             <Button
                                 AutomationProperties.Name="Forward 10 seconds"
                                 Click="Forward10_Click"
                                 Style="{StaticResource PlayerIconButtonStyle}"
-                                ToolTipService.ToolTip="Forward 10 seconds">
+                                ToolTipService.ToolTip="Forward 10 seconds (Right arrow)">
                                 <FontIcon FontSize="18" Glyph="&#xE101;" />
                             </Button>
                             <Button

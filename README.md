@@ -159,8 +159,10 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
 - Source discovery queries every configured addon that declares a `stream`
   resource for the media type and id prefix, deduplicates URLs, and ranks 1080p
   HLS sources first. Provider request headers are forwarded as VLC media options.
-- Keyboard: **F** fullscreen, **M** mute, **Esc** exits fullscreen/closes the
-  source panel. Space/Enter activate the focused transport button.
+- Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
+  fullscreen, **M** mute, **Esc** exits fullscreen or closes the source/subtitle
+  panels. Enter activates a focused button. Arrow keys adjust volume when the
+  volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
 - Source discovery can take 10–20 seconds depending on the addon/provider; the
