@@ -115,4 +115,75 @@ public static class SubtitleLanguages
 
         return normalized.ToUpperInvariant();
     }
+
+    /// <summary>
+    /// Codes that describe the same language share one canonical code: the
+    /// first code listed for that name above (so "eng" becomes "en"). Region
+    /// variants with their own display name, such as Portuguese (Brazil),
+    /// stay separate.
+    /// </summary>
+    private static readonly Dictionary<string, string> CanonicalByLanguageName = BuildCanonicalByLanguageName();
+
+    /// <summary>Distinct languages offered by the preferred-subtitle setting.</summary>
+    public static IReadOnlyList<SubtitleLanguageOption> PreferenceOptions { get; } = BuildPreferenceOptions();
+
+    public static string CanonicalCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return "";
+        }
+
+        var normalized = code.Trim().ToLowerInvariant();
+        if (Names.TryGetValue(normalized, out var name) &&
+            CanonicalByLanguageName.TryGetValue(name, out var canonical))
+        {
+            return canonical;
+        }
+
+        // Codes we don't list, such as pt-BR, still resolve through their name.
+        return CanonicalByLanguageName.TryGetValue(DisplayName(normalized), out canonical)
+            ? canonical
+            : normalized;
+    }
+
+    /// <summary>
+    /// Whether two codes name the same language, regardless of whether an
+    /// addon used the two- or three-letter form.
+    /// </summary>
+    public static bool SameLanguage(string? first, string? second) =>
+        !string.IsNullOrWhiteSpace(first) &&
+        !string.IsNullOrWhiteSpace(second) &&
+        CanonicalCode(first).Equals(CanonicalCode(second), StringComparison.OrdinalIgnoreCase);
+
+    private static Dictionary<string, string> BuildCanonicalByLanguageName()
+    {
+        var canonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in Names)
+        {
+            canonical.TryAdd(pair.Value, pair.Key);
+        }
+
+        return canonical;
+    }
+
+    private static IReadOnlyList<SubtitleLanguageOption> BuildPreferenceOptions()
+    {
+        var canonical = BuildCanonicalByLanguageName();
+        return canonical
+            .Select(pair => new SubtitleLanguageOption(pair.Value, pair.Key))
+            .OrderBy(option => option.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+}
+
+/// <summary>
+/// One entry in the preferred-subtitle language picker. The off entry has an
+/// empty code, which is exactly what an unset preference is stored as.
+/// </summary>
+public sealed record SubtitleLanguageOption(string Code, string Name)
+{
+    public bool IsOff => string.IsNullOrEmpty(Code);
+
+    public override string ToString() => Name;
 }

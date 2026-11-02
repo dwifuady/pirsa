@@ -144,6 +144,12 @@ on this machine, and you should rotate it if it is ever exposed.
      above the list and remains selected when you reopen the picker.
 - Languages with a single track apply immediately. **Off** disables subtitles
   immediately. Selecting a different version is how you test subtitle sync.
+- **Preferred subtitle language** (Settings → Playback) turns the first
+  matching track on automatically for every title and episode, including the
+  next episode after auto-advance. Picking a language in the player remembers it
+  as the preference, while choosing **Off** there only applies to the title you
+  are watching. Two- and three-letter codes (en / eng) count as the same
+  language.
 - The current subtitle stays selected across source switches.
 - Subtitle files are downloaded with .NET first and handed to VLC as local
   files. This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote

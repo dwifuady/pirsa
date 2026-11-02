@@ -381,6 +381,35 @@
                         BorderThickness="1"
                         CornerRadius="12">
                         <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Subtitles" />
+                            <ComboBox
+                                MinWidth="240"
+                                AutomationProperties.AutomationId="SubtitleLanguageBox"
+                                AutomationProperties.Name="Preferred subtitle language"
+                                Header="Preferred subtitle language"
+                                ItemsSource="{x:Bind ViewModel.SubtitleLanguageOptions}"
+                                SelectedItem="{x:Bind ViewModel.SelectedSubtitleLanguage, Mode=TwoWay}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="helpers:SubtitleLanguageOption">
+                                        <TextBlock Text="{x:Bind Name, Mode=OneTime}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Pirsa turns on the first matching track automatically for every title and episode. Picking a language in the player updates this preference, while choosing Off there only applies to the title you are watching. Pick Off here to keep subtitles off everywhere."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <StackPanel Spacing="8">
                             <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Watch history" />
                             <TextBlock
                                 FontSize="12"

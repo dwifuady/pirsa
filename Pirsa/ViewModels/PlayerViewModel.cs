@@ -324,6 +324,24 @@ public partial class PlayerViewModel : ObservableObject
         SelectedSubtitle = version;
     }
 
+    /// <summary>
+    /// The best track for a preferred language, when this title has one. Used
+    /// to turn subtitles on automatically for the configured language.
+    /// </summary>
+    public SubtitleVersionChoice? FindSubtitleForLanguage(string? languageCode)
+    {
+        if (string.IsNullOrWhiteSpace(languageCode))
+        {
+            return null;
+        }
+
+        return SubtitleMenu
+            .FirstOrDefault(language =>
+                !language.IsOff &&
+                SubtitleLanguages.SameLanguage(language.LanguageCode, languageCode))
+            ?.Versions.FirstOrDefault();
+    }
+
     private static string NormalizeLanguage(string? lang) =>
         string.IsNullOrWhiteSpace(lang) ? "unknown" : lang.Trim().ToLowerInvariant();
 

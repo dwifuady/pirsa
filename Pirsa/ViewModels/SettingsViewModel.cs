@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Pirsa.Helpers;
 using Pirsa.Services;
 
 namespace Pirsa.ViewModels;
@@ -22,11 +23,20 @@ public partial class SettingsViewModel : ObservableObject
         _registry = registry;
         _settings = settings;
         _watchProgress = watchProgress;
+
+        // Off first, then every language the subtitle picker understands.
+        SubtitleLanguageOptions.Add(new SubtitleLanguageOption("", "Off"));
+        foreach (var option in SubtitleLanguages.PreferenceOptions)
+        {
+            SubtitleLanguageOptions.Add(option);
+        }
+
         NewManifestUrl = "";
         ErrorMessage = "";
         _loadingSettings = true;
         AutoplayEnabled = false;
         QualityIndex = 0;
+        SelectedSubtitleLanguage = SubtitleLanguageOptions[0];
         _loadingSettings = false;
         _registry.Entries.CollectionChanged += (_, _) => RaiseAddonInfo();
     }
@@ -55,6 +65,12 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>0 = best, 1 = 4K, 2 = 1440p, 3 = 1080p, 4 = 720p, 5 = 480p.</summary>
     [ObservableProperty]
     public partial int QualityIndex { get; set; }
+
+    /// <summary>Off plus every language subtitles can turn on automatically.</summary>
+    public ObservableCollection<SubtitleLanguageOption> SubtitleLanguageOptions { get; } = [];
+
+    [ObservableProperty]
+    public partial SubtitleLanguageOption? SelectedSubtitleLanguage { get; set; }
 
     public static readonly string[] QualityCodes = ["", "4K", "1440p", "1080p", "720p", "480p"];
 
@@ -91,6 +107,7 @@ public partial class SettingsViewModel : ObservableObject
             _loadingSettings = true;
             AutoplayEnabled = _settings.Autoplay;
             AutoAdvanceEnabled = _settings.AutoAdvance;
+            SelectedSubtitleLanguage = ResolveSubtitleLanguage(_settings.PreferredSubtitleLanguage);
             var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
             QualityIndex = qualityIndex < 0 ? 0 : qualityIndex;
             _loadingSettings = false;
@@ -223,6 +240,39 @@ public partial class SettingsViewModel : ObservableObject
                 : "";
             _ = _settings.SaveAsync();
         }
+    }
+
+    partial void OnSelectedSubtitleLanguageChanged(SubtitleLanguageOption? value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.PreferredSubtitleLanguage = value?.Code ?? "";
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    /// <summary>
+    /// Finds the picker row for a stored code (eng and en are the same row). A
+    /// code no title offered yet is added so the choice is never silently lost.
+    /// </summary>
+    private SubtitleLanguageOption ResolveSubtitleLanguage(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return SubtitleLanguageOptions[0];
+        }
+
+        if (SubtitleLanguageOptions.FirstOrDefault(option =>
+                !option.IsOff && SubtitleLanguages.SameLanguage(option.Code, code)) is { } match)
+        {
+            return match;
+        }
+
+        var extra = new SubtitleLanguageOption(
+            SubtitleLanguages.CanonicalCode(code),
+            SubtitleLanguages.DisplayName(code));
+        SubtitleLanguageOptions.Add(extra);
+        return extra;
     }
 
     private void SetError(string message)

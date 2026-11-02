@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.Services;
 using Pirsa.ViewModels;
@@ -246,7 +247,25 @@ public sealed partial class PlayerPage : Page
 
         try
         {
-            await ViewModel.LoadSubtitlesAsync(request, _subtitleCts.Token);
+            var token = _subtitleCts.Token;
+            await App.Settings.EnsureLoadedAsync(token);
+            await ViewModel.LoadSubtitlesAsync(request, token);
+
+            // Subtitles for the configured language turn on without opening
+            // the picker, unless something was already selected for this title.
+            if (!_disposed &&
+                !token.IsCancellationRequested &&
+                _selectedSubtitle is null &&
+                ViewModel.FindSubtitleForLanguage(App.Settings.PreferredSubtitleLanguage) is { } preferred)
+            {
+                // Playback may not have started yet; the track is attached when it does.
+                if (!await ApplySelectedSubtitleAsync(preferred, applyNow: false))
+                {
+                    // Fall back to Off rather than showing a track that never loaded.
+                    RestoreSubtitleSelection(null);
+                }
+            }
+
             if (SubtitlesFlyout.IsOpen)
             {
                 RefreshSubtitleFlyout();
@@ -1825,7 +1844,15 @@ public sealed partial class PlayerPage : Page
         RefreshSubtitleFlyout();
     }
 
-    private async Task<bool> ApplySelectedSubtitleAsync(SubtitleVersionChoice? version)
+    /// <summary>
+    /// Downloads and attaches a subtitle track. Auto-selection passes
+    /// <paramref name="applyNow"/> false so a track chosen before playback
+    /// starts is attached by the Playing handler instead of failing against an
+    /// empty player.
+    /// </summary>
+    private async Task<bool> ApplySelectedSubtitleAsync(
+        SubtitleVersionChoice? version,
+        bool applyNow = true)
     {
         _selectedSubtitle = version;
         SubtitleActiveDot.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
@@ -1866,7 +1893,32 @@ public sealed partial class PlayerPage : Page
         _selectedSubtitlePath = path;
         ViewModel.SubtitleStatus = "";
         UpdateSubtitleCurrent();
+        RememberSubtitleLanguage(version);
+
+        if (!applyNow && _currentSource is null)
+        {
+            // The Playing handler attaches the downloaded track once a source starts.
+            return true;
+        }
+
         return ApplyLocalSubtitle(path);
+    }
+
+    /// <summary>
+    /// Keeps the language the user actually watches in as the default for the
+    /// next title or episode. Choosing Off is deliberately not remembered.
+    /// </summary>
+    private static void RememberSubtitleLanguage(SubtitleVersionChoice version)
+    {
+        var code = SubtitleLanguages.CanonicalCode(version.LanguageCode);
+        if (string.IsNullOrWhiteSpace(code) ||
+            code.Equals(App.Settings.PreferredSubtitleLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        App.Settings.PreferredSubtitleLanguage = code;
+        _ = App.Settings.SaveAsync();
     }
 
     private string EnsureSubtitleDirectory()

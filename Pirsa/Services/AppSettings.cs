@@ -22,6 +22,13 @@ public sealed class AppSettings
     /// <summary>When true, the next episode starts as soon as the current one ends.</summary>
     public bool AutoAdvance { get; set; } = true;
 
+    /// <summary>
+    /// Canonical language code for subtitles that should turn on automatically,
+    /// or empty when nothing is preferred. Set from Settings or by picking a
+    /// language in the player.
+    /// </summary>
+    public string PreferredSubtitleLanguage { get; set; } = "";
+
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
         if (_loaded)
@@ -50,6 +57,7 @@ public sealed class AppSettings
                         Autoplay = record.Autoplay;
                         PreferredQuality = record.PreferredQuality ?? "";
                         AutoAdvance = record.AutoAdvance;
+                        PreferredSubtitleLanguage = record.PreferredSubtitleLanguage ?? "";
                     }
                 }
             }
@@ -83,6 +91,7 @@ public sealed class AppSettings
                 Autoplay = Autoplay,
                 PreferredQuality = PreferredQuality ?? "",
                 AutoAdvance = AutoAdvance,
+                PreferredSubtitleLanguage = PreferredSubtitleLanguage ?? "",
             };
 
             await File.WriteAllTextAsync(
@@ -129,5 +138,7 @@ public sealed class AppSettings
         public string PreferredQuality { get; set; } = "";
 
         public bool AutoAdvance { get; set; } = true;
+
+        public string PreferredSubtitleLanguage { get; set; } = "";
     }
 }
