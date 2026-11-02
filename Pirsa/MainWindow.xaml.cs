@@ -14,7 +14,7 @@ namespace Pirsa;
 
 /// <summary>
 /// The app window: custom title bar, Store-style navigation pane, and the
-/// frame that hosts Home, Discover, Details, Settings and the player.
+/// frame that hosts Home, Discover, Watchlist, Details, Settings and the player.
 /// </summary>
 public sealed partial class MainWindow : Window
 {
@@ -63,6 +63,10 @@ public sealed partial class MainWindow : Window
         else if (pageType == typeof(DiscoverPage))
         {
             NavView.SelectedItem = DiscoverNavItem;
+        }
+        else if (pageType == typeof(LibraryPage))
+        {
+            NavView.SelectedItem = WatchlistNavItem;
         }
 
         AppTitleBar.IsBackButtonVisible = RootFrame.CanGoBack;
@@ -178,6 +182,13 @@ public sealed partial class MainWindow : Window
         if (ReferenceEquals(args.InvokedItemContainer, DiscoverNavItem))
         {
             NavigateSection(typeof(DiscoverPage));
+            NavView.IsPaneOpen = false;
+            return;
+        }
+
+        if (ReferenceEquals(args.InvokedItemContainer, WatchlistNavItem))
+        {
+            NavigateSection(typeof(LibraryPage));
             NavView.IsPaneOpen = false;
         }
     }

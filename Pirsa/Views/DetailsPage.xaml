@@ -157,6 +157,20 @@
                                     </StackPanel>
                                 </Button>
 
+                                <Button
+                                    AutomationProperties.Name="{x:Bind ViewModel.WatchlistAutomationName, Mode=OneWay}"
+                                    Command="{x:Bind ViewModel.ToggleWatchlistCommand}"
+                                    Style="{StaticResource HeroSecondaryButtonStyle}"
+                                    ToolTipService.ToolTip="{x:Bind ViewModel.WatchlistButtonText, Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon
+                                            FontSize="14"
+                                            Foreground="{ThemeResource HeroSecondaryButtonForegroundBrush}"
+                                            Glyph="{x:Bind ViewModel.WatchlistGlyph, Mode=OneWay}" />
+                                        <TextBlock Text="{x:Bind ViewModel.WatchlistButtonText, Mode=OneWay}" />
+                                    </StackPanel>
+                                </Button>
+
                                 <HyperlinkButton
                                     AutomationProperties.Name="Open on IMDb"
                                     Click="Imdb_Click"

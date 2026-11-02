@@ -20,7 +20,7 @@ public sealed partial class DetailsPage : Page
     private ConnectedAnimation? _posterAnimation;
     private PlaybackRequest? _warmRequest;
 
-    public DetailsViewModel ViewModel { get; } = new(App.Addons, App.WatchProgress);
+    public DetailsViewModel ViewModel { get; } = new(App.Addons, App.WatchProgress, App.Watchlist);
 
     public DetailsPage()
     {

@@ -39,6 +39,9 @@ public partial class App : Application
     /// <summary>Local watch history, persisted in watch-progress.json.</summary>
     public static WatchProgressStore WatchProgress { get; } = new();
 
+    /// <summary>Saved titles, persisted in watchlist.json.</summary>
+    public static WatchlistStore Watchlist { get; } = new();
+
     /// <summary>
     /// The native window handle (HWND). Use for file pickers,
     /// <c>DataTransferManager</c>, and any WinRT interop that requires
@@ -60,6 +63,7 @@ public partial class App : Application
         _ = Addons.EnsureLoadedAsync();
         _ = Settings.EnsureLoadedAsync();
         _ = WatchProgress.EnsureLoadedAsync();
+        _ = Watchlist.EnsureLoadedAsync();
         _ = VideoEngine.WarmUpAsync();
     }
 }

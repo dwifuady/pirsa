@@ -10,8 +10,9 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
 ## What it does
 
 - **Store-style shell** — an icon-only navigation rail with **Home**,
-  **Discover** and **Settings** by default. The title-bar hamburger expands it to
-  labels as an overlay; the rail hides completely while a video is playing.
+  **Discover**, **Watchlist** and **Settings** by default. The title-bar
+  hamburger expands it to labels as an overlay; the rail hides completely while
+  a video is playing.
 - **Home** — a Top 10 hero carousel (movie/top when available) followed by every
   catalog exposed by the user's configured addons, with the source addon shown
   on each rail.
@@ -30,6 +31,12 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
   is visible, the details page turns its Play button into **Resume S02E04** (or
   **Resume 23:41** for a movie), and episode rows show **Watched** or
   **Resume 12:34** with a thin progress bar. History never leaves the machine.
+- **Watchlist** — every movie and series details page has an **Add to
+  watchlist** button (it turns into **In watchlist**, and pressing it again
+  removes the title). Saved titles appear on the **Watchlist** page as a poster
+  grid, newest first, with their added date; select a card to reopen details or
+  right-click it to remove it. The page also offers **Clear watchlist**. The
+  list is stored on this device only.
 - **Discover** — browse what your addons provide without typing: pick a **type**
   (All, Movies, Series, Live TV, or any custom type an addon declares), a
   **catalog** from those addons, and the catalog's own **genre/year filter**.
@@ -120,6 +127,7 @@ Configuration lives in the app's local data:
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\addons.json
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\settings.json
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\watch-progress.json
+%LOCALAPPDATA%\Packages\<package-id>\LocalState\watchlist.json
 ```
 
 If a manifest URL contains a token, treat it like a password: it is only stored

@@ -14,13 +14,18 @@ public partial class DetailsViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
     private readonly WatchProgressStore _watchProgress;
+    private readonly WatchlistStore _watchlist;
     private string _type = "";
     private string _id = "";
 
-    public DetailsViewModel(AddonRegistry registry, WatchProgressStore watchProgress)
+    public DetailsViewModel(
+        AddonRegistry registry,
+        WatchProgressStore watchProgress,
+        WatchlistStore watchlist)
     {
         _registry = registry;
         _watchProgress = watchProgress;
+        _watchlist = watchlist;
         ErrorMessage = "";
     }
 
@@ -44,6 +49,19 @@ public partial class DetailsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial SeasonOption? SelectedSeason { get; set; }
+
+    /// <summary>Whether this title is saved to the local watchlist.</summary>
+    [ObservableProperty]
+    public partial bool IsInWatchlist { get; set; }
+
+    public string WatchlistButtonText => IsInWatchlist ? "In watchlist" : "Add to watchlist";
+
+    /// <summary>Add glyph when the title can be saved, checkmark once it is.</summary>
+    public string WatchlistGlyph => IsInWatchlist ? "\uE73E" : "\uE710";
+
+    public string WatchlistAutomationName => IsInWatchlist
+        ? "Remove from watchlist"
+        : "Add to watchlist";
 
     /// <summary>
     /// The newest unfinished movie or episode for this title, from the local
@@ -134,6 +152,10 @@ public partial class DetailsViewModel : ObservableObject
 
         try
         {
+            // The button state only needs local storage, so show it before
+            // waiting on the network.
+            await RefreshWatchlistStateAsync(cancellationToken);
+
             await _registry.EnsureLoadedAsync(cancellationToken);
 
             var sourceUrl = Meta?.SourceAddonUrl;
@@ -157,6 +179,7 @@ public partial class DetailsViewModel : ObservableObject
             BuildFacts(meta);
             BuildSeasons(meta);
             await LoadWatchProgressAsync(meta, cancellationToken);
+            UpdateWatchlistState();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -175,6 +198,52 @@ public partial class DetailsViewModel : ObservableObject
     [RelayCommand]
     private Task ReloadAsync(CancellationToken cancellationToken) =>
         LoadAsync(_type, _id, cancellationToken);
+
+    /// <summary>
+    /// Saves or unsaves the current title. The button state follows the store,
+    /// so a failed write leaves the label unchanged.
+    /// </summary>
+    [RelayCommand]
+    private async Task ToggleWatchlistAsync(CancellationToken cancellationToken)
+    {
+        if (Meta is not { } meta || string.IsNullOrWhiteSpace(meta.Id))
+        {
+            return;
+        }
+
+        try
+        {
+            IsInWatchlist = await _watchlist.ToggleAsync(meta, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Keep the previous state; the title simply wasn't saved.
+        }
+    }
+
+    private async Task RefreshWatchlistStateAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _watchlist.EnsureLoadedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return;
+        }
+
+        UpdateWatchlistState();
+    }
+
+    private void UpdateWatchlistState() =>
+        IsInWatchlist = Meta is { } meta && _watchlist.Contains(meta.Id);
 
     private async Task LoadWatchProgressAsync(MetaItem meta, CancellationToken cancellationToken)
     {
@@ -276,8 +345,17 @@ public partial class DetailsViewModel : ObservableObject
             ?? Seasons.FirstOrDefault();
     }
 
+    partial void OnIsInWatchlistChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WatchlistButtonText));
+        OnPropertyChanged(nameof(WatchlistGlyph));
+        OnPropertyChanged(nameof(WatchlistAutomationName));
+    }
+
     partial void OnMetaChanged(MetaItem? value)
     {
+        UpdateWatchlistState();
+
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(TypeLabel));
         OnPropertyChanged(nameof(MetaLine));

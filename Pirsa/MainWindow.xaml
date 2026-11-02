@@ -73,6 +73,14 @@
                         <SymbolIcon Symbol="Find" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="WatchlistNavItem"
+                    Content="Watchlist"
+                    Tag="watchlist">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Bookmarks" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <Frame x:Name="RootFrame" />
