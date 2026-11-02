@@ -11,12 +11,17 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
     private readonly AppSettings _settings;
+    private readonly WatchProgressStore _watchProgress;
     private bool _loadingSettings;
 
-    public SettingsViewModel(AddonRegistry registry, AppSettings settings)
+    public SettingsViewModel(
+        AddonRegistry registry,
+        AppSettings settings,
+        WatchProgressStore watchProgress)
     {
         _registry = registry;
         _settings = settings;
+        _watchProgress = watchProgress;
         NewManifestUrl = "";
         ErrorMessage = "";
         _loadingSettings = true;
@@ -43,6 +48,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool AutoplayEnabled { get; set; }
 
+    /// <summary>When true, the next episode starts when the current one ends.</summary>
+    [ObservableProperty]
+    public partial bool AutoAdvanceEnabled { get; set; }
+
     /// <summary>0 = best, 1 = 4K, 2 = 1440p, 3 = 1080p, 4 = 720p, 5 = 480p.</summary>
     [ObservableProperty]
     public partial int QualityIndex { get; set; }
@@ -50,6 +59,15 @@ public partial class SettingsViewModel : ObservableObject
     public static readonly string[] QualityCodes = ["", "4K", "1440p", "1080p", "720p", "480p"];
 
     public bool IsEmpty => Addons.Count == 0;
+
+    public bool HasWatchHistory => _watchProgress.Entries.Count > 0;
+
+    public string WatchHistoryText => _watchProgress.Entries.Count switch
+    {
+        0 => "No saved playback positions on this device.",
+        1 => "1 saved playback position on this device.",
+        var count => $"{count} saved playback positions on this device.",
+    };
 
     public bool HasAddons => Addons.Count > 0;
 
@@ -67,9 +85,12 @@ public partial class SettingsViewModel : ObservableObject
             await _registry.EnsureLoadedAsync(cancellationToken);
             RaiseAddonInfo();
             await _settings.EnsureLoadedAsync(cancellationToken);
+            await _watchProgress.EnsureLoadedAsync(cancellationToken);
+            RaiseWatchHistoryInfo();
 
             _loadingSettings = true;
             AutoplayEnabled = _settings.Autoplay;
+            AutoAdvanceEnabled = _settings.AutoAdvance;
             var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
             QualityIndex = qualityIndex < 0 ? 0 : qualityIndex;
             _loadingSettings = false;
@@ -159,11 +180,36 @@ public partial class SettingsViewModel : ObservableObject
         RaiseAddonInfo();
     }
 
+    public async Task ClearWatchHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _watchProgress.ClearAsync(cancellationToken);
+            RaiseWatchHistoryInfo();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            SetError($"Couldn't clear the watch history. {exception.Message}");
+        }
+    }
+
     partial void OnAutoplayEnabledChanged(bool value)
     {
         if (!_loadingSettings)
         {
             _settings.Autoplay = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoAdvanceEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoAdvance = value;
             _ = _settings.SaveAsync();
         }
     }
@@ -190,5 +236,11 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasAddons));
         OnPropertyChanged(nameof(AddonCountText));
+    }
+
+    private void RaiseWatchHistoryInfo()
+    {
+        OnPropertyChanged(nameof(HasWatchHistory));
+        OnPropertyChanged(nameof(WatchHistoryText));
     }
 }

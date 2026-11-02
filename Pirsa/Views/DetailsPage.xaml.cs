@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Models;
@@ -14,13 +16,21 @@ public sealed partial class DetailsPage : Page
 {
     private const string PosterAnimationKey = "PosterAnimation";
 
+    private readonly DispatcherTimer _warmTimer;
     private ConnectedAnimation? _posterAnimation;
+    private PlaybackRequest? _warmRequest;
 
-    public DetailsViewModel ViewModel { get; } = new(App.Addons);
+    public DetailsViewModel ViewModel { get; } = new(App.Addons, App.WatchProgress);
 
     public DetailsPage()
     {
         InitializeComponent();
+
+        // Hovering across episode rows shouldn't fire a fetch for each one.
+        _warmTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _warmTimer.Tick += (_, _) => FlushWarmRequest();
+
+        ViewModel.PropertyChanged += ViewModel_PropertyChanged;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -39,12 +49,19 @@ public sealed partial class DetailsPage : Page
         PreparePosterAnimation();
 
         await ViewModel.LoadAsync(preview.Type, preview.Id);
+
+        // Warm stream discovery for the episode Play would start, so pressing
+        // Play shows sources (or starts playback) without waiting on addons.
+        WarmPlaybackTarget();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+
         _posterAnimation = null;
+        _warmTimer.Stop();
+        _warmRequest = null;
     }
 
     private void PreparePosterAnimation()
@@ -80,15 +97,14 @@ public sealed partial class DetailsPage : Page
 
     private void Play_Click(object sender, RoutedEventArgs e)
     {
-        if (ViewModel.Meta is not { } meta)
+        if (BuildPlayRequest() is not { } request)
         {
             return;
         }
 
-        var firstEpisode = ViewModel.SelectedSeason?.Episodes.FirstOrDefault();
         Frame.Navigate(
             typeof(PlayerPage),
-            PlaybackRequest.ForMeta(meta, firstEpisode),
+            request,
             new DrillInNavigationTransitionInfo());
     }
 
@@ -104,6 +120,71 @@ public sealed partial class DetailsPage : Page
             typeof(PlayerPage),
             PlaybackRequest.ForEpisode(series, episode),
             new DrillInNavigationTransitionInfo());
+    }
+
+    /// <summary>
+    /// The request the Play button uses: continue a saved movie or episode when
+    /// there is one, otherwise the first episode of the selected season.
+    /// </summary>
+    private PlaybackRequest? BuildPlayRequest()
+    {
+        if (ViewModel.Meta is not { } meta)
+        {
+            return null;
+        }
+
+        return ViewModel.ResumeEntry is { } resume
+            ? resume.ToPlaybackRequest()
+            : PlaybackRequest.ForMeta(meta, ViewModel.SelectedSeason?.Episodes.FirstOrDefault());
+    }
+
+    private void WarmPlaybackTarget()
+    {
+        if (BuildPlayRequest() is { } request)
+        {
+            App.StreamDiscovery.Warm(request);
+        }
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(DetailsViewModel.SelectedSeason) ||
+            ViewModel.Meta is not { } meta)
+        {
+            return;
+        }
+
+        // The Play button now targets this season's first episode.
+        if (ViewModel.SelectedSeason?.Episodes.FirstOrDefault() is { } first)
+        {
+            App.StreamDiscovery.Warm(PlaybackRequest.ForEpisode(meta, first));
+        }
+    }
+
+    private void Episode_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (ViewModel.Meta is not { } meta ||
+            (sender as FrameworkElement)?.DataContext is not MetaVideo episode)
+        {
+            return;
+        }
+
+        _warmRequest = PlaybackRequest.ForEpisode(meta, episode);
+        _warmTimer.Stop();
+        _warmTimer.Start();
+    }
+
+    private void FlushWarmRequest()
+    {
+        _warmTimer.Stop();
+
+        if (_warmRequest is not { } request)
+        {
+            return;
+        }
+
+        _warmRequest = null;
+        App.StreamDiscovery.Warm(request);
     }
 
     private async void Imdb_Click(object sender, RoutedEventArgs e)

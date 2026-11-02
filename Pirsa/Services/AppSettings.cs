@@ -19,6 +19,9 @@ public sealed class AppSettings
     /// <summary>Empty means "best available"; otherwise 4K, 1440p, 1080p, 720p or 480p.</summary>
     public string PreferredQuality { get; set; } = "";
 
+    /// <summary>When true, the next episode starts as soon as the current one ends.</summary>
+    public bool AutoAdvance { get; set; } = true;
+
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
         if (_loaded)
@@ -46,6 +49,7 @@ public sealed class AppSettings
                     {
                         Autoplay = record.Autoplay;
                         PreferredQuality = record.PreferredQuality ?? "";
+                        AutoAdvance = record.AutoAdvance;
                     }
                 }
             }
@@ -78,6 +82,7 @@ public sealed class AppSettings
             {
                 Autoplay = Autoplay,
                 PreferredQuality = PreferredQuality ?? "",
+                AutoAdvance = AutoAdvance,
             };
 
             await File.WriteAllTextAsync(
@@ -122,5 +127,7 @@ public sealed class AppSettings
         public bool Autoplay { get; set; }
 
         public string PreferredQuality { get; set; } = "";
+
+        public bool AutoAdvance { get; set; } = true;
     }
 }

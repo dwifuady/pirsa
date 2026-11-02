@@ -431,6 +431,130 @@
             </Grid>
         </Grid>
 
+        <!--  Resume hint, kept outside the chrome so it survives auto-hide  -->
+        <Border
+            x:Name="ResumePanel"
+            Margin="0,84,26,0"
+            Padding="12,6,6,6"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Background="{ThemeResource PlayerPanelBackgroundBrush}"
+            BorderBrush="{ThemeResource PlayerPanelBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon
+                    FontSize="12"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                    Glyph="&#xE81C;" />
+                <TextBlock
+                    x:Name="ResumeText"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource PlayerForegroundBrush}"
+                    Text="Resuming…" />
+                <HyperlinkButton
+                    x:Name="StartOverButton"
+                    Padding="6,2"
+                    AutomationProperties.Name="Start over from the beginning"
+                    Click="StartOver_Click"
+                    Content="Start over"
+                    FontSize="12"
+                    MinHeight="0"
+                    ToolTipService.ToolTip="Start from the beginning" />
+            </StackPanel>
+        </Border>
+
+        <!--  Up next card, shown shortly before the episode ends  -->
+        <Border
+            x:Name="UpNextPanel"
+            Width="370"
+            Margin="0,0,26,104"
+            Padding="12"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource PlayerPanelBackgroundBrush}"
+            BorderBrush="{ThemeResource PlayerPanelBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Width="112"
+                    Height="63"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource PlayerBadgeBackgroundBrush}"
+                    CornerRadius="6">
+                    <Grid>
+                        <FontIcon
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="18"
+                            Foreground="{ThemeResource PlayerTertiaryForegroundBrush}"
+                            Glyph="&#xE714;"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+                        <Image
+                            AutomationProperties.AccessibilityView="Raw"
+                            Source="{x:Bind ViewModel.NextEpisodeImage}"
+                            Stretch="UniformToFill" />
+                    </Grid>
+                </Border>
+
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Spacing="3">
+                    <TextBlock
+                        CharacterSpacing="110"
+                        FontSize="10"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                        Text="UP NEXT" />
+                    <TextBlock
+                        MaxLines="2"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource PlayerForegroundBrush}"
+                        Text="{x:Bind ViewModel.NextEpisodeLine}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Column="2"
+                    Orientation="Horizontal"
+                    Spacing="2"
+                    VerticalAlignment="Center">
+                    <Button
+                        Padding="12,5"
+                        AutomationProperties.Name="Play next episode"
+                        Click="PlayNext_Click"
+                        Content="Play next"
+                        FontSize="12"
+                        MinHeight="0"
+                        Style="{StaticResource AccentButtonStyle}"
+                        ToolTipService.ToolTip="Play the next episode now" />
+                    <Button
+                        Width="30"
+                        Height="30"
+                        AutomationProperties.Name="Don't play next episode"
+                        Click="DismissUpNext_Click"
+                        Style="{StaticResource PlayerIconButtonStyle}"
+                        ToolTipService.ToolTip="Don't play next">
+                        <FontIcon FontSize="12" Glyph="&#xE711;" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!--  Source discovery / startup  -->
         <Grid x:Name="LoadingOverlay" Background="{ThemeResource PlayerSurfaceBrush}">
             <Border Opacity="0.45">

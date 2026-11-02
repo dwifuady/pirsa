@@ -27,8 +27,17 @@ public partial class App : Application
     /// </summary>
     public static AddonRegistry Addons { get; } = new();
 
+    /// <summary>
+    /// Per-title stream discovery cache. The details page warms it so the
+    /// player opens with sources ready.
+    /// </summary>
+    public static StreamDiscovery StreamDiscovery { get; } = new(Addons);
+
     /// <summary>Player and app preferences, persisted in settings.json.</summary>
     public static AppSettings Settings { get; } = new();
+
+    /// <summary>Local watch history, persisted in watch-progress.json.</summary>
+    public static WatchProgressStore WatchProgress { get; } = new();
 
     /// <summary>
     /// The native window handle (HWND). Use for file pickers,
@@ -50,6 +59,7 @@ public partial class App : Application
         Window.Activate();
         _ = Addons.EnsureLoadedAsync();
         _ = Settings.EnsureLoadedAsync();
+        _ = WatchProgress.EnsureLoadedAsync();
         _ = VideoEngine.WarmUpAsync();
     }
 }

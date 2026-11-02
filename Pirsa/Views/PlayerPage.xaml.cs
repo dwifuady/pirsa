@@ -26,7 +26,7 @@ public sealed partial class PlayerPage : Page
     private static bool _coreReady;
     private static readonly HttpClient SubtitleHttp = CreateSubtitleHttpClient();
 
-    private readonly PlayerViewModel _viewModel = new(App.Addons);
+    private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
     private readonly DispatcherTimer _chromeTimer;
 
     private LibVLC? _libVlc;
@@ -58,6 +58,19 @@ public sealed partial class PlayerPage : Page
     private bool _keyboardActive;
     private bool _isFullScreen;
     private long _resumeMs;
+    private long _resumeFromHistoryMs;
+    private long _positionMs;
+    private long _lengthMs;
+    private DateTime _lastProgressSaveUtc;
+    private DispatcherTimer? _resumeHintTimer;
+    private DispatcherTimer? _cachedWatchdog;
+    private PlaybackSource? _cachedAttempt;
+    private Task<bool>? _sourceDiscovery;
+    private CancellationTokenSource? _nextEpisodeCts;
+    private MetaItem? _seriesMeta;
+    private MetaVideo? _nextEpisode;
+    private bool _upNextDismissed;
+    private bool _advancing;
     private int _lastVolume = 80;
 
     public PlayerViewModel ViewModel => _viewModel;
@@ -71,6 +84,20 @@ public sealed partial class PlayerPage : Page
         {
             _chromeTimer.Stop();
             HideChrome();
+        };
+
+        _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _resumeHintTimer.Tick += (_, _) => HideResumeHint();
+
+        // A remembered source that never reaches "playing" is treated as dead.
+        _cachedWatchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _cachedWatchdog.Tick += (_, _) =>
+        {
+            _cachedWatchdog?.Stop();
+            if (!_playing)
+            {
+                _ = HandleCachedSourceFailureAsync();
+            }
         };
 
         SeekSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SeekSlider_PointerPressed), true);
@@ -102,8 +129,17 @@ public sealed partial class PlayerPage : Page
 
         ViewModel.Request = request;
         _selectedSubtitle = null;
+        _resumeFromHistoryMs = 0;
+        _positionMs = 0;
+        _lengthMs = 0;
+        _ended = false;
+        ResumePanel.Visibility = Visibility.Collapsed;
+        HideUpNext();
+        _upNextDismissed = false;
+        ViewModel.NextEpisode = null;
         _ = LoadSourcesAsync(request);
         _ = LoadSubtitlesAsync(request);
+        _ = LoadNextEpisodeAsync(request);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -267,7 +303,7 @@ public sealed partial class PlayerPage : Page
 
     // ------------------------------------------------------------- source loading
 
-    private async Task LoadSourcesAsync(PlaybackRequest request)
+    private async Task LoadSourcesAsync(PlaybackRequest request, bool autoStart = false)
     {
         _sourceCts?.Cancel();
         _sourceCts?.Dispose();
@@ -276,6 +312,25 @@ public sealed partial class PlayerPage : Page
         if (ViewModel.Request != request)
         {
             ViewModel.Request = request;
+        }
+
+        await App.Settings.EnsureLoadedAsync();
+        await RestoreProgressAsync(request);
+
+        // Fast path: start the last source that actually played, while the
+        // normal source search runs in parallel. A dead URL therefore costs
+        // at most the watchdog window, never the full discovery wait.
+        var savedSource = await FindRememberedSourceAsync(request);
+        if (savedSource is not null && (App.Settings.Autoplay || autoStart))
+        {
+            _sourceDiscovery = ViewModel.LoadAsync(request, _sourceCts.Token);
+            _ = CompleteSourceDiscoveryAsync(_sourceDiscovery);
+
+            _cachedAttempt = savedSource;
+            _pendingSource = savedSource;
+            ViewModel.StatusText = "Starting your last source…";
+            TryStartPlayback();
+            return;
         }
 
         var loaded = await ViewModel.LoadAsync(request, _sourceCts.Token);
@@ -296,9 +351,7 @@ public sealed partial class PlayerPage : Page
         SourcesButton.IsEnabled = true;
         ShowChrome();
 
-        await App.Settings.EnsureLoadedAsync();
-
-        var autoplay = SelectAutoplaySource();
+        var autoplay = SelectAutoplaySource(force: autoStart);
         if (autoplay is not null)
         {
             _pendingSource = autoplay;
@@ -310,22 +363,539 @@ public sealed partial class PlayerPage : Page
         OpenSources();
     }
 
-    private PlaybackSource? SelectAutoplaySource()
+    /// <summary>
+    /// The last source that reached "playing" for this exact movie or episode,
+    /// when it is still fresh and still belongs to a configured addon.
+    /// </summary>
+    private async Task<PlaybackSource?> FindRememberedSourceAsync(PlaybackRequest request)
     {
-        if (!App.Settings.Autoplay)
+        try
+        {
+            await App.Addons.EnsureLoadedAsync();
+
+            var entry = App.WatchProgress.Find(request.VideoId);
+            if (entry is not { IsSourceFresh: true, SourceUrl: { Length: > 0 } url })
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.SourceAddonUrl) &&
+                App.Addons.GetEntry(entry.SourceAddonUrl) is null)
+            {
+                _ = App.WatchProgress.ForgetSourceAsync(request.VideoId);
+                return null;
+            }
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                return null;
+            }
+
+            return new PlaybackSource
+            {
+                Url = url,
+                AddonName = string.IsNullOrWhiteSpace(entry.SourceAddon) ? "Saved source" : entry.SourceAddon,
+                AddonUrl = entry.SourceAddonUrl,
+                QualityLabel = string.IsNullOrWhiteSpace(entry.SourceQuality) ? "Auto" : entry.SourceQuality,
+                ProviderLine = "Last used",
+                Headers = entry.SourceHeaders,
+            };
+        }
+        catch
         {
             return null;
+        }
+    }
+
+    private async Task CompleteSourceDiscoveryAsync(Task<bool> discovery)
+    {
+        try
+        {
+            var loaded = await discovery;
+            if (!_disposed)
+            {
+                SourcesButton.IsEnabled = loaded;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            // The cached source is playing; discovery failures are invisible.
+        }
+    }
+
+    /// <summary>
+    /// A remembered source didn't play. Drop it and fall back to the source
+    /// list that was fetched in the background, without showing an error.
+    /// </summary>
+    private async Task HandleCachedSourceFailureAsync()
+    {
+        if (_cachedAttempt is null || _disposed)
+        {
+            return;
+        }
+
+        var failed = _cachedAttempt;
+        _cachedAttempt = null;
+        _cachedWatchdog?.Stop();
+
+        // Stop the dead attempt now so a late "playing" event can't take over
+        // the player while the fallback is being prepared.
+        _switching = true;
+        try
+        {
+            _mediaPlayer?.Stop();
+        }
+        catch
+        {
+        }
+
+        _media?.Dispose();
+        _media = null;
+        _currentSource = null;
+        _playing = false;
+
+        var request = ViewModel.Request;
+        if (request is not null)
+        {
+            await App.WatchProgress.ForgetSourceAsync(request.VideoId);
+        }
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        _errorVisible = false;
+        ErrorPanel.Visibility = Visibility.Collapsed;
+        LoadingOverlay.Visibility = Visibility.Visible;
+        ViewModel.StatusText = "That saved source didn't work. Finding another…";
+
+        var discovery = _sourceDiscovery;
+        if (discovery is null)
+        {
+            if (request is null)
+            {
+                ShowPlaybackError("Couldn't find a source.", canSwitch: false);
+                return;
+            }
+
+            discovery = ViewModel.LoadAsync(request, _sourceCts?.Token ?? CancellationToken.None);
+        }
+
+        bool loaded;
+        try
+        {
+            loaded = await discovery;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        _sourceDiscovery = null;
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        SourcesButton.IsEnabled = loaded;
+
+        if (!loaded)
+        {
+            ShowPlaybackError(ViewModel.ErrorMessage, canSwitch: false);
+            return;
+        }
+
+        ShowChrome();
+
+        var next = SelectAutoplaySource(failed.Url);
+        if (next is not null)
+        {
+            _pendingSource = next;
+            TryStartPlayback();
+            return;
+        }
+
+        OpenSources();
+    }
+
+    /// <summary>
+    /// Picks up the locally saved position for this movie or episode. The
+    /// position is applied to the first source played; switching sources keeps
+    /// the live playback position instead.
+    /// </summary>
+    private async Task RestoreProgressAsync(PlaybackRequest request)
+    {
+        try
+        {
+            await App.WatchProgress.EnsureLoadedAsync();
+            var saved = App.WatchProgress.Find(request.VideoId);
+
+            if (saved is { Completed: false, PositionMs: > 0 })
+            {
+                _resumeFromHistoryMs = saved.PositionMs;
+                ResumeText.Text = $"Resuming from {FormatTime(saved.PositionMs)}";
+                ResumePanel.Visibility = Visibility.Visible;
+            }
+        }
+        catch
+        {
+            // Watch history is optional; playback starts from the beginning.
+        }
+    }
+
+    private void HideResumeHint()
+    {
+        _resumeHintTimer?.Stop();
+        ResumePanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void StartOver_Click(object sender, RoutedEventArgs e)
+    {
+        _resumeFromHistoryMs = 0;
+
+        if (_mediaPlayer is { IsSeekable: true } player && _currentSource is not null)
+        {
+            player.Time = 0;
+            _positionMs = 0;
+        }
+
+        HideResumeHint();
+        ShowChrome();
+        StartChromeTimer();
+    }
+
+    private PlaybackSource? SelectAutoplaySource(string? avoidUrl = null, bool force = false)
+    {
+        if (!force && !App.Settings.Autoplay)
+        {
+            return null;
+        }
+
+        IEnumerable<PlaybackSource> candidates = ViewModel.Sources;
+        if (!string.IsNullOrWhiteSpace(avoidUrl))
+        {
+            candidates = candidates.Where(
+                source => !source.Url.Equals(avoidUrl, StringComparison.OrdinalIgnoreCase));
         }
 
         var preferred = App.Settings.PreferredQuality;
         if (string.IsNullOrWhiteSpace(preferred))
         {
-            return ViewModel.Sources.FirstOrDefault();
+            return candidates.FirstOrDefault();
         }
 
-        return ViewModel.Sources.FirstOrDefault(
+        return candidates.FirstOrDefault(
                    source => source.QualityLabel.Equals(preferred, StringComparison.OrdinalIgnoreCase))
-               ?? ViewModel.Sources.FirstOrDefault();
+               ?? candidates.FirstOrDefault();
+    }
+
+    // ------------------------------------------------------------ next episode
+
+    /// <summary>True when the request is one episode of a series.</summary>
+    private static bool IsEpisodic(PlaybackRequest request) =>
+        request.Episode > 0 &&
+        (request.Type.Equals("series", StringComparison.OrdinalIgnoreCase) ||
+         request.Type.Equals("tv", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Resolves the episode after the current one. Requests coming from the
+    /// details page already carry the full episode list; a Continue watching
+    /// entry does not, so the series metadata is fetched in the background.
+    /// </summary>
+    private async Task LoadNextEpisodeAsync(PlaybackRequest request)
+    {
+        _nextEpisodeCts?.Cancel();
+        _nextEpisodeCts?.Dispose();
+        _nextEpisodeCts = new CancellationTokenSource();
+        var cancellationToken = _nextEpisodeCts.Token;
+
+        _nextEpisode = null;
+        ViewModel.NextEpisode = null;
+        HideUpNext();
+
+        if (!IsEpisodic(request))
+        {
+            return;
+        }
+
+        try
+        {
+            var meta = request.Meta;
+            if (meta.Videos is not { Count: > 1 })
+            {
+                meta = await FetchSeriesMetaAsync(meta, cancellationToken) ?? meta;
+            }
+
+            if (cancellationToken.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+
+            _seriesMeta = meta;
+            _nextEpisode = FindNextEpisode(meta, request.Season, request.Episode);
+            ViewModel.NextEpisode = _nextEpisode;
+            UpdateUpNextVisibility();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            _nextEpisode = null;
+            ViewModel.NextEpisode = null;
+        }
+    }
+
+    private async Task<MetaItem?> FetchSeriesMetaAsync(
+        MetaItem meta,
+        CancellationToken cancellationToken)
+    {
+        var seriesId = meta.Id;
+        if (string.IsNullOrWhiteSpace(seriesId))
+        {
+            return null;
+        }
+
+        try
+        {
+            await App.Addons.EnsureLoadedAsync(cancellationToken);
+            await App.Addons.LoadManifestsAsync(cancellationToken);
+
+            var clients = new List<StremioAddonClient>();
+
+            if (App.Addons.GetClient(meta.SourceAddonUrl) is { } preferred)
+            {
+                clients.Add(preferred);
+            }
+
+            clients.AddRange(App.Addons.Entries
+                .Where(entry => entry.Manifest?.Resources.Any(resource =>
+                    resource.Name.Equals("meta", StringComparison.OrdinalIgnoreCase)) == true)
+                .Select(entry => entry.Client)
+                .Where(client => !clients.Contains(client)));
+
+            foreach (var client in clients)
+            {
+                try
+                {
+                    var full = await client.GetMetaAsync("series", seriesId, cancellationToken);
+                    if (full.Videos is { Count: > 0 })
+                    {
+                        return full;
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Try the next metadata addon.
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Without metadata there is simply no Up next card.
+        }
+
+        return null;
+    }
+
+    private static MetaVideo? FindNextEpisode(MetaItem meta, int season, int episode)
+    {
+        var ordered = meta.Videos?
+            .Where(video => video.EpisodeNumber > 0)
+            .OrderBy(video => video.Season == 0 ? int.MaxValue : video.Season)
+            .ThenBy(video => video.EpisodeNumber)
+            .ToList();
+
+        if (ordered is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var index = ordered.FindIndex(video =>
+            video.Season == season && video.EpisodeNumber == episode);
+
+        return index >= 0 && index + 1 < ordered.Count ? ordered[index + 1] : null;
+    }
+
+    /// <summary>
+    /// The card appears a little before the end (5%, clamped to 15–90 seconds)
+    /// so the credits can be skipped, and again when playback finishes.
+    /// </summary>
+    private void UpdateUpNextVisibility()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_nextEpisode is null || _upNextDismissed)
+        {
+            HideUpNext();
+            return;
+        }
+
+        if (!_ended)
+        {
+            if (_lengthMs <= 0)
+            {
+                return;
+            }
+
+            var lead = Math.Clamp((long)(_lengthMs * 0.05), 15_000, 90_000);
+            if (_lengthMs - _positionMs > lead)
+            {
+                HideUpNext();
+                return;
+            }
+        }
+
+        ShowUpNext();
+    }
+
+    private void ShowUpNext()
+    {
+        if (_nextEpisode is null || _upNextDismissed)
+        {
+            return;
+        }
+
+        if (UpNextPanel.Visibility != Visibility.Visible)
+        {
+            UpNextPanel.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void HideUpNext()
+    {
+        if (UpNextPanel.Visibility != Visibility.Collapsed)
+        {
+            UpNextPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void PlayNext_Click(object sender, RoutedEventArgs e) => _ = PlayNextEpisodeAsync();
+
+    private void DismissUpNext_Click(object sender, RoutedEventArgs e)
+    {
+        // Also cancels the automatic switch for this episode.
+        _upNextDismissed = true;
+        HideUpNext();
+    }
+
+    /// <summary>
+    /// Switches the same player to the next episode, keeping the current
+    /// window, chrome and subtitles logic. The next episode's remembered
+    /// source is used when available; otherwise the best source is chosen.
+    /// </summary>
+    private async Task PlayNextEpisodeAsync()
+    {
+        if (_advancing || _disposed)
+        {
+            return;
+        }
+
+        var next = _nextEpisode;
+        var series = _seriesMeta;
+        if (next is null || series is null)
+        {
+            return;
+        }
+
+        _advancing = true;
+        try
+        {
+            // Save the finished (or skipped) episode before the request changes.
+            PersistProgress(_positionMs, _lengthMs);
+
+            var request = PlaybackRequest.ForEpisode(series, next);
+
+            _nextEpisode = null;
+            _upNextDismissed = false;
+            ViewModel.NextEpisode = null;
+            HideUpNext();
+
+            PrepareNextEpisode();
+
+            ViewModel.Request = request;
+            _ = LoadSubtitlesAsync(request);
+            _ = LoadNextEpisodeAsync(request);
+            await LoadSourcesAsync(request, autoStart: true);
+        }
+        finally
+        {
+            _advancing = false;
+        }
+    }
+
+    /// <summary>Resets per-episode state before the next episode is loaded.</summary>
+    private void PrepareNextEpisode()
+    {
+        _cachedAttempt = null;
+        _cachedWatchdog?.Stop();
+        _sourceDiscovery = null;
+        _switching = true;
+
+        try
+        {
+            _mediaPlayer?.Stop();
+        }
+        catch
+        {
+        }
+
+        _media?.Dispose();
+        _media = null;
+        _currentSource = null;
+
+        _playing = false;
+        _ended = false;
+        _errorVisible = false;
+        _positionMs = 0;
+        _lengthMs = 0;
+        _resumeMs = 0;
+        _resumeFromHistoryMs = 0;
+        _upNextDismissed = false;
+
+        _subtitleApplied = false;
+        _selectedSubtitle = null;
+        _selectedSubtitlePath = null;
+        _versionsLanguage = null;
+        SubtitleActiveDot.Visibility = Visibility.Collapsed;
+        ViewModel.SelectSubtitle(null);
+        ViewModel.SubtitleStatus = "";
+
+        if (SubtitlesFlyout.IsOpen)
+        {
+            SubtitlesFlyout.Hide();
+        }
+
+        if (_sourcePanelOpen)
+        {
+            CloseSources();
+        }
+
+        _resumeHintTimer?.Stop();
+        ResumePanel.Visibility = Visibility.Collapsed;
+        EndedText.Visibility = Visibility.Collapsed;
+        ErrorPanel.Visibility = Visibility.Collapsed;
+        HideBuffer();
+        HideUpNext();
+        LoadingOverlay.Visibility = Visibility.Visible;
+        UpdatePlayPauseUi();
+        ShowChrome();
     }
 
     private void TryStartPlayback()
@@ -358,8 +928,22 @@ public sealed partial class PlayerPage : Page
                 ? Math.Max(0, _mediaPlayer.Time)
                 : 0;
 
+            if (resume > 0 && _lengthMs > 0)
+            {
+                PersistProgress(resume, _lengthMs);
+            }
+
+            // The first source of this title continues from the local history.
+            if (resume == 0 && _resumeFromHistoryMs > 0)
+            {
+                resume = _resumeFromHistoryMs;
+                _lastProgressSaveUtc = DateTime.UtcNow;
+            }
+
             _ended = false;
             _resumeMs = resume;
+            _positionMs = resume;
+            _lengthMs = 0;
             _switching = true;
 
             _mediaPlayer.Stop();
@@ -381,6 +965,12 @@ public sealed partial class PlayerPage : Page
             _currentSource = source;
             _subtitleApplied = false;
 
+            if (ReferenceEquals(source, _cachedAttempt))
+            {
+                _cachedWatchdog?.Stop();
+                _cachedWatchdog?.Start();
+            }
+
             foreach (var candidate in ViewModel.Sources)
             {
                 candidate.IsCurrent = ReferenceEquals(candidate, source) ||
@@ -401,6 +991,13 @@ public sealed partial class PlayerPage : Page
         catch (Exception exception)
         {
             _switching = false;
+
+            if (_cachedAttempt is not null)
+            {
+                _ = HandleCachedSourceFailureAsync();
+                return;
+            }
+
             ShowPlaybackError($"Couldn't start this source. {exception.Message}", ViewModel.HasSources);
         }
     }
@@ -461,10 +1058,22 @@ public sealed partial class PlayerPage : Page
 
     private void MediaPlayer_EndReached(object? sender, EventArgs e) => Dispatch(HandleEndReached);
 
-    private void MediaPlayer_EncounteredError(object? sender, EventArgs e) => Dispatch(() =>
+    private void MediaPlayer_EncounteredError(object? sender, EventArgs e) =>
+        Dispatch(HandleEncounteredError);
+
+    private void HandleEncounteredError()
+    {
+        // A remembered source that fails before playing is replaced silently.
+        if (_cachedAttempt is not null)
+        {
+            _ = HandleCachedSourceFailureAsync();
+            return;
+        }
+
         ShowPlaybackError(
             "The selected source stopped responding or uses a format VLC can't open.",
-            ViewModel.HasSources));
+            ViewModel.HasSources);
+    }
 
     private void MediaPlayer_TimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e) =>
         Dispatch(() => HandleTimeChanged(e.Time));
@@ -491,12 +1100,24 @@ public sealed partial class PlayerPage : Page
         ShowChrome();
         StartChromeTimer();
 
+        if (ResumePanel.Visibility == Visibility.Visible)
+        {
+            _resumeHintTimer?.Stop();
+            _resumeHintTimer?.Start();
+        }
+
         if (_resumeMs > 0 && _mediaPlayer is { IsSeekable: true })
         {
             _mediaPlayer.Time = _resumeMs;
         }
 
         _resumeMs = 0;
+        _resumeFromHistoryMs = 0;
+        _cachedAttempt = null;
+        _cachedWatchdog?.Stop();
+
+        // Attach the working source to the history entry as early as possible.
+        PersistProgress(_positionMs, _lengthMs);
 
         if (!_subtitleApplied &&
             _selectedSubtitle is not null &&
@@ -509,6 +1130,7 @@ public sealed partial class PlayerPage : Page
     private void HandlePaused()
     {
         _playing = false;
+        PersistProgress(_positionMs, _lengthMs);
         UpdatePlayPauseUi();
         ShowChrome();
         _chromeTimer.Stop();
@@ -516,11 +1138,23 @@ public sealed partial class PlayerPage : Page
 
     private void HandleStopped()
     {
-        if (_switching || _disposed)
+        if (_disposed)
         {
             return;
         }
 
+        if (_cachedAttempt is not null)
+        {
+            _ = HandleCachedSourceFailureAsync();
+            return;
+        }
+
+        if (_switching)
+        {
+            return;
+        }
+
+        PersistProgress(_positionMs, _lengthMs);
         _playing = false;
         UpdatePlayPauseUi();
         ShowChrome();
@@ -528,8 +1162,33 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEndReached()
     {
+        // A source that never reached "playing" is a failed attempt, not a
+        // finished title. Marking it completed would hide it from Continue
+        // watching and lose the resume position.
+        if (_cachedAttempt is not null)
+        {
+            _ = HandleCachedSourceFailureAsync();
+            return;
+        }
+
+        if (_switching)
+        {
+            return;
+        }
+
         _playing = false;
         _ended = true;
+        _positionMs = _lengthMs > 0 ? _lengthMs : _positionMs;
+        PersistProgress(_positionMs, _lengthMs, completed: true);
+
+        if (_nextEpisode is not null && !_upNextDismissed && App.Settings.AutoAdvance)
+        {
+            _ = PlayNextEpisodeAsync();
+            return;
+        }
+
+        UpdateUpNextVisibility();
+        HideResumeHint();
         HideBuffer();
         EndedText.Visibility = Visibility.Visible;
         UpdatePlayPauseUi();
@@ -539,10 +1198,15 @@ public sealed partial class PlayerPage : Page
 
     private void HandleTimeChanged(long time)
     {
+        _positionMs = Math.Max(0, time);
+        UpdateUpNextVisibility();
+
         if (_draggingSeek)
         {
             return;
         }
+
+        TrackProgress();
 
         _suppressSeek = true;
         SeekSlider.Value = Math.Clamp(time, 0, (long)SeekSlider.Maximum);
@@ -552,10 +1216,71 @@ public sealed partial class PlayerPage : Page
 
     private void HandleLengthChanged(long length)
     {
+        _lengthMs = Math.Max(0, length);
+        UpdateUpNextVisibility();
         SeekSlider.Maximum = Math.Max(1, length);
         SeekSlider.IsEnabled = length > 0 && _mediaPlayer?.IsSeekable == true;
         UpdateTimeText(_mediaPlayer?.Time ?? 0, length);
     }
+
+    /// <summary>Writes the position at most every ten seconds while playing.</summary>
+    private void TrackProgress()
+    {
+        if (_positionMs <= 0 || _lengthMs <= 0)
+        {
+            return;
+        }
+
+        if ((DateTime.UtcNow - _lastProgressSaveUtc).TotalSeconds < 10)
+        {
+            return;
+        }
+
+        PersistProgress(_positionMs, _lengthMs);
+    }
+
+    /// <summary>
+    /// Saves to the local watch history. Nothing leaves the machine, and a
+    /// failure here never interrupts playback.
+    /// </summary>
+    private async void PersistProgress(long positionMs, long durationMs, bool completed = false)
+    {
+        if (ViewModel.Request is not { } request)
+        {
+            return;
+        }
+
+        if (!completed && (durationMs <= 0 || positionMs < WatchProgressEntry.MinimumPositionMs))
+        {
+            return;
+        }
+
+        _lastProgressSaveUtc = DateTime.UtcNow;
+
+        try
+        {
+            await App.WatchProgress.SaveAsync(
+                request,
+                positionMs,
+                durationMs,
+                completed,
+                ToSourceInfo(_currentSource));
+        }
+        catch
+        {
+            // History is best effort.
+        }
+    }
+
+    private static PlaybackSourceInfo? ToSourceInfo(PlaybackSource? source) =>
+        source is null
+            ? null
+            : new PlaybackSourceInfo(
+                source.Url,
+                source.AddonName,
+                source.AddonUrl,
+                source.QualityLabel,
+                source.Headers);
 
     private void HandleBuffering(float cache)
     {
@@ -1411,8 +2136,18 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
+        if (!_ended)
+        {
+            PersistProgress(_positionMs, _lengthMs);
+        }
+
         _disposed = true;
         _chromeTimer.Stop();
+        _resumeHintTimer?.Stop();
+        _cachedWatchdog?.Stop();
+        _nextEpisodeCts?.Cancel();
+        _nextEpisodeCts?.Dispose();
+        _nextEpisodeCts = null;
         _sourceCts?.Cancel();
         _sourceCts?.Dispose();
         _sourceCts = null;

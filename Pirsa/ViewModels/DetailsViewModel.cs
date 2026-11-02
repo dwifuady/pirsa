@@ -13,12 +13,14 @@ namespace Pirsa.ViewModels;
 public partial class DetailsViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
+    private readonly WatchProgressStore _watchProgress;
     private string _type = "";
     private string _id = "";
 
-    public DetailsViewModel(AddonRegistry registry)
+    public DetailsViewModel(AddonRegistry registry, WatchProgressStore watchProgress)
     {
         _registry = registry;
+        _watchProgress = watchProgress;
         ErrorMessage = "";
     }
 
@@ -42,6 +44,21 @@ public partial class DetailsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial SeasonOption? SelectedSeason { get; set; }
+
+    /// <summary>
+    /// The newest unfinished movie or episode for this title, from the local
+    /// watch history. Drives the resume label on the Play button.
+    /// </summary>
+    public WatchProgressEntry? ResumeEntry { get; private set; }
+
+    public bool HasResume => ResumeEntry is not null;
+
+    public string PlayButtonText => ResumeEntry switch
+    {
+        null => "Play",
+        { IsSeries: true } entry => $"Resume {entry.EpisodeTag}",
+        { } entry => $"Resume {WatchProgressEntry.FormatPosition(entry.PositionMs)}",
+    };
 
     public string Title => Meta?.Name ?? "";
 
@@ -139,6 +156,7 @@ public partial class DetailsViewModel : ObservableObject
             Meta = meta;
             BuildFacts(meta);
             BuildSeasons(meta);
+            await LoadWatchProgressAsync(meta, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -157,6 +175,45 @@ public partial class DetailsViewModel : ObservableObject
     [RelayCommand]
     private Task ReloadAsync(CancellationToken cancellationToken) =>
         LoadAsync(_type, _id, cancellationToken);
+
+    private async Task LoadWatchProgressAsync(MetaItem meta, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _watchProgress.EnsureLoadedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            return;
+        }
+
+        var entries = _watchProgress.GetEpisodeEntries(meta.Id);
+        ResumeEntry = _watchProgress.FindResume(meta.Id);
+
+        foreach (var video in meta.Videos ?? [])
+        {
+            if (entries.TryGetValue(
+                    WatchProgressStore.EpisodeKey(video.Season, video.EpisodeNumber),
+                    out var entry))
+            {
+                video.WatchProgress = entry.Completed ? 1 : entry.ProgressFraction;
+                video.WatchLabel = entry.ResumeLabel;
+            }
+            else
+            {
+                video.WatchProgress = 0;
+                video.WatchLabel = "";
+            }
+        }
+
+        OnPropertyChanged(nameof(ResumeEntry));
+        OnPropertyChanged(nameof(HasResume));
+        OnPropertyChanged(nameof(PlayButtonText));
+    }
 
     private void BuildFacts(MetaItem meta)
     {

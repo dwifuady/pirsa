@@ -14,7 +14,7 @@ namespace Pirsa.Views;
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
-    public SettingsViewModel ViewModel { get; } = new(App.Addons, App.Settings);
+    public SettingsViewModel ViewModel { get; } = new(App.Addons, App.Settings, App.WatchProgress);
 
     public SettingsPage()
     {
@@ -95,6 +95,24 @@ public sealed partial class SettingsPage : Page
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             await ViewModel.RestoreDefaultsAsync();
+        }
+    }
+
+    private async void ClearWatchHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Clear watch history?",
+            Content = "This forgets every saved movie and episode position on this device. Your addons and settings stay as they are.",
+            PrimaryButtonText = "Clear history",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await ViewModel.ClearWatchHistoryAsync();
         }
     }
 

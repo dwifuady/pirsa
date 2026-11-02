@@ -20,11 +20,13 @@ public partial class HomeViewModel : ObservableObject
     private const int HeroLimit = 10;
 
     private readonly AddonRegistry _registry;
+    private readonly WatchProgressStore _watchProgress;
     private int _rowFailures;
 
-    public HomeViewModel(AddonRegistry registry)
+    public HomeViewModel(AddonRegistry registry, WatchProgressStore watchProgress)
     {
         _registry = registry;
+        _watchProgress = watchProgress;
         ErrorMessage = "";
         RowErrorMessage = "";
         AddonName = "";
@@ -33,6 +35,9 @@ public partial class HomeViewModel : ObservableObject
     public ObservableCollection<HeroItemViewModel> HeroItems { get; } = [];
 
     public ObservableCollection<CatalogRowViewModel> Catalogs { get; } = [];
+
+    /// <summary>One card per movie or series from the local watch history.</summary>
+    public ObservableCollection<WatchProgressEntry> ContinueWatching { get; } = [];
 
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
@@ -59,7 +64,52 @@ public partial class HomeViewModel : ObservableObject
     public partial int HeroSlides { get; set; }
 
     public bool IsEmpty =>
-        !IsLoading && !IsLoadingRows && !HasError && HeroItems.Count == 0 && Catalogs.Count == 0;
+        !IsLoading && !IsLoadingRows && !HasError &&
+        HeroItems.Count == 0 && Catalogs.Count == 0 && ContinueWatching.Count == 0;
+
+    public bool HasContinueWatching => ContinueWatching.Count > 0;
+
+    public string ContinueWatchingLabel => ContinueWatching.Count == 1
+        ? "1 title"
+        : $"{ContinueWatching.Count} titles";
+
+    /// <summary>
+    /// Reloads the local watch history. Cheap enough to run on every visit to
+    /// Home, which keeps the rail current after watching something.
+    /// </summary>
+    public async Task RefreshContinueWatchingAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _watchProgress.EnsureLoadedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        ContinueWatching.Clear();
+        foreach (var entry in _watchProgress.GetContinueWatching())
+        {
+            ContinueWatching.Add(entry);
+        }
+
+        OnPropertyChanged(nameof(HasContinueWatching));
+        OnPropertyChanged(nameof(ContinueWatchingLabel));
+        OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    public async Task RemoveContinueWatchingAsync(
+        WatchProgressEntry entry,
+        CancellationToken cancellationToken = default)
+    {
+        await _watchProgress.RemoveTitleAsync(entry.MetaId, cancellationToken);
+        await RefreshContinueWatchingAsync(cancellationToken);
+    }
 
     public string LoadingText =>
         string.IsNullOrWhiteSpace(AddonName) ? "Loading your catalog…" : $"Loading {AddonName}…";

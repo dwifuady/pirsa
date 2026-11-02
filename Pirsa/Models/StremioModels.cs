@@ -629,6 +629,42 @@ public sealed class MetaVideo : ObservableObject
     public string? Rating { get; set; }
 
     private BitmapImage? _thumbnail;
+    private string _watchLabel = "";
+    private double _watchProgress;
+
+    /// <summary>Local watch history marker: "Watched" or "Resume 12:34".</summary>
+    [JsonIgnore]
+    public string WatchLabel
+    {
+        get => _watchLabel;
+        set
+        {
+            if (SetProperty(ref _watchLabel, value))
+            {
+                OnPropertyChanged(nameof(HasWatchLabel));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasWatchLabel => !string.IsNullOrWhiteSpace(WatchLabel);
+
+    /// <summary>0–1 playback progress from the local watch history.</summary>
+    [JsonIgnore]
+    public double WatchProgress
+    {
+        get => _watchProgress;
+        set
+        {
+            if (SetProperty(ref _watchProgress, value))
+            {
+                OnPropertyChanged(nameof(HasWatchProgress));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasWatchProgress => _watchProgress > 0;
 
     [JsonIgnore]
     public int EpisodeNumber => Number > 0 ? Number : Math.Max(Episode, 0);

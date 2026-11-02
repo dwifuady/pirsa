@@ -358,6 +358,45 @@
                                     Text="Quality comes from each addon's source metadata. Sources that don't declare a resolution are shown as Unknown and won't match; Pirsa then falls back to the best available source."
                                     TextWrapping="Wrap" />
                             </StackPanel>
+
+                            <ToggleSwitch
+                                x:Name="AutoAdvanceToggle"
+                                Header="Play next episode automatically"
+                                IsOn="{x:Bind ViewModel.AutoAdvanceEnabled, Mode=TwoWay}"
+                                OffContent="Off"
+                                OnContent="On" />
+
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="When an episode ends, the next one starts in the same player, using its saved source when it is still available. An Up next card appears shortly before the end so you can skip the credits, and its close button cancels the automatic switch for that episode."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Watch history" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Pirsa remembers where you stopped in each movie and episode, plus the last stream source that worked for it, so Continue watching can start instantly. All of it is stored on this device only."
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Text="{x:Bind ViewModel.WatchHistoryText, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                HorizontalAlignment="Left"
+                                Click="ClearWatchHistory_Click"
+                                Content="Clear watch history"
+                                IsEnabled="{x:Bind ViewModel.HasWatchHistory, Mode=OneWay}" />
                         </StackPanel>
                     </Border>
                 </StackPanel>

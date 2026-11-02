@@ -15,10 +15,12 @@ namespace Pirsa.ViewModels;
 public partial class PlayerViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
+    private readonly StreamDiscovery _streamDiscovery;
 
-    public PlayerViewModel(AddonRegistry registry)
+    public PlayerViewModel(AddonRegistry registry, StreamDiscovery streamDiscovery)
     {
         _registry = registry;
+        _streamDiscovery = streamDiscovery;
         ErrorMessage = "";
         StatusText = "";
         SubtitleStatus = "";
@@ -69,6 +71,33 @@ public partial class PlayerViewModel : ObservableObject
     [ObservableProperty]
     public partial SubtitleVersionChoice? SelectedSubtitle { get; set; }
 
+    /// <summary>
+    /// The episode that follows the current one, when the player can find it.
+    /// Drives the Up next card and episode auto-advance.
+    /// </summary>
+    [ObservableProperty]
+    public partial MetaVideo? NextEpisode { get; set; }
+
+    public bool HasNextEpisode => NextEpisode is not null;
+
+    public string NextEpisodeTag => NextEpisode is null
+        ? ""
+        : $"S{NextEpisode.Season:00}E{NextEpisode.EpisodeNumber:00}";
+
+    public string NextEpisodeLine => NextEpisode is null
+        ? ""
+        : $"{NextEpisodeTag} · {NextEpisode.Title}";
+
+    public BitmapImage? NextEpisodeImage => NextEpisode?.ThumbnailImage;
+
+    partial void OnNextEpisodeChanged(MetaVideo? value)
+    {
+        OnPropertyChanged(nameof(HasNextEpisode));
+        OnPropertyChanged(nameof(NextEpisodeTag));
+        OnPropertyChanged(nameof(NextEpisodeLine));
+        OnPropertyChanged(nameof(NextEpisodeImage));
+    }
+
     public bool HasSubtitles => SubtitleMenu.Count > 1;
 
     public string Title => Request?.Title ?? "";
@@ -110,11 +139,7 @@ public partial class PlayerViewModel : ObservableObject
         {
             await _registry.EnsureLoadedAsync(cancellationToken);
 
-            var addons = _registry.Entries
-                .Select(entry => entry.Client)
-                .ToList();
-
-            if (addons.Count == 0)
+            if (_registry.Entries.Count == 0)
             {
                 HasError = true;
                 ErrorMessage = "No addons are configured. Add a stream addon in Settings → Addons.";
@@ -122,11 +147,16 @@ public partial class PlayerViewModel : ObservableObject
                 return false;
             }
 
-            var results = await Task.WhenAll(
-                addons.Select(addon => FetchSourcesAsync(addon, request, cancellationToken)));
+            // The details page warms this cache, so the list is often already
+            // computed (or still in flight) when Play is pressed.
+            var results = await _streamDiscovery.GetAsync(
+                request,
+                cancellationToken: cancellationToken);
 
             var ranked = results
-                .SelectMany(result => result.Sources)
+                .SelectMany(result => result.Streams.Select(stream =>
+                    PlaybackSource.From(result.AddonName, result.ManifestUrl, stream)))
+                .OfType<PlaybackSource>()
                 .GroupBy(source => source.Url, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group
                     .OrderByDescending(source => source.Score)
@@ -297,31 +327,6 @@ public partial class PlayerViewModel : ObservableObject
     private static string NormalizeLanguage(string? lang) =>
         string.IsNullOrWhiteSpace(lang) ? "unknown" : lang.Trim().ToLowerInvariant();
 
-    private static async Task<AddonFetchResult> FetchSourcesAsync(
-        StremioAddonClient addon,
-        PlaybackRequest request,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var streams = await addon.GetStreamsAsync(request.Type, request.VideoId, cancellationToken);
-            var sources = streams
-                .Select(stream => PlaybackSource.From(addon.AddonName, stream))
-                .OfType<PlaybackSource>()
-                .ToList();
-
-            return new AddonFetchResult(addon.AddonName, null, sources);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            return new AddonFetchResult(addon.AddonName, exception.Message, []);
-        }
-    }
-
     private void RaiseSourceInfo()
     {
         OnPropertyChanged(nameof(SourceCount));
@@ -336,11 +341,6 @@ public partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(BackdropImage));
         OnPropertyChanged(nameof(PosterImage));
     }
-
-    private sealed record AddonFetchResult(
-        string AddonName,
-        string? Error,
-        List<PlaybackSource> Sources);
 }
 
 /// <summary>
@@ -486,6 +486,9 @@ public sealed class PlaybackSource : ObservableObject
 
     public required string AddonName { get; init; }
 
+    /// <summary>Manifest URL of the addon that returned this source.</summary>
+    public string? AddonUrl { get; init; }
+
     private bool _isCurrent;
 
     public bool IsCurrent
@@ -530,7 +533,7 @@ public sealed class PlaybackSource : ObservableObject
 
     public bool HasDetails => !string.IsNullOrWhiteSpace(DetailsLine);
 
-    public static PlaybackSource? From(string addonName, StreamItem stream)
+    public static PlaybackSource? From(string addonName, string? addonUrl, StreamItem stream)
     {
         if (!stream.HasDirectUrl || stream.Url is null ||
             !Uri.TryCreate(stream.Url, UriKind.Absolute, out var uri))
@@ -593,6 +596,7 @@ public sealed class PlaybackSource : ObservableObject
         {
             Url = stream.Url!,
             AddonName = addonName,
+            AddonUrl = addonUrl,
             QualityLabel = quality,
             ProviderLine = provider,
             DetailsLine = details,

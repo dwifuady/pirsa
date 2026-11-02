@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Helpers;
 using Pirsa.Models;
+using Pirsa.Services;
 using Pirsa.ViewModels;
 
 namespace Pirsa.Views;
@@ -20,7 +22,7 @@ public sealed partial class HomePage : Page
     private bool _syncingHero;
     private int _loadedRevision = -1;
 
-    public HomeViewModel ViewModel { get; } = new(App.Addons);
+    public HomeViewModel ViewModel { get; } = new(App.Addons, App.WatchProgress);
 
     public HomePage()
     {
@@ -31,6 +33,10 @@ public sealed partial class HomePage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+
+        // The watch history changes while the player is open, so refresh the
+        // rail on every visit even when the cached catalogs stay as they are.
+        await ViewModel.RefreshContinueWatchingAsync();
 
         if (_loaded && _loadedRevision == App.Addons.Revision)
         {
@@ -154,6 +160,37 @@ public sealed partial class HomePage : Page
                 PlaybackRequest.ForMeta(hero.Meta),
                 new DrillInNavigationTransitionInfo());
         }
+    }
+
+    private void Continue_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not WatchProgressEntry entry)
+        {
+            return;
+        }
+
+        Frame.Navigate(
+            typeof(PlayerPage),
+            entry.ToPlaybackRequest(),
+            new DrillInNavigationTransitionInfo());
+    }
+
+    private void ContinueCard_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not WatchProgressEntry entry)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        var remove = new MenuFlyoutItem { Text = "Remove from Continue watching" };
+        remove.Click += async (_, _) => await ViewModel.RemoveContinueWatchingAsync(entry);
+
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(remove);
+        flyout.ShowAt(element, e.GetPosition(element));
     }
 
     private void OpenDetails(MetaItem meta, UIElement? posterSource)

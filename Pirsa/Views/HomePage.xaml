@@ -7,6 +7,7 @@
     xmlns:helpers="using:Pirsa.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="using:Pirsa.Models"
+    xmlns:services="using:Pirsa.Services"
     xmlns:vm="using:Pirsa.ViewModels"
     x:DefaultBindMode="OneWay"
     Background="{ThemeResource AppBackgroundBrush}"
@@ -72,6 +73,59 @@
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Text="{x:Bind CardMeta}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ContinueCardTemplate" x:DataType="services:WatchProgressEntry">
+            <Grid Width="168" RightTapped="ContinueCard_RightTapped">
+                <StackPanel Spacing="7">
+                    <Border
+                        Width="168"
+                        Height="252"
+                        Background="{ThemeResource PosterPlaceholderBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                        <Grid>
+                            <FontIcon
+                                AutomationProperties.AccessibilityView="Raw"
+                                FontSize="28"
+                                Foreground="{ThemeResource PosterPlaceholderForegroundBrush}"
+                                Glyph="&#xE8B2;"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind helpers:XamlHelpers.Collapsed(HasPoster)}" />
+
+                            <Image
+                                AutomationProperties.AccessibilityView="Raw"
+                                Source="{x:Bind PosterImage}"
+                                Stretch="UniformToFill" />
+
+                            <ProgressBar
+                                Height="4"
+                                Margin="8,0,8,9"
+                                VerticalAlignment="Bottom"
+                                AutomationProperties.Name="Playback progress"
+                                Background="{ThemeResource OverlayChipBackgroundBrush}"
+                                Foreground="{ThemeResource BrandPrimaryBrush}"
+                                Maximum="1"
+                                Value="{x:Bind ProgressFraction}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock
+                        MaxLines="2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind Name}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="WrapWholeWords" />
+
+                    <TextBlock
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind SubtitleLine}"
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Grid>
@@ -252,6 +306,60 @@
                         </PipsPager.Resources>
                     </PipsPager>
                 </Grid>
+
+                <!--  Continue watching  -->
+                <StackPanel
+                    Margin="0,26,0,0"
+                    Spacing="13"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasContinueWatching), Mode=OneWay}">
+                    <Grid Margin="48,0,48,0">
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center">
+                            <Border
+                                Width="4"
+                                Height="20"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource BrandPrimaryBrush}"
+                                CornerRadius="2" />
+                            <TextBlock
+                                Style="{StaticResource SectionTitleTextBlockStyle}"
+                                Text="Continue watching" />
+                        </StackPanel>
+                        <TextBlock
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SectionSubtitleTextBlockStyle}"
+                            Text="{x:Bind ViewModel.ContinueWatchingLabel, Mode=OneWay}" />
+                    </Grid>
+
+                    <ListView
+                        Height="342"
+                        Margin="42,0,0,0"
+                        AutomationProperties.Name="Continue watching"
+                        CanDragItems="False"
+                        CanReorderItems="False"
+                        IsItemClickEnabled="True"
+                        ItemClick="Continue_ItemClick"
+                        ItemContainerStyle="{StaticResource PosterListItemStyle}"
+                        ItemContainerTransitions="{x:Null}"
+                        ItemTemplate="{StaticResource ContinueCardTemplate}"
+                        ItemsSource="{x:Bind ViewModel.ContinueWatching}"
+                        SelectionMode="None"
+                        ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                        ScrollViewer.HorizontalScrollMode="Enabled"
+                        ScrollViewer.IsHorizontalRailEnabled="True"
+                        ScrollViewer.IsVerticalRailEnabled="False"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        ScrollViewer.VerticalScrollMode="Disabled">
+                        <ListView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsStackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ListView.ItemsPanel>
+                    </ListView>
+                </StackPanel>
 
                 <!--  Catalogs  -->
                 <StackPanel Margin="0,26,0,72" Spacing="38">
