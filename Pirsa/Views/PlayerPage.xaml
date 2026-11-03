@@ -354,6 +354,21 @@
                                 Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
                                 Text="0:00 / 0:00" />
                             <Button
+                                x:Name="AudioButton"
+                                AutomationProperties.Name="Audio track"
+                                Style="{StaticResource PlayerTextButtonStyle}"
+                                ToolTipService.ToolTip="Audio track">
+                                <Button.Flyout>
+                                    <MenuFlyout x:Name="AudioMenu" Opened="AudioMenu_Opened">
+                                        <MenuFlyoutItem IsEnabled="False" Text="Loading…" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                                <Grid>
+                                    <TextBlock Text="Audio" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Ellipse x:Name="AudioMultiDot" Width="5" Height="5" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top" Fill="{ThemeResource BrandPrimaryBrush}" />
+                                </Grid>
+                            </Button>
+                            <Button
                                 x:Name="SubtitlesButton"
                                 AutomationProperties.Name="Subtitles"
                                 Style="{StaticResource PlayerIconButtonStyle}"

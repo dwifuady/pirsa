@@ -58,6 +58,9 @@ public sealed partial class PlayerPage : Page
     private bool _draggingSeek;
     private bool _suppressSeek;
     private bool _suppressVolume;
+    private List<TrackDescriptionTile> _audioTracks = new();
+    private int _selectedAudioTrackId = -1;
+    private bool _audioListDirty = true;
     private bool _chromeHidden = true;
     private bool _keyboardActive;
     private bool _isFullScreen;
@@ -224,6 +227,9 @@ public sealed partial class PlayerPage : Page
         _mediaPlayer.TimeChanged += MediaPlayer_TimeChanged;
         _mediaPlayer.LengthChanged += MediaPlayer_LengthChanged;
         _mediaPlayer.Buffering += MediaPlayer_Buffering;
+        _mediaPlayer.ESAdded += MediaPlayer_ESAdded;
+        _mediaPlayer.ESDeleted += MediaPlayer_ESDeleted;
+        _mediaPlayer.ESSelected += MediaPlayer_ESSelected;
     }
 
     private void UnhookMediaPlayer()
@@ -241,6 +247,9 @@ public sealed partial class PlayerPage : Page
         _mediaPlayer.TimeChanged -= MediaPlayer_TimeChanged;
         _mediaPlayer.LengthChanged -= MediaPlayer_LengthChanged;
         _mediaPlayer.Buffering -= MediaPlayer_Buffering;
+        _mediaPlayer.ESAdded -= MediaPlayer_ESAdded;
+        _mediaPlayer.ESDeleted -= MediaPlayer_ESDeleted;
+        _mediaPlayer.ESSelected -= MediaPlayer_ESSelected;
     }
 
     private async Task LoadSubtitlesAsync(PlaybackRequest request)
@@ -989,6 +998,12 @@ public sealed partial class PlayerPage : Page
             _media?.Dispose();
             _media = null;
 
+            // The discarded source's tracks must not leak into the new menu.
+            _audioTracks = new List<TrackDescriptionTile>();
+            _selectedAudioTrackId = -1;
+            _audioListDirty = true;
+            UpdateAudioIndicator();
+
             var media = new Media(_libVlc, new Uri(source.Url));
             media.AddOption(":no-video-title-show");
             media.AddOption(":no-osd");
@@ -1065,6 +1080,157 @@ public sealed partial class PlayerPage : Page
     }
 
     // --------------------------------------------------------------- VLC events
+
+    // ------------------------------------------------------------ audio tracks
+
+    private void MediaPlayer_ESAdded(object? sender, MediaPlayerESAddedEventArgs e) =>
+        HandleEsChanged(e.Type);
+
+    private void MediaPlayer_ESDeleted(object? sender, MediaPlayerESDeletedEventArgs e) =>
+        HandleEsChanged(e.Type);
+
+    private void MediaPlayer_ESSelected(object? sender, MediaPlayerESSelectedEventArgs e) =>
+        HandleEsChanged(e.Type);
+
+    private void HandleEsChanged(TrackType type)
+    {
+        if (type is not TrackType.Audio || _switching)
+        {
+            return;
+        }
+
+        // Elementary-stream events arrive off the UI thread.
+        _audioListDirty = true;
+        Dispatch(() =>
+        {
+            if (_audioListDirty)
+            {
+                RefreshAudioTracks();
+            }
+
+            if (AudioMenu.IsOpen)
+            {
+                RebuildAudioMenu();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Streams are parsed as the media starts, so the track list is complete
+    /// only once playback settles. Read it lazily and keep it fresh with the
+    /// ES* events afterwards.
+    /// </summary>
+    private void RefreshAudioTracks()
+    {
+        try
+        {
+            _audioTracks = _mediaPlayer?.AudioTrackDescription
+                               .Where(t => t is { Name.Length: > 0 })
+                               .Select(t => new TrackDescriptionTile(t.Id, NameAudioTrack(t.Id, t.Name)))
+                               .ToList()
+                           ?? new List<TrackDescriptionTile>();
+            _selectedAudioTrackId = _mediaPlayer?.AudioTrack ?? -1;
+        }
+        catch
+        {
+            _audioTracks = new List<TrackDescriptionTile>();
+            _selectedAudioTrackId = -1;
+        }
+
+        _audioListDirty = false;
+        UpdateAudioIndicator();
+    }
+
+    /// <summary>
+    /// VLC names look like "Track 1 - [eng]" or "Track 1 - [au]" depending on
+    /// the container; language tags become their display name.
+    /// </summary>
+    private static string NameAudioTrack(int id, string raw)
+    {
+        if (id == -1)
+        {
+            return "Off";
+        }
+
+        var cleaned = raw;
+        var bracketStart = cleaned.IndexOf('[', StringComparison.Ordinal);
+        var bracketEnd = cleaned.IndexOf(']', StringComparison.Ordinal);
+        if (bracketStart >= 0 && bracketEnd > bracketStart)
+        {
+            var tag = cleaned[(bracketStart + 1)..bracketEnd].Trim();
+            cleaned = cleaned[..bracketStart].Trim().TrimEnd('-', ' ');
+            if (!string.IsNullOrWhiteSpace(tag) &&
+                !tag.StartsWith("au", StringComparison.OrdinalIgnoreCase) &&
+                tag.Length <= 8)
+            {
+                var language = SubtitleLanguages.DisplayName(tag);
+                cleaned = string.IsNullOrWhiteSpace(language)
+                    ? string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} - {tag}"
+                    : string.IsNullOrWhiteSpace(cleaned) ? language : $"{cleaned} - {language}";
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(cleaned) ? raw : cleaned;
+    }
+
+    private void AudioMenu_Opened(object? sender, object e)
+    {
+        if (_audioListDirty || _mediaPlayer?.State != VLCState.Playing || AudioMenu.Items.Count == 0)
+        {
+            RefreshAudioTracks();
+        }
+
+        RebuildAudioMenu();
+    }
+
+    private void RebuildAudioMenu()
+    {
+        AudioMenu.Items.Clear();
+
+        if (_mediaPlayer is null || _audioTracks.Count == 0)
+        {
+            AudioMenu.Items.Add(new MenuFlyoutItem { Text = "No audio tracks", IsEnabled = false });
+            return;
+        }
+
+        foreach (var track in _audioTracks)
+        {
+            var item = new ToggleMenuFlyoutItem
+            {
+                Text = track.Name,
+                IsChecked = track.Id == _selectedAudioTrackId,
+                Tag = track.Id,
+            };
+            item.Click += AudioTrack_Click;
+            AudioMenu.Items.Add(item);
+        }
+    }
+
+    private void AudioTrack_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuFlyoutItem { Tag: int id } || _mediaPlayer is null)
+        {
+            return;
+        }
+
+        if (!_mediaPlayer.SetAudioTrack(id))
+        {
+            return;
+        }
+
+        _selectedAudioTrackId = id;
+        foreach (var item in AudioMenu.Items.OfType<ToggleMenuFlyoutItem>())
+        {
+            item.IsChecked = item.Tag is int other && other == id;
+        }
+    }
+
+    private void UpdateAudioIndicator()
+    {
+        AudioMultiDot.Visibility = _audioTracks.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private sealed record TrackDescriptionTile(int Id, string Name);
 
     private void Dispatch(Action action)
     {
