@@ -157,22 +157,74 @@ public partial class DetailsViewModel : ObservableObject
             await RefreshWatchlistStateAsync(cancellationToken);
 
             await _registry.EnsureLoadedAsync(cancellationToken);
+            await _registry.LoadManifestsAsync(cancellationToken);
 
             var sourceUrl = Meta?.SourceAddonUrl;
-            var client = _registry.GetClient(sourceUrl)
-                ?? _registry.Entries.FirstOrDefault()?.Client;
 
-            if (client is null)
+            // Meta follows the addon priority order. Custom id prefixes only
+            // match the addon that declared them, so an addon that knows a
+            // language (or a private id) is picked without breaking others.
+            var candidates = _registry.MetaCandidates(_type, _id, sourceUrl);
+
+            if (candidates.Count == 0)
+            {
+                // Addons that don't declare their meta resource can still
+                // answer: try the catalog's addon, then the first enabled one.
+                var fallback = _registry.GetEnabledEntry(sourceUrl)
+                    ?? _registry.EnabledEntries.FirstOrDefault();
+
+                if (fallback is not null)
+                {
+                    candidates = [fallback];
+                }
+            }
+
+            if (candidates.Count == 0)
             {
                 HasError = true;
-                ErrorMessage = "No addons are configured. Add one in Settings → Addons.";
+                ErrorMessage = "No addon provides metadata. Turn one on in Settings → Addons.";
                 return;
             }
 
-            var meta = await client.GetMetaAsync(_type, _id, cancellationToken);
-            if (string.IsNullOrWhiteSpace(meta.SourceAddonUrl))
+            MetaItem? meta = null;
+            Exception? lastError = null;
+
+            foreach (var candidate in candidates)
             {
-                meta.SourceAddonUrl = sourceUrl ?? client.ManifestUrl;
+                try
+                {
+                    meta = await candidate.Client.GetMetaAsync(_type, _id, cancellationToken);
+
+                    // A series without episodes cannot be played; give the
+                    // next addon in the priority list a turn.
+                    if (NeedsEpisodes(_type) && meta.Videos is not { Count: > 0 } &&
+                        candidates.Count > 1)
+                    {
+                        lastError = new StremioException($"{candidate.Name} has no episode list.");
+                        meta = null;
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(meta.SourceAddonUrl))
+                    {
+                        meta.SourceAddonUrl = candidate.ManifestUrl;
+                    }
+
+                    break;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    lastError = exception;
+                }
+            }
+
+            if (meta is null)
+            {
+                throw lastError ?? new StremioException("No addon knew this title.");
             }
 
             Meta = meta;
@@ -198,6 +250,10 @@ public partial class DetailsViewModel : ObservableObject
     [RelayCommand]
     private Task ReloadAsync(CancellationToken cancellationToken) =>
         LoadAsync(_type, _id, cancellationToken);
+
+    private static bool NeedsEpisodes(string type) =>
+        type.Equals("series", StringComparison.OrdinalIgnoreCase) ||
+        type.Equals("tv", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Saves or unsaves the current title. The button state follows the store,

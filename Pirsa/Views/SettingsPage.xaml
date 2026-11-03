@@ -124,7 +124,45 @@
                         </StackPanel>
                     </Border>
 
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.Addons}">
+                    <InfoBar
+                        Title="Addons updated"
+                        Closed="Notice_Closed"
+                        IsClosable="True"
+                        IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
+                        Message="{x:Bind ViewModel.NoticeMessage, Mode=OneWay}"
+                        Severity="Informational" />
+
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="12"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasManyAddons), Mode=OneWay}">
+                        <TextBox
+                            Width="260"
+                            AutomationProperties.AutomationId="AddonSearchBox"
+                            AutomationProperties.Name="Search addons"
+                            PlaceholderText="Search by name or host"
+                            Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <SelectorBar
+                            x:Name="AddonFilterBar"
+                            AutomationProperties.Name="Filter addons"
+                            SelectionChanged="AddonFilter_SelectionChanged">
+                            <SelectorBarItem
+                                IsSelected="True"
+                                Tag="0"
+                                Text="All" />
+                            <SelectorBarItem Tag="1" Text="Streams" />
+                            <SelectorBarItem Tag="2" Text="Metadata" />
+                            <SelectorBarItem Tag="3" Text="Catalogs" />
+                            <SelectorBarItem Tag="4" Text="Issues" />
+                        </SelectorBar>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.VisibleCountText, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.VisibleAddons}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Spacing="10" />
@@ -148,6 +186,17 @@
                                             <StackPanel
                                                 Orientation="Horizontal"
                                                 Spacing="8">
+                                                <Border
+                                                    Padding="7,2"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                    CornerRadius="4">
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="{x:Bind Order, Mode=OneWay}" />
+                                                </Border>
                                                 <TextBlock
                                                     FontSize="16"
                                                     FontWeight="SemiBold"
@@ -174,6 +223,18 @@
                                                         FontWeight="SemiBold"
                                                         Foreground="{ThemeResource BrandPrimaryBrush}"
                                                         Text="Default" />
+                                                </Border>
+                                                <Border
+                                                    Padding="7,2"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                    CornerRadius="4"
+                                                    Visibility="{x:Bind helpers:XamlHelpers.Collapsed(IsEnabled), Mode=OneWay}">
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="Disabled" />
                                                 </Border>
                                             </StackPanel>
 
@@ -242,27 +303,112 @@
                                             </StackPanel>
                                         </StackPanel>
 
-                                        <Button
+                                        <StackPanel
                                             Grid.Column="1"
-                                            Width="40"
-                                            Height="40"
-                                            VerticalAlignment="Top"
-                                            AutomationProperties.Name="Remove addon"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Click="RemoveAddon_Click"
-                                            CornerRadius="8"
-                                            ToolTipService.ToolTip="Remove addon">
-                                            <FontIcon
-                                                FontSize="16"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Glyph="&#xE74D;" />
-                                        </Button>
+                                            HorizontalAlignment="Right"
+                                            Spacing="4">
+                                            <ToggleSwitch
+                                                HorizontalAlignment="Right"
+                                                AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
+                                                AutomationProperties.Name="Enable addon"
+                                                IsOn="{x:Bind IsEnabled, Mode=OneWay}"
+                                                MinWidth="0"
+                                                OffContent=""
+                                                OnContent=""
+                                                Toggled="AddonEnabled_Toggled" />
+                                            <StackPanel
+                                                HorizontalAlignment="Right"
+                                                Orientation="Horizontal"
+                                                Spacing="2">
+                                                <Button
+                                                    Width="34"
+                                                    Height="32"
+                                                    AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
+                                                    AutomationProperties.Name="Move addon up"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Click="MoveAddonUp_Click"
+                                                    CornerRadius="6"
+                                                    IsEnabled="{x:Bind CanMoveUp, Mode=OneWay}"
+                                                    ToolTipService.ToolTip="Move up">
+                                                    <FontIcon
+                                                        FontSize="13"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Glyph="&#xE70E;" />
+                                                </Button>
+                                                <Button
+                                                    Width="34"
+                                                    Height="32"
+                                                    AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
+                                                    AutomationProperties.Name="Move addon down"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Click="MoveAddonDown_Click"
+                                                    CornerRadius="6"
+                                                    IsEnabled="{x:Bind CanMoveDown, Mode=OneWay}"
+                                                    ToolTipService.ToolTip="Move down">
+                                                    <FontIcon
+                                                        FontSize="13"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Glyph="&#xE70D;" />
+                                                </Button>
+                                                <Button
+                                                    Width="34"
+                                                    Height="32"
+                                                    AutomationProperties.Name="Remove addon"
+                                                    Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Click="RemoveAddon_Click"
+                                                    CornerRadius="6"
+                                                    ToolTipService.ToolTip="Remove addon">
+                                                    <FontIcon
+                                                        FontSize="15"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Glyph="&#xE74D;" />
+                                                </Button>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="The first enabled addon wins for metadata; stream sources are listed in this order."
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasAddons), Mode=OneWay}" />
+
+                    <Border
+                        Padding="24"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasNoMatches), Mode=OneWay}">
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            Spacing="8">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="No addons match" />
+                            <TextBlock
+                                MaxWidth="420"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="Try a different name or host, or clear the search and filter."
+                                TextAlignment="Center"
+                                TextWrapping="Wrap" />
+                            <Button
+                                HorizontalAlignment="Center"
+                                Click="ClearAddonFilters_Click"
+                                Content="Clear filters" />
+                        </StackPanel>
+                    </Border>
 
                     <Border
                         Padding="28"

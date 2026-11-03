@@ -16,6 +16,11 @@ public partial class PlayerViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
     private readonly StreamDiscovery _streamDiscovery;
+    private readonly List<AddonStreamResult> _results = [];
+    private readonly EventHandler _registryChangedHandler;
+    private CancellationTokenSource? _loadCts;
+    private Task _fillTask = Task.CompletedTask;
+    private int _loadVersion;
 
     public PlayerViewModel(AddonRegistry registry, StreamDiscovery streamDiscovery)
     {
@@ -32,6 +37,26 @@ public partial class PlayerViewModel : ObservableObject
             [],
             "No subtitles");
         SubtitleMenu.Add(OffSubtitle);
+
+        // Reordering or disabling an addon re-ranks the open source list.
+        _registryChangedHandler = (_, _) =>
+        {
+            if (Sources.Count > 0)
+            {
+                RebuildSources();
+            }
+        };
+        _registry.Changed += _registryChangedHandler;
+    }
+
+    /// <summary>Stops listening to the shared addon list when the page goes away.</summary>
+    public void Detach()
+    {
+        _registry.Changed -= _registryChangedHandler;
+        _loadVersion++;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = null;
     }
 
     public ObservableCollection<PlaybackSource> Sources { get; } = [];
@@ -120,8 +145,15 @@ public partial class PlayerViewModel : ObservableObject
     };
 
     /// <summary>
-    /// Loads streams from every configured addon in parallel, deduplicates by
-    /// URL, and ranks the results for a sensible default (1080p HLS first).
+    /// True while addons are still answering for the current request.
+    /// </summary>
+    public bool IsDiscovering => !_fillTask.IsCompleted;
+
+    /// <summary>
+    /// Loads streams from the enabled addons in priority order and returns as
+    /// soon as the first playable source arrives. The remaining addons keep
+    /// filling the picker in the background, so one slow addon never delays
+    /// playback.
     /// </summary>
     public async Task<bool> LoadAsync(PlaybackRequest request, CancellationToken cancellationToken = default)
     {
@@ -129,99 +161,262 @@ public partial class PlayerViewModel : ObservableObject
         SelectedSource = null;
         Sources.Clear();
         SourceItems.Clear();
+        _results.Clear();
         HasError = false;
         ErrorMessage = "";
         StatusText = "Finding sources…";
         IsLoading = true;
         RaiseSourceInfo();
 
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var token = _loadCts.Token;
+        var version = ++_loadVersion;
+
         try
         {
-            await _registry.EnsureLoadedAsync(cancellationToken);
+            await _registry.EnsureLoadedAsync(token);
 
-            if (_registry.Entries.Count == 0)
+            if (_registry.EnabledEntries.Count == 0)
             {
                 HasError = true;
-                ErrorMessage = "No addons are configured. Add a stream addon in Settings → Addons.";
+                ErrorMessage = "No addons are enabled. Turn one on in Settings → Addons.";
                 StatusText = "No sources";
+                IsLoading = false;
                 return false;
             }
 
-            // The details page warms this cache, so the list is often already
-            // computed (or still in flight) when Play is pressed.
-            var results = await _streamDiscovery.GetAsync(
-                request,
-                cancellationToken: cancellationToken);
+            // The details page warms this pass, so results are often already
+            // waiting when Play is pressed.
+            var session = _streamDiscovery.Start(request);
+            var firstSource = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
 
-            var ranked = results
-                .SelectMany(result => result.Streams.Select(stream =>
-                    PlaybackSource.From(result.AddonName, result.ManifestUrl, stream)))
-                .OfType<PlaybackSource>()
-                .GroupBy(source => source.Url, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group
-                    .OrderByDescending(source => source.Score)
-                    .ThenBy(source => source.Size ?? long.MaxValue)
-                    .First())
-                .OrderByDescending(source => source.Score)
-                .ThenBy(source => source.Size ?? long.MaxValue)
-                .ToList();
-
-            foreach (var source in ranked)
-            {
-                Sources.Add(source);
-            }
-
-            foreach (var group in ranked.GroupBy(source => source.AddonName))
-            {
-                SourceItems.Add(new SourceListItem
-                {
-                    IsHeader = true,
-                    HeaderTitle = group.Key,
-                    HeaderDetail = group.Count() == 1 ? "1 source" : $"{group.Count()} sources",
-                });
-
-                foreach (var source in group)
-                {
-                    SourceItems.Add(new SourceListItem { Source = source });
-                }
-            }
-
-            if (Sources.Count == 0)
-            {
-                var failure = results
-                    .Where(result => !string.IsNullOrWhiteSpace(result.Error))
-                    .Select(result => $"{result.AddonName}: {result.Error}")
-                    .FirstOrDefault();
-
-                HasError = true;
-                ErrorMessage = failure is null
-                    ? "No playable sources were returned for this title."
-                    : $"Couldn't get sources. {failure}";
-                StatusText = "No sources";
-                return false;
-            }
-
-            SelectedSource = Sources[0];
-            StatusText = SourcesLabel;
-            return true;
+            _fillTask = FillAsync(session, firstSource, version, token);
+            return await firstSource.Task.WaitAsync(token);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             return false;
         }
         catch (Exception exception)
         {
-            HasError = true;
-            ErrorMessage = $"Couldn't find a source. {exception.Message}";
-            StatusText = "No sources";
+            if (version == _loadVersion)
+            {
+                HasError = true;
+                ErrorMessage = $"Couldn't find a source. {exception.Message}";
+                StatusText = "No sources";
+                IsLoading = false;
+            }
+
             return false;
+        }
+    }
+
+    /// <summary>Waits until every addon has answered for the current request.</summary>
+    public Task WaitForSourcesAsync(CancellationToken cancellationToken = default) =>
+        _fillTask.WaitAsync(cancellationToken);
+
+    private async Task FillAsync(
+        StreamLoadSession session,
+        TaskCompletionSource<bool> firstSource,
+        int version,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var subscription = session.Subscribe();
+
+            await foreach (var result in subscription.WithCancellation(cancellationToken))
+            {
+                if (version != _loadVersion)
+                {
+                    return;
+                }
+
+                ApplyResult(result);
+
+                if (Sources.Count > 0)
+                {
+                    firstSource.TrySetResult(true);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A new request replaced this one; its own fill loop owns the UI.
+        }
+        catch (Exception exception)
+        {
+            if (version == _loadVersion)
+            {
+                HasError = true;
+                ErrorMessage = $"Couldn't find a source. {exception.Message}";
+            }
         }
         finally
         {
-            IsLoading = false;
-            RaiseSourceInfo();
+            if (version != _loadVersion)
+            {
+                firstSource.TrySetResult(false);
+            }
+            else
+            {
+                IsLoading = false;
+
+                if (Sources.Count == 0)
+                {
+                    var failure = _results
+                        .Where(result => !string.IsNullOrWhiteSpace(result.Error))
+                        .Select(result => $"{result.AddonName}: {result.Error}")
+                        .FirstOrDefault();
+
+                    HasError = true;
+                    ErrorMessage = failure is null
+                        ? "No playable sources were returned for this title."
+                        : $"Couldn't get sources. {failure}";
+                    StatusText = "No sources";
+                }
+                else
+                {
+                    HasError = false;
+                    ErrorMessage = "";
+                    StatusText = SourcesLabel;
+                }
+
+                RaiseSourceInfo();
+                firstSource.TrySetResult(Sources.Count > 0);
+            }
         }
     }
+
+    /// <summary>
+    /// Merges one addon's answer into the picker: duplicate URLs keep the
+    /// highest-priority addon's entry, and groups follow the user's addon order.
+    /// </summary>
+    private void ApplyResult(AddonStreamResult result)
+    {
+        _results.Add(result);
+        RebuildSources();
+    }
+
+    private void RebuildSources()
+    {
+        var existing = Sources.ToDictionary(
+            source => source.Url,
+            StringComparer.OrdinalIgnoreCase);
+        var winners = new Dictionary<string, PlaybackSource>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var result in _results)
+        {
+            // A disabled or removed addon stops contributing immediately.
+            if (_registry.GetEntry(result.ManifestUrl) is not { IsEnabled: true })
+            {
+                continue;
+            }
+
+            foreach (var stream in result.Streams)
+            {
+                var candidate = PlaybackSource.From(result.AddonName, result.ManifestUrl, stream);
+                if (candidate is null)
+                {
+                    continue;
+                }
+
+                if (winners.TryGetValue(candidate.Url, out var current) &&
+                    !IsBetter(candidate, current))
+                {
+                    continue;
+                }
+
+                if (existing.TryGetValue(candidate.Url, out var previous) &&
+                    SameStream(previous, candidate))
+                {
+                    winners[candidate.Url] = previous;
+                    continue;
+                }
+
+                // Keep the playing indicator when another addon takes the URL.
+                if (existing.TryGetValue(candidate.Url, out var old))
+                {
+                    candidate.IsCurrent = old.IsCurrent;
+                }
+
+                winners[candidate.Url] = candidate;
+            }
+        }
+
+        var ordered = winners.Values
+            .OrderBy(source => _registry.GetRank(source.AddonUrl))
+            .ThenByDescending(source => source.Score)
+            .ThenBy(source => source.Size ?? long.MaxValue)
+            .ToList();
+
+        if (!Sources.SequenceEqual(ordered))
+        {
+            var selected = SelectedSource;
+            Sources.Clear();
+            foreach (var source in ordered)
+            {
+                Sources.Add(source);
+            }
+
+            SelectedSource = selected is not null && ordered.Contains(selected)
+                ? selected
+                : ordered.FirstOrDefault();
+
+            RebuildSourceItems(ordered);
+        }
+
+        RaiseSourceInfo();
+    }
+
+    private void RebuildSourceItems(IReadOnlyList<PlaybackSource> ordered)
+    {
+        SourceItems.Clear();
+
+        foreach (var group in ordered.GroupBy(
+            source => source.AddonUrl ?? source.AddonName,
+            StringComparer.OrdinalIgnoreCase))
+        {
+            SourceItems.Add(new SourceListItem
+            {
+                IsHeader = true,
+                HeaderTitle = group.First().AddonName,
+                HeaderDetail = group.Count() == 1 ? "1 source" : $"{group.Count()} sources",
+            });
+
+            foreach (var source in group)
+            {
+                SourceItems.Add(new SourceListItem { Source = source });
+            }
+        }
+    }
+
+    private bool IsBetter(PlaybackSource candidate, PlaybackSource existing)
+    {
+        var candidateRank = _registry.GetRank(candidate.AddonUrl);
+        var existingRank = _registry.GetRank(existing.AddonUrl);
+
+        if (candidateRank != existingRank)
+        {
+            return candidateRank < existingRank;
+        }
+
+        if (candidate.Score != existing.Score)
+        {
+            return candidate.Score > existing.Score;
+        }
+
+        return (candidate.Size ?? long.MaxValue) < (existing.Size ?? long.MaxValue);
+    }
+
+    private static bool SameStream(PlaybackSource left, PlaybackSource right) =>
+        string.Equals(left.AddonUrl, right.AddonUrl, StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(left.AddonName, right.AddonName, StringComparison.Ordinal) &&
+        left.Score == right.Score &&
+        left.QualityLabel == right.QualityLabel;
 
     /// <summary>
     /// Queries every configured addon for subtitle tracks and groups them by
@@ -242,7 +437,7 @@ public partial class PlayerViewModel : ObservableObject
 
             var found = new List<(SubtitleItem Item, string AddonName)>();
 
-            foreach (var entry in _registry.Entries)
+            foreach (var entry in _registry.EnabledEntries)
             {
                 try
                 {

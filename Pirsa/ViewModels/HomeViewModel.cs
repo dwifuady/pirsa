@@ -138,16 +138,16 @@ public partial class HomeViewModel : ObservableObject
         {
             await _registry.EnsureLoadedAsync(cancellationToken);
 
-            if (_registry.Entries.Count == 0)
+            if (_registry.EnabledEntries.Count == 0)
             {
                 HasError = true;
-                ErrorMessage = "No addons are configured. Open Settings to add a Stremio addon.";
+                ErrorMessage = "No addons are enabled. Open Settings to turn one on or add a Stremio addon.";
                 return;
             }
 
             await _registry.LoadManifestsAsync(cancellationToken);
 
-            var entries = _registry.Entries
+            var entries = _registry.EnabledEntries
                 .Where(entry => entry.Manifest is not null)
                 .ToList();
 

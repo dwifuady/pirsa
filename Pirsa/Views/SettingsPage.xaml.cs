@@ -28,10 +28,17 @@ public sealed partial class SettingsPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ViewModel.Attach();
         await ViewModel.InitializeAsync();
         QualityPanel.Visibility = ViewModel.AutoplayEnabled
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        ViewModel.Detach();
     }
 
     private void AutoplayToggle_Toggled(object sender, RoutedEventArgs e)
@@ -60,6 +67,54 @@ public sealed partial class SettingsPage : Page
         e.Handled = true;
         await ViewModel.AddAsync();
     }
+
+    private async void AddonEnabled_Toggled(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not AddonEntry entry ||
+            sender is not ToggleSwitch toggle ||
+            toggle.IsOn == entry.IsEnabled)
+        {
+            return;
+        }
+
+        await ViewModel.SetEnabledAsync(entry, toggle.IsOn);
+    }
+
+    private async void MoveAddonUp_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is AddonEntry entry)
+        {
+            await ViewModel.MoveAsync(entry, -1);
+        }
+    }
+
+    private async void MoveAddonDown_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is AddonEntry entry)
+        {
+            await ViewModel.MoveAsync(entry, 1);
+        }
+    }
+
+    private void AddonFilter_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (sender.SelectedItem?.Tag is string tag && int.TryParse(tag, out var index))
+        {
+            ViewModel.FilterIndex = index;
+        }
+    }
+
+    private void ClearAddonFilters_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.ClearFilters();
+
+        if (AddonFilterBar.Items.Count > 0)
+        {
+            AddonFilterBar.SelectedItem = AddonFilterBar.Items[0];
+        }
+    }
+
+    private void Notice_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissNotice();
 
     private async void RemoveAddon_Click(object sender, RoutedEventArgs e)
     {

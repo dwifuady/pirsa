@@ -403,7 +403,7 @@ public sealed partial class PlayerPage : Page
             }
 
             if (!string.IsNullOrWhiteSpace(entry.SourceAddonUrl) &&
-                App.Addons.GetEntry(entry.SourceAddonUrl) is null)
+                App.Addons.GetEnabledEntry(entry.SourceAddonUrl) is null)
             {
                 _ = App.WatchProgress.ForgetSourceAsync(request.VideoId);
                 return null;
@@ -537,6 +537,23 @@ public sealed partial class PlayerPage : Page
         ShowChrome();
 
         var next = SelectAutoplaySource(failed.Url);
+
+        // Sources may still be arriving; give the remaining addons a chance
+        // before showing the picker with a single failed entry.
+        if (next is null && ViewModel.IsDiscovering)
+        {
+            try
+            {
+                await ViewModel.WaitForSourcesAsync(_sourceCts?.Token ?? CancellationToken.None);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            next = SelectAutoplaySource(failed.Url);
+        }
+
         if (next is not null)
         {
             _pendingSource = next;
@@ -690,18 +707,17 @@ public sealed partial class PlayerPage : Page
             await App.Addons.EnsureLoadedAsync(cancellationToken);
             await App.Addons.LoadManifestsAsync(cancellationToken);
 
-            var clients = new List<StremioAddonClient>();
+            // Same priority order as the details page. The source addon is
+            // part of the list; custom ids only match the addon that declared
+            // their prefix.
+            var clients = App.Addons.MetaCandidates("series", seriesId, meta.SourceAddonUrl)
+                .Select(entry => entry.Client)
+                .ToList();
 
-            if (App.Addons.GetClient(meta.SourceAddonUrl) is { } preferred)
+            if (clients.Count == 0 && App.Addons.GetEnabledEntry(meta.SourceAddonUrl)?.Client is { } preferred)
             {
                 clients.Add(preferred);
             }
-
-            clients.AddRange(App.Addons.Entries
-                .Where(entry => entry.Manifest?.Resources.Any(resource =>
-                    resource.Name.Equals("meta", StringComparison.OrdinalIgnoreCase)) == true)
-                .Select(entry => entry.Client)
-                .Where(client => !clients.Contains(client)));
 
             foreach (var client in clients)
             {
@@ -2241,6 +2257,7 @@ public sealed partial class PlayerPage : Page
         _sourceCts?.Cancel();
         _sourceCts?.Dispose();
         _sourceCts = null;
+        ViewModel.Detach();
         _subtitleCts?.Cancel();
         _subtitleCts?.Dispose();
         _subtitleCts = null;

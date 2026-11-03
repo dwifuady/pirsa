@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Pirsa.Models;
@@ -18,6 +19,7 @@ public sealed partial class AddonEntry : ObservableObject
     {
         Client = new StremioAddonClient(manifestUrl);
         ManifestUrl = Client.ManifestUrl;
+        IsEnabled = true;
     }
 
     public StremioAddonClient Client { get; }
@@ -36,6 +38,24 @@ public sealed partial class AddonEntry : ObservableObject
     [ObservableProperty]
     public partial string? LoadError { get; set; }
 
+    /// <summary>Disabled addons stay configured but are never queried.</summary>
+    [ObservableProperty]
+    public partial bool IsEnabled { get; set; }
+
+    /// <summary>1-based position in the user's addon list.</summary>
+    [ObservableProperty]
+    public partial int Order { get; set; }
+
+    [ObservableProperty]
+    public partial bool CanMoveUp { get; set; }
+
+    [ObservableProperty]
+    public partial bool CanMoveDown { get; set; }
+
+    /// <summary>False while the settings list is filtered, so rows cannot be moved.</summary>
+    [ObservableProperty]
+    public partial bool CanReorder { get; set; }
+
     public string Name => Manifest?.Name is { Length: > 0 } name ? name : Host;
 
     public string VersionText =>
@@ -53,8 +73,11 @@ public sealed partial class AddonEntry : ObservableObject
 
     public bool HasCatalogs => Manifest?.Catalogs is { Count: > 0 };
 
-    public bool HasStreams => Manifest?.Resources.Any(resource =>
-        resource.Name.Equals("stream", StringComparison.OrdinalIgnoreCase)) == true;
+    public bool HasStreams => HasResource("stream");
+
+    public bool HasMeta => HasResource("meta");
+
+    public bool HasSubtitles => HasResource("subtitles");
 
     public string TypesText => Manifest is null
         ? ""
@@ -71,16 +94,11 @@ public sealed partial class AddonEntry : ObservableObject
                 return "";
             }
 
-            var names = Manifest.Resources
-                .Select(resource => resource.Name.ToLowerInvariant())
-                .Distinct()
-                .ToList();
-
             var parts = new List<string>();
-            if (Manifest.Catalogs.Count > 0 || names.Contains("catalog")) parts.Add("Catalogs");
-            if (names.Contains("stream")) parts.Add("Streams");
-            if (names.Contains("meta")) parts.Add("Metadata");
-            if (names.Contains("subtitles")) parts.Add("Subtitles");
+            if (Manifest.Catalogs.Count > 0 || HasResource("catalog")) parts.Add("Catalogs");
+            if (HasStreams) parts.Add("Streams");
+            if (HasMeta) parts.Add("Metadata");
+            if (HasSubtitles) parts.Add("Subtitles");
 
             return string.Join(" · ", parts);
         }
@@ -141,6 +159,8 @@ public sealed partial class AddonEntry : ObservableObject
         OnPropertyChanged(nameof(IsReady));
         OnPropertyChanged(nameof(HasCatalogs));
         OnPropertyChanged(nameof(HasStreams));
+        OnPropertyChanged(nameof(HasMeta));
+        OnPropertyChanged(nameof(HasSubtitles));
         OnPropertyChanged(nameof(TypesText));
         OnPropertyChanged(nameof(CapabilitiesText));
         OnPropertyChanged(nameof(HasError));
@@ -150,6 +170,10 @@ public sealed partial class AddonEntry : ObservableObject
     {
         OnPropertyChanged(nameof(HasError));
     }
+
+    private bool HasResource(string name) =>
+        Manifest?.Resources.Any(resource =>
+            resource.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
 
     private static string TypeLabel(string type) => type.ToLowerInvariant() switch
     {
@@ -166,6 +190,9 @@ public sealed partial class AddonEntry : ObservableObject
 /// <summary>
 /// The user's addon list, persisted next to the app's local data. A fresh
 /// install contains only Cinemeta; stream addons are added from Settings.
+///
+/// List order is the user's priority order: the first enabled addon wins for
+/// metadata, and stream sources are requested in list order.
 /// </summary>
 public sealed class AddonRegistry
 {
@@ -180,6 +207,12 @@ public sealed class AddonRegistry
         SubtitleManifestUrl,
     ];
 
+    private static readonly JsonSerializerOptions StoreJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     private readonly object _gate = new();
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private Task? _loadTask;
@@ -187,7 +220,17 @@ public sealed class AddonRegistry
 
     public ObservableCollection<AddonEntry> Entries { get; } = [];
 
+    /// <summary>Bumped whenever the list changes in a way that affects content.</summary>
     public int Revision { get; private set; }
+
+    /// <summary>Raised after any add, remove, reorder, or enable/disable.</summary>
+    public event EventHandler? Changed;
+
+    public IReadOnlyList<AddonEntry> EnabledEntries =>
+        Entries.Where(entry => entry.IsEnabled).ToList();
+
+    public AddonEntry? PreferredMetaEntry =>
+        Entries.FirstOrDefault(entry => entry.IsEnabled && entry.HasMeta);
 
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
@@ -200,11 +243,20 @@ public sealed class AddonRegistry
         await load.WaitAsync(cancellationToken);
     }
 
-    /// <summary>Fetches manifests for all configured addons in parallel.</summary>
-    public async Task LoadManifestsAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Fetches manifests for the enabled addons in parallel. Settings asks for
+    /// disabled ones too so their names and capabilities stay visible while
+    /// they are off.
+    /// </summary>
+    public async Task LoadManifestsAsync(
+        CancellationToken cancellationToken = default,
+        bool includeDisabled = false)
     {
         await EnsureLoadedAsync(cancellationToken);
-        await Task.WhenAll(Entries.Select(entry => entry.LoadManifestAsync(cancellationToken)));
+
+        var entries = includeDisabled ? Entries.ToList() : EnabledEntries;
+
+        await Task.WhenAll(entries.Select(entry => entry.LoadManifestAsync(cancellationToken)));
     }
 
     public AddonEntry? GetEntry(string? manifestUrl)
@@ -217,7 +269,72 @@ public sealed class AddonRegistry
         return Entries.FirstOrDefault(entry => UrlEquals(entry.ManifestUrl, manifestUrl));
     }
 
-    public StremioAddonClient? GetClient(string? manifestUrl) => GetEntry(manifestUrl)?.Client;
+    public AddonEntry? GetEnabledEntry(string? manifestUrl) =>
+        GetEntry(manifestUrl) is { IsEnabled: true } entry ? entry : null;
+
+    /// <summary>0-based rank of an addon, or <see cref="int.MaxValue"/> when it is gone.</summary>
+    public int GetRank(string? manifestUrl)
+    {
+        if (string.IsNullOrWhiteSpace(manifestUrl))
+        {
+            return int.MaxValue;
+        }
+
+        for (var index = 0; index < Entries.Count; index++)
+        {
+            if (UrlEquals(Entries[index].ManifestUrl, manifestUrl))
+            {
+                return index;
+            }
+        }
+
+        return int.MaxValue;
+    }
+
+    /// <summary>
+    /// Enabled addons that declare meta support for this type and id prefix,
+    /// in the user's priority order. Custom ids therefore only match the addon
+    /// that declared them; for a custom id owned by the catalog addon, that
+    /// addon is tried first even if it is lower in the list.
+    /// </summary>
+    public IReadOnlyList<AddonEntry> MetaCandidates(
+        string type,
+        string id,
+        string? sourceManifestUrl = null)
+    {
+        var value = type ?? "";
+        var idValue = id ?? "";
+        var candidates = Entries
+            .Where(entry => entry.IsEnabled && entry.Manifest is not null &&
+                entry.Manifest.SupportsResource("meta", value, idValue))
+            .ToList();
+
+        if (candidates.Count > 1 &&
+            !IsGenericId(idValue) &&
+            !string.IsNullOrWhiteSpace(sourceManifestUrl))
+        {
+            var owner = candidates.FirstOrDefault(entry =>
+                UrlEquals(entry.ManifestUrl, sourceManifestUrl));
+
+            if (owner is not null)
+            {
+                candidates.Remove(owner);
+                candidates.Insert(0, owner);
+            }
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Ids from shared metadata ecosystems (IMDb, TMDb) are understood by many
+    /// addons, so the user's metadata priority applies. Anything else is a
+    /// private id that only its own addon can resolve.
+    /// </summary>
+    public static bool IsGenericId(string id) =>
+        id.StartsWith("tt", StringComparison.OrdinalIgnoreCase) ||
+        id.StartsWith("imdb:", StringComparison.OrdinalIgnoreCase) ||
+        id.StartsWith("tmdb:", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Validates and adds a manifest URL, then persists the list.</summary>
     public async Task<AddonEntry> AddAsync(string manifestUrl, CancellationToken cancellationToken = default)
@@ -229,9 +346,12 @@ public sealed class AddonRegistry
             throw new StremioException("Enter a valid http(s) Stremio addon manifest URL.");
         }
 
-        if (Entries.Any(entry => UrlEquals(entry.ManifestUrl, normalized)))
+        var existing = Entries.FirstOrDefault(entry => UrlEquals(entry.ManifestUrl, normalized));
+        if (existing is not null)
         {
-            throw new StremioException("That addon is already configured.");
+            throw new StremioException(existing.IsEnabled
+                ? "That addon is already configured."
+                : "That addon is already configured but disabled. Turn it on in the list instead of adding it again.");
         }
 
         var entry = new AddonEntry(normalized);
@@ -248,8 +368,9 @@ public sealed class AddonRegistry
         }
 
         Entries.Add(entry);
+        Attach(entry);
         Revision++;
-        await SaveAsync(cancellationToken);
+        await RaiseChangedAsync(cancellationToken);
         return entry;
     }
 
@@ -259,15 +380,42 @@ public sealed class AddonRegistry
 
         if (Entries.Remove(entry))
         {
+            entry.PropertyChanged -= OnEntryPropertyChanged;
             Revision++;
-            await SaveAsync(cancellationToken);
+            await RaiseChangedAsync(cancellationToken);
         }
     }
 
-    /// <summary>Removes every entry and restores the bundled Cinemeta addon.</summary>
+    /// <summary>Moves an addon one row up (-1) or down (+1) and persists the order.</summary>
+    public async Task<bool> MoveAsync(
+        AddonEntry entry,
+        int offset,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+
+        var index = Entries.IndexOf(entry);
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= Entries.Count)
+        {
+            return false;
+        }
+
+        Entries.Move(index, target);
+        Revision++;
+        await RaiseChangedAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>Removes every entry and restores the bundled addons in their default order.</summary>
     public async Task RestoreDefaultsAsync(CancellationToken cancellationToken = default)
     {
         await EnsureLoadedAsync(cancellationToken);
+
+        foreach (var entry in Entries)
+        {
+            entry.PropertyChanged -= OnEntryPropertyChanged;
+        }
 
         Entries.Clear();
 
@@ -276,10 +424,11 @@ public sealed class AddonRegistry
             var entry = new AddonEntry(manifestUrl);
             await entry.LoadManifestAsync(cancellationToken);
             Entries.Add(entry);
+            Attach(entry);
         }
 
         Revision++;
-        await SaveAsync(cancellationToken);
+        await RaiseChangedAsync(cancellationToken);
     }
 
     public static bool UrlEquals(string left, string right) =>
@@ -291,42 +440,157 @@ public sealed class AddonRegistry
     private async Task LoadCoreAsync()
     {
         var path = GetStoragePath();
-        List<string> urls;
+        List<AddonRecord> records;
         var shouldSave = false;
 
         try
         {
             if (File.Exists(path))
             {
-                var json = await File.ReadAllTextAsync(path);
-                urls = JsonSerializer.Deserialize<List<string>>(json) ?? [];
+                records = ParseStore(await File.ReadAllTextAsync(path));
             }
             else
             {
-                urls = [.. DefaultManifestUrls];
+                records = DefaultManifestUrls
+                    .Select(url => new AddonRecord { Url = url, Enabled = true })
+                    .ToList();
                 shouldSave = true;
             }
         }
         catch
         {
-            urls = [.. DefaultManifestUrls];
+            records = DefaultManifestUrls
+                .Select(url => new AddonRecord { Url = url, Enabled = true })
+                .ToList();
             shouldSave = true;
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var raw in urls)
+        foreach (var record in records)
         {
-            if (!TryNormalizeManifestUrl(raw, out var normalized) || !seen.Add(normalized))
+            if (!TryNormalizeManifestUrl(record.Url, out var normalized) || !seen.Add(normalized))
             {
                 continue;
             }
 
-            Entries.Add(new AddonEntry(normalized));
+            var entry = new AddonEntry(normalized) { IsEnabled = record.Enabled };
+            Entries.Add(entry);
+            Attach(entry);
         }
+
+        RefreshOrder();
 
         if (shouldSave)
         {
             await SaveAsync(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Accepts both the current format ({ version, addons: [...] }) and the
+    /// original bare array of manifest URLs.
+    /// </summary>
+    private static List<AddonRecord> ParseStore(string json)
+    {
+        var records = new List<AddonRecord>();
+        using var document = JsonDocument.Parse(json);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                if (element.ValueKind == JsonValueKind.String)
+                {
+                    records.Add(new AddonRecord { Url = element.GetString() ?? "" });
+                }
+            }
+
+            return records;
+        }
+
+        if (document.RootElement.ValueKind != JsonValueKind.Object ||
+            !TryGetProperty(document.RootElement, "addons", out var addons) ||
+            addons.ValueKind != JsonValueKind.Array)
+        {
+            return records;
+        }
+
+        foreach (var element in addons.EnumerateArray())
+        {
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                records.Add(new AddonRecord { Url = element.GetString() ?? "" });
+                continue;
+            }
+
+            if (element.ValueKind != JsonValueKind.Object ||
+                !TryGetProperty(element, "url", out var url) ||
+                url.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var enabled = !TryGetProperty(element, "enabled", out var flag) ||
+                          flag.ValueKind != JsonValueKind.False;
+            records.Add(new AddonRecord { Url = url.GetString() ?? "", Enabled = enabled });
+        }
+
+        return records;
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.TryGetProperty(name, out value))
+        {
+            return true;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private void Attach(AddonEntry entry) => entry.PropertyChanged += OnEntryPropertyChanged;
+
+    private void OnEntryPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AddonEntry.IsEnabled) || sender is not AddonEntry entry)
+        {
+            return;
+        }
+
+        Revision++;
+        _ = RaiseChangedAsync(CancellationToken.None);
+
+        if (entry.IsEnabled)
+        {
+            _ = entry.LoadManifestAsync();
+        }
+    }
+
+    private async Task RaiseChangedAsync(CancellationToken cancellationToken)
+    {
+        RefreshOrder();
+        Changed?.Invoke(this, EventArgs.Empty);
+        await SaveAsync(cancellationToken);
+    }
+
+    private void RefreshOrder()
+    {
+        for (var index = 0; index < Entries.Count; index++)
+        {
+            var entry = Entries[index];
+            entry.Order = index + 1;
+            entry.CanMoveUp = index > 0;
+            entry.CanMoveDown = index < Entries.Count - 1;
         }
     }
 
@@ -342,10 +606,20 @@ public sealed class AddonRegistry
                 Directory.CreateDirectory(directory);
             }
 
-            var urls = Entries.Select(entry => entry.ManifestUrl).ToList();
+            var store = new AddonStore
+            {
+                Addons = Entries
+                    .Select(entry => new AddonRecord
+                    {
+                        Url = entry.ManifestUrl,
+                        Enabled = entry.IsEnabled,
+                    })
+                    .ToList(),
+            };
+
             await File.WriteAllTextAsync(
                 path,
-                JsonSerializer.Serialize(urls, new JsonSerializerOptions { WriteIndented = true }),
+                JsonSerializer.Serialize(store, StoreJsonOptions),
                 cancellationToken);
         }
         catch
@@ -402,5 +676,19 @@ public sealed class AddonRegistry
 
         normalized = uri.ToString();
         return true;
+    }
+
+    private sealed class AddonStore
+    {
+        public int Version { get; set; } = 2;
+
+        public List<AddonRecord> Addons { get; set; } = [];
+    }
+
+    private sealed class AddonRecord
+    {
+        public string Url { get; set; } = "";
+
+        public bool Enabled { get; set; } = true;
     }
 }

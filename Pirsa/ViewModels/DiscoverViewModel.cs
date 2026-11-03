@@ -179,15 +179,15 @@ public partial class DiscoverViewModel : ObservableObject
         {
             await _registry.EnsureLoadedAsync(cancellationToken);
 
-            if (_registry.Entries.Count == 0)
+            if (_registry.EnabledEntries.Count == 0)
             {
-                Fail("No addons are configured. Open Settings to add a Stremio addon.");
+                Fail("No addons are enabled. Open Settings to turn one on or add a Stremio addon.");
                 return;
             }
 
             await _registry.LoadManifestsAsync(cancellationToken);
 
-            _allCatalogs = BuildCatalogOptions(_registry.Entries);
+            _allCatalogs = BuildCatalogOptions(_registry.EnabledEntries);
 
             if (_allCatalogs.Count == 0)
             {
@@ -498,7 +498,7 @@ public partial class DiscoverViewModel : ObservableObject
         string search,
         CancellationToken cancellationToken)
     {
-        var addonOrder = _registry.Entries.IndexOf(entry);
+        var addonOrder = _registry.GetRank(entry.ManifestUrl);
         var groups = new List<DiscoverResultGroup>();
         var failed = false;
 

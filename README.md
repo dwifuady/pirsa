@@ -51,25 +51,32 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
   offered as suggestions when the search box is focused, filtered as you type.
   Clear them in Settings → Search.
 - **Details** — full-bleed backdrop, poster, overview, fact sheet, IMDb link,
-  and season/episode browsing. Metadata is fetched from the addon that supplied
-  the catalog item. Posters animate into the details hero with a native
+  and season/episode browsing. Metadata follows your addon priority order: the
+  first enabled metadata addon that understands the title's id supplies it,
+  with the next addon as a fallback. Custom id prefixes only match the addon
+  that declared them. Posters animate into the details hero with a native
   connected animation. Opening a title also **warms stream discovery in the
   background** for the episode Play would start (and for an episode you hover),
   so Play shows the source list — or starts playing — without waiting for the
   addons.
-- **Settings → Addons** — add and remove Stremio addon manifest URLs. A fresh
-  install contains **Cinemeta and OpenSubtitles v3**; the app is fully usable
-  without any stream addon, and stream sources appear as soon as one is added.
-  Addons are persisted locally and can be restored to the defaults at any time.
+- **Settings → Addons** — add, remove, enable/disable, and reorder Stremio
+  addon manifest URLs. A fresh install contains **Cinemeta and OpenSubtitles
+  v3**; the app is fully usable without any stream addon, and stream sources
+  appear as soon as one is added. With more than five addons, a search box
+  (name or host) and capability filters appear. Addons are persisted locally
+  and can be restored to the defaults at any time.
 - **Native player** — LibVLCSharp + libvlc in a WinUI SwapChainPanel, with a
   custom Windows 11-style chrome: seek bar, 10-second skips, volume, speed,
   fullscreen, auto-hiding controls, a source picker, and a **CC subtitle
   picker**.
-- **Playback sources** — every configured addon that declares a `stream`
-  resource is queried in parallel, deduplicated and grouped by addon in the
-  source picker. By default, pressing Play opens this picker; choose a source to
-  start. Headers from `behaviorHints.proxyHeaders` are forwarded to VLC when
-  needed.
+- **Playback sources** — every enabled addon that declares a `stream` resource
+  is queried in your addon order, but the picker fills in as answers arrive:
+  one slow addon never delays the sources others already returned. Duplicate
+  URLs keep the entry from the higher-priority addon, and pressing Play can
+  start the first source that arrives without waiting for the rest. By default,
+  pressing Play opens the picker as soon as something is available; choose a
+  source to start. Headers from `behaviorHints.proxyHeaders` are forwarded to
+  VLC when needed.
 
 A fresh install includes two addons:
 
@@ -119,10 +126,24 @@ https://v3-cinemeta.strem.io/manifest.json
 - Each card shows the addon name, version, capabilities, types and host. The
   full manifest URL (which may contain a private token) is stored locally in
   `addons.json` and is deliberately not rendered in the UI.
-- **Remove addon** asks for confirmation. **Restore default** removes custom
-  addons and restores Cinemeta and OpenSubtitles v3.
-- Changing the list bumps the registry revision; Home reloads when you return
-  to it.
+- **Order is priority.** The first enabled addon wins for metadata details and
+  its stream sources are listed first in the player. Addons are asked for
+  streams in this order, but a slow one never blocks the results that already
+  arrived. Use the ▲/▼ buttons to move a row; it applies immediately, including
+  to a source list that is already open. Reordering is disabled while the list
+  is filtered, so rows cannot jump under the pointer.
+- **Enable/disable** keeps an addon configured but stops all of its catalogs,
+  streams, metadata and subtitles. Disabled addons keep their position in the
+  list, so turning one back on restores its priority.
+- **Search and filters** appear once more than five addons are configured:
+  match by name or host, then narrow to Streams, Metadata, Catalogs, or Issues
+  (addons whose manifest failed to load).
+- **Remove addon** asks for confirmation. Disabling or removing the addon that
+  supplied details announces which addon takes over.
+- **Restore default** removes custom addons and restores Cinemeta and
+  OpenSubtitles v3, resetting the order to the defaults.
+- Changing the list bumps the registry revision; Home and Discover reload when
+  you return to them, and an open player re-ranks its sources.
 
 Configuration lives in the app's local data:
 
@@ -276,6 +297,7 @@ licensed LGPL-2.1; review your distribution obligations if you publish it.
 - No audio-track picker. Auto-advance stops at the end of the last known
   episode and does not know about unaired episodes.
 - Watch history is per device; there is no sync between machines.
-- No addon enable/disable toggle; addons are either configured or removed.
+- Addon order is global: per-type or per-catalog priorities are not supported
+  yet.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only
   direct HTTP(S) sources are played.
