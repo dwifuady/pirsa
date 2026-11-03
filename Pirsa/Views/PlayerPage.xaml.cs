@@ -30,8 +30,28 @@ public sealed partial class PlayerPage : Page
     /// <summary>Volume points changed per mouse-wheel detent.</summary>
     private const double WheelVolumeStep = 5;
 
+    /// <summary>
+    /// LibVLC's demuxer cache for on-demand video. It is the only read-ahead
+    /// buffer that exists: it keeps this many seconds of the stream downloaded
+    /// ahead of the playhead, so a seek that lands inside it costs no network
+    /// round trip and no buffering. Ten seconds covers the ±10s skip buttons
+    /// plus normal jitter at roughly one second of RAM per Mbps.
+    /// </summary>
+    private const int VodNetworkCachingMs = 10000;
+
+    /// <summary>
+    /// The same buffer for live TV, kept small on purpose: every cached second
+    /// is a second further behind the live edge.
+    /// </summary>
+    private const int LiveNetworkCachingMs = 3000;
+
+    /// <summary>A refill shorter than this never shows the buffering overlay.</summary>
+    private static readonly TimeSpan BufferOverlayDelay = TimeSpan.FromMilliseconds(500);
+
     private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
     private readonly DispatcherTimer _chromeTimer;
+    private DispatcherTimer? _bufferShowTimer;
+    private string _bufferText = "Buffering…";
 
     private LibVLC? _libVlc;
     private MediaPlayer? _mediaPlayer;
@@ -104,6 +124,19 @@ public sealed partial class PlayerPage : Page
             if (!_playing)
             {
                 _ = HandleCachedSourceFailureAsync();
+            }
+        };
+
+        // Re-filling the demuxer cache after a seek is routine and usually over
+        // in a fraction of a second. Waiting a moment before showing the
+        // spinner keeps quick skips from flashing the overlay.
+        _bufferShowTimer = new DispatcherTimer { Interval = BufferOverlayDelay };
+        _bufferShowTimer.Tick += (_, _) =>
+        {
+            _bufferShowTimer?.Stop();
+            if (_playing && !_ended && !_errorVisible && BufferPanel.Visibility != Visibility.Visible)
+            {
+                ShowBuffer(_bufferText);
             }
         };
 
@@ -1007,7 +1040,7 @@ public sealed partial class PlayerPage : Page
             var media = new Media(_libVlc, new Uri(source.Url));
             media.AddOption(":no-video-title-show");
             media.AddOption(":no-osd");
-            media.AddOption(":network-caching=2500");
+            media.AddOption($":network-caching={NetworkCachingFor(ViewModel.Request)}");
 
             if (resume > 0)
             {
@@ -1055,6 +1088,20 @@ public sealed partial class PlayerPage : Page
             ShowPlaybackError($"Couldn't start this source. {exception.Message}", ViewModel.HasSources);
         }
     }
+
+    /// <summary>
+    /// On-demand playback gets a cache wide enough to seek inside; live TV keeps
+    /// a short one so it stays close to the live edge.
+    /// </summary>
+    private static int NetworkCachingFor(PlaybackRequest? request) =>
+        IsLive(request) ? LiveNetworkCachingMs : VodNetworkCachingMs;
+
+    /// <summary>Live TV channel: "tv"/"channel" type with no episode attached.</summary>
+    private static bool IsLive(PlaybackRequest? request) =>
+        request is not null &&
+        request.Episode == 0 &&
+        (request.Type.Equals("tv", StringComparison.OrdinalIgnoreCase) ||
+         request.Type.Equals("channel", StringComparison.OrdinalIgnoreCase));
 
     private static void ApplyRequestHeaders(Media media, IReadOnlyDictionary<string, string>? headers)
     {
@@ -1496,7 +1543,18 @@ public sealed partial class PlayerPage : Page
 
         if (cache is > 0 and < 100 && _playing)
         {
-            ShowBuffer($"Buffering… {cache:0}%");
+            _bufferText = $"Buffering… {cache:0}%";
+
+            if (BufferPanel.Visibility == Visibility.Visible)
+            {
+                BufferText.Text = _bufferText;
+            }
+            else if (_bufferShowTimer is { IsEnabled: false })
+            {
+                // Give a quick top-up a chance to finish before the overlay shows.
+                _bufferShowTimer.Start();
+            }
+
             CenterPlayButton.Visibility = Visibility.Collapsed;
         }
         else if (cache >= 100)
@@ -2344,6 +2402,8 @@ public sealed partial class PlayerPage : Page
 
     private void ShowBuffer(string text)
     {
+        _bufferShowTimer?.Stop();
+        _bufferText = text;
         BufferText.Text = text;
         BufferRing.IsActive = true;
         BufferPanel.Visibility = Visibility.Visible;
@@ -2353,6 +2413,7 @@ public sealed partial class PlayerPage : Page
 
     private void HideBuffer()
     {
+        _bufferShowTimer?.Stop();
         BufferRing.IsActive = false;
         BufferPanel.Visibility = Visibility.Collapsed;
     }
@@ -2436,6 +2497,7 @@ public sealed partial class PlayerPage : Page
         _chromeTimer.Stop();
         _resumeHintTimer?.Stop();
         _cachedWatchdog?.Stop();
+        _bufferShowTimer?.Stop();
         _nextEpisodeCts?.Cancel();
         _nextEpisodeCts?.Dispose();
         _nextEpisodeCts = null;
