@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Windows.Storage;
 
 namespace Pirsa.Services;
 
@@ -116,18 +115,7 @@ public sealed class AppSettings
             return _path;
         }
 
-        try
-        {
-            _path = Path.Combine(ApplicationData.Current.LocalFolder.Path, "settings.json");
-        }
-        catch
-        {
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa");
-            _path = Path.Combine(directory, "settings.json");
-        }
-
+        _path = Path.Combine(LocalPaths.Root, "settings.json");
         return _path;
     }
 

@@ -165,25 +165,23 @@ https://v3-cinemeta.strem.io/manifest.json
   setup and offers **Open addon settings**, and later presses go straight
   there. Pirsa does not ship, recommend, or list stream addons.
 
-Configuration lives in the app's local data:
+Configuration lives in the app's local data, and the folder depends on **how the
+build is launched** so a development session can never touch an installed copy:
 
 ```
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\addons.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\settings.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\watch-progress.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\watchlist.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\search-history.json
+# packaged: Store install, or a dev run through winapp / dotnet run
+%LOCALAPPDATA%\Packages\<package-id>\LocalState\        (addons.json, settings.json, …)
+%LOCALAPPDATA%\Packages\<package-id>\LocalState\dev\     (Debug builds of the same identity)
+
+# unpackaged: Inno Setup installer, portable ZIP
+%LOCALAPPDATA%\Pirsa\                                   (Release build)
+%LOCALAPPDATA%\Pirsa-dev\                               (Debug build)
 ```
 
-A portable (unpackaged) build keeps the same files one level up:
-
-```
-%LOCALAPPDATA%\Pirsa\addons.json
-%LOCALAPPDATA%\Pirsa\settings.json
-%LOCALAPPDATA%\Pirsa\watch-progress.json
-%LOCALAPPDATA%\Pirsa\watchlist.json
-%LOCALAPPDATA%\Pirsa\search-history.json
-```
+Every file lives in that one root: `addons.json`, `settings.json`,
+`watch-progress.json`, `watchlist.json`, `search-history.json`, `player.log` and
+the `cache\` folder used while a video plays. `Services/LocalPaths.cs` is the
+only place that resolves it, and the player log header names the root it used.
 
 If a manifest URL contains a token, treat it like a password: it is only stored
 on this machine, and you should rotate it if it is ever exposed.
@@ -273,7 +271,7 @@ Pirsa/
   Services/StreamDiscovery.cs     per-title stream fetch cache + details-page prefetch
   Services/StreamCacheSession.cs  localhost read-ahead cache that makes seeks local
   Services/PlayerLog.cs           per-session seek/buffering log for diagnosis
-  Services/LocalPaths.cs          %LOCALAPPDATA%\Pirsa paths, same for packaged and dev runs
+  Services/LocalPaths.cs          the one data root: packaged, unpackaged, and Debug runs
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
@@ -326,10 +324,10 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   position.
 - **Local stream cache** — an on-demand HTTP source plays through a small
   localhost server (`StreamCacheSession`) instead of straight from the addon.
-  Two download slots pull the file into a temp file under
-  `%LOCALAPPDATA%\Pirsa\cache` (up to 128 MB ahead of the furthest read) and the
-  player reads ranges from disk. Seeks into the downloaded window are then a
-  disk read — measured at 150–450 ms against a source only 1.5× faster than real
+  Two download slots pull the file into a temporary file in the `cache` folder of
+  the data root (see [Addons](#addons); up to 128 MB ahead of the furthest read)
+  and the player reads ranges from disk. Seeks into the downloaded window are
+  then a disk read — measured at 150–450 ms against a source only 1.5× faster than real
   time, where the same seek takes 5 s over the network. A seek outside the window
   redirects a slot and waits, exactly like playing direct. Live TV, HLS, and
   servers that ignore byte ranges skip the cache and play direct. Temp files are
@@ -351,8 +349,9 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   stood still for 1.2 seconds, and disappears the moment frames move again. The
   last four seconds of a title never show a spinner: VLC stops advancing the
   clock while the final buffered frames drain, which looked like a stall at 99%.
-- **Player log** — `%LOCALAPPDATA%\Pirsa\player.log` records every seek, how long
-  the playhead stayed frozen afterwards, the source format and options, and
+- **Player log** — `player.log` in the data root (see [Addons](#addons)) records
+  every seek, how long the playhead stayed frozen afterwards, the source format
+  and options, and
   VLC's own stream-layer messages. It is reset when the player opens, capped at
   1 MB, and never leaves the machine.
 - Source discovery can take 10–20 seconds depending on the addon/provider; the

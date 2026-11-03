@@ -40,7 +40,13 @@ public static class PlayerLog
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
                 File.WriteAllText(
                     path,
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Pirsa player log{Environment.NewLine}");
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Pirsa player log{Environment.NewLine}" +
+                    $"data root: {LocalPaths.Root}{Environment.NewLine}" +
+                    $"build: {typeof(PlayerLog).Assembly.GetName().Version}" +
+#if DEBUG
+                    " DEBUG" +
+#endif
+                    Environment.NewLine);
             }
             catch
             {
