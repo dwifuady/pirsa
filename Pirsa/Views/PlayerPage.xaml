@@ -11,6 +11,7 @@
     xmlns:vm="using:Pirsa.ViewModels"
     x:DefaultBindMode="OneWay"
     Background="{ThemeResource PlayerSurfaceBrush}"
+    KeyboardAcceleratorPlacementMode="Hidden"
     NavigationCacheMode="Disabled"
     RequestedTheme="Dark"
     mc:Ignorable="d">
@@ -324,13 +325,14 @@
                                 AutomationProperties.Name="Mute"
                                 Click="Mute_Click"
                                 Style="{StaticResource PlayerIconButtonStyle}"
-                                ToolTipService.ToolTip="Mute">
+                                ToolTipService.ToolTip="Mute (M)">
                                 <FontIcon x:Name="VolumeIcon" FontSize="18" Glyph="&#xE767;" />
                             </Button>
                             <Slider
                                 x:Name="VolumeSlider"
                                 Width="90"
                                 Margin="2,0,8,0"
+                                VerticalAlignment="Center"
                                 AutomationProperties.Name="Volume"
                                 Maximum="100"
                                 Minimum="0"
@@ -422,7 +424,7 @@
                                 AutomationProperties.Name="Full screen"
                                 Click="FullScreen_Click"
                                 Style="{StaticResource PlayerIconButtonStyle}"
-                                ToolTipService.ToolTip="Full screen">
+                                ToolTipService.ToolTip="Full screen (F)">
                                 <FontIcon x:Name="FullScreenIcon" FontSize="18" Glyph="&#xE740;" />
                             </Button>
                         </StackPanel>

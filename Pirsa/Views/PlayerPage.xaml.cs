@@ -27,6 +27,9 @@ public sealed partial class PlayerPage : Page
     private static bool _coreReady;
     private static readonly HttpClient SubtitleHttp = CreateSubtitleHttpClient();
 
+    /// <summary>Volume points changed per mouse-wheel detent.</summary>
+    private const double WheelVolumeStep = 5;
+
     private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
     private readonly DispatcherTimer _chromeTimer;
 
@@ -106,6 +109,7 @@ public sealed partial class PlayerPage : Page
         SeekSlider.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(SeekSlider_PointerCaptureLost), true);
         Root.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(Root_PointerMoved), true);
         Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(Root_PointerPressed), true);
+        Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(Root_PointerWheelChanged), true);
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Root_KeyDown), true);
         Root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Root_PreviewKeyDown), true);
 
@@ -1585,6 +1589,40 @@ public sealed partial class PlayerPage : Page
         _keyboardActive = false;
     }
 
+    /// <summary>
+    /// The mouse wheel over the video changes the volume, like most players.
+    /// Panels that scroll keep the wheel for themselves.
+    /// </summary>
+    private void Root_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (_sourcePanelOpen || _subtitlesFlyoutOpen || _errorVisible)
+        {
+            return;
+        }
+
+        var properties = e.GetCurrentPoint(Root).Properties;
+        if (properties.IsHorizontalMouseWheel || properties.MouseWheelDelta == 0)
+        {
+            return;
+        }
+
+        // One detent (120) is 5 points; touchpad wheels move in smaller steps.
+        var step = WheelVolumeStep * (properties.MouseWheelDelta / 120.0);
+        var target = Math.Clamp(
+            VolumeSlider.Value + step,
+            VolumeSlider.Minimum,
+            VolumeSlider.Maximum);
+
+        if (Math.Abs(target - VolumeSlider.Value) > 0.01)
+        {
+            VolumeSlider.Value = target;
+            ShowChrome();
+            StartChromeTimer();
+        }
+
+        e.Handled = true;
+    }
+
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         _keyboardActive = true;
@@ -2065,7 +2103,7 @@ public sealed partial class PlayerPage : Page
         OverlayBackButton.Visibility = fullscreen ? Visibility.Visible : Visibility.Collapsed;
         FullScreenIcon.Glyph = fullscreen ? "\uE73F" : "\uE740";
         AutomationProperties.SetName(FullScreenButton, fullscreen ? "Exit full screen" : "Full screen");
-        ToolTipService.SetToolTip(FullScreenButton, fullscreen ? "Exit full screen" : "Full screen");
+        ToolTipService.SetToolTip(FullScreenButton, fullscreen ? "Exit full screen (F)" : "Full screen (F)");
         ShowChrome();
         StartChromeTimer();
     }
@@ -2144,7 +2182,7 @@ public sealed partial class PlayerPage : Page
         var muted = _mediaPlayer.Mute || _mediaPlayer.Volume == 0;
         VolumeIcon.Glyph = muted ? "\uE74F" : "\uE767";
         AutomationProperties.SetName(VolumeButton, muted ? "Unmute" : "Mute");
-        ToolTipService.SetToolTip(VolumeButton, muted ? "Unmute" : "Mute");
+        ToolTipService.SetToolTip(VolumeButton, muted ? "Unmute (M)" : "Mute (M)");
     }
 
     private void UpdateTimeText(long time, long length)
