@@ -31,8 +31,23 @@ jobs:
           key: nuget-${{ hashFiles('Pirsa/Pirsa.csproj') }}
           restore-keys: nuget-
 
+      # Pirsa.csproj sets a default RuntimeIdentifier, which makes the SDK infer
+      # SelfContained=true. Both must be passed to restore, otherwise the
+      # Microsoft.NETCore.App runtime pack is skipped and the build fails with
+      # NETSDK1112.
       - name: Restore
-        run: dotnet restore Pirsa/Pirsa.csproj -p:Platform=x64
+        run: >
+          dotnet restore Pirsa/Pirsa.csproj
+          -r win-x64
+          -p:Platform=x64
+          -p:SelfContained=true
 
       - name: Build
-        run: dotnet build Pirsa/Pirsa.csproj -c Release -p:Platform=x64 --no-restore
+        run: >
+          dotnet build Pirsa/Pirsa.csproj
+          -c Release
+          -r win-x64
+          -p:Platform=x64
+          -p:SelfContained=true
+          -p:PublishTrimmed=false
+          --no-restore
