@@ -57,6 +57,8 @@ public sealed class StreamCacheSession : IAsyncDisposable
     private readonly SemaphoreSlim _dataArrived = new(0);
     private readonly List<(long Start, long End)> _complete = [];
     private readonly Slot[] _slots = [new(), new()];
+    private readonly HashSet<long> _waiters = [];
+    private long _readerSequence;
     private readonly TcpListener _listener;
     private readonly Uri _upstream;
     private readonly Dictionary<string, string> _headers;
@@ -249,6 +251,7 @@ public sealed class StreamCacheSession : IAsyncDisposable
             request.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
+        PlayerLog.Write($"cache fetch from {start}");
         request.Headers.Range = new RangeHeaderValue(start, null);
 
         using var response = await Http.SendAsync(
@@ -349,6 +352,9 @@ public sealed class StreamCacheSession : IAsyncDisposable
             from = Math.Clamp(from, 0, _length - 1);
             to = Math.Clamp(to, from, _length - 1);
 
+            var readerId = Interlocked.Increment(ref _readerSequence);
+            PlayerLog.Write($"cache read {from}-{to} (reader {readerId})");
+
             var head = new StringBuilder();
             head.Append(hasRange
                 ? "HTTP/1.1 206 Partial Content\r\n"
@@ -375,7 +381,7 @@ public sealed class StreamCacheSession : IAsyncDisposable
                 var offset = from;
                 while (offset <= to)
                 {
-                    var available = await WaitForDataAsync(offset, cancellationToken);
+                    var available = await WaitForDataAsync(offset, readerId, cancellationToken);
                     if (available <= offset)
                     {
                         return;
@@ -464,50 +470,77 @@ public sealed class StreamCacheSession : IAsyncDisposable
     /// <summary>
     /// Returns how many bytes from <paramref name="offset"/> are on disk, waiting
     /// for a download slot and steering it when the data is somewhere else.
+    ///
+    /// Only the newest connection that is waiting gets to steer a downloader.
+    /// VLC opens a fresh connection per seek but can leave the previous one open,
+    /// and those stale readers want the old position: if they were allowed to
+    /// steer, two readers in different places would keep sending the same two
+    /// downloaders back and forth and neither would ever get its data. The
+    /// newest connection is the user's current intent, so it wins.
     /// </summary>
-    private async Task<long> WaitForDataAsync(long offset, CancellationToken cancellationToken)
+    private async Task<long> WaitForDataAsync(
+        long offset, long readerId, CancellationToken cancellationToken)
     {
-        while (true)
+        lock (_gate)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            _waiters.Add(readerId);
+        }
 
-            CancellationTokenSource? superseded = null;
-            long available;
-            lock (_gate)
+        try
+        {
+            while (true)
             {
-                foreach (var slot in _slots)
-                {
-                    slot.Demand = Math.Max(slot.Demand, offset);
-                }
+                cancellationToken.ThrowIfCancellationRequested();
 
-                if (TryGetAvailable(offset, out available))
+                CancellationTokenSource? superseded = null;
+                long available;
+                lock (_gate)
                 {
-                    return available;
-                }
-
-                // Already heading there, or close enough that waiting wins.
-                var coming = _slots.Any(slot =>
-                    slot.Pending == offset ||
-                    (slot.Active && offset >= slot.Start && offset - slot.End <= JumpToleranceBytes));
-
-                if (!coming)
-                {
-                    var target = PickSlotForJump(offset);
-                    target.Pending = offset;
-                    if (target.Work.CurrentCount == 0)
+                    foreach (var slot in _slots)
                     {
-                        target.Work.Release();
+                        slot.Demand = Math.Max(slot.Demand, offset);
                     }
 
-                    superseded = target.Cts;
-                }
-            }
+                    if (TryGetAvailable(offset, out available))
+                    {
+                        return available;
+                    }
 
-            // Cancelling under the lock can run a downloader continuation inline.
-            superseded?.Cancel();
-            await _dataArrived.WaitAsync(250, cancellationToken);
+                    // Already heading there, or close enough that waiting wins.
+                    var coming = _slots.Any(slot =>
+                        slot.Pending == offset ||
+                        (slot.Active && offset >= slot.Start && offset - slot.End <= JumpToleranceBytes));
+
+                    if (!coming && IsNewestWaiter(readerId))
+                    {
+                        var target = PickSlotForJump(offset);
+                        target.Pending = offset;
+                        if (target.Work.CurrentCount == 0)
+                        {
+                            target.Work.Release();
+                        }
+
+                        superseded = target.Cts;
+                        PlayerLog.Write($"cache steer {offset} to slot {Array.IndexOf(_slots, target)}");
+                    }
+                }
+
+                // Cancelling under the lock can run a downloader continuation inline.
+                superseded?.Cancel();
+                await _dataArrived.WaitAsync(250, cancellationToken);
+            }
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _waiters.Remove(readerId);
+            }
         }
     }
+
+    private bool IsNewestWaiter(long readerId) =>
+        _waiters.Count == 0 || readerId == _waiters.Max();
 
     private bool TryGetAvailable(long offset, out long availableEnd)
     {

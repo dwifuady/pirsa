@@ -333,7 +333,10 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   redirects a slot and waits, exactly like playing direct. Live TV, HLS, and
   servers that ignore byte ranges skip the cache and play direct. Temp files are
   deleted when playback stops or the source changes, and leftovers older than six
-  hours are removed on the next run.
+  hours are removed on the next run. Only the newest connection that is waiting
+  may redirect a downloader: VLC opens a fresh connection for every seek and can
+  leave the previous one open, and without that rule two readers in different
+  places send the same downloaders back and forth and neither ever gets its data.
 - **Seek cache** — VLC's own demuxer cache is set to **3 seconds** for on-demand
   titles and **2.5 seconds** for live TV (kept shorter so it stays near the live
   edge). It is a jitter buffer, not a seek window: VLC answers every seek with a
