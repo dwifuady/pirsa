@@ -55,9 +55,25 @@ jobs:
           "tag=v$version" >> $env:GITHUB_OUTPUT
           Write-Host "Releasing v$version"
 
-      - name: Publish portable builds
+      - name: Publish portable builds and installers
         shell: pwsh
         run: |
+          $iscc = @(
+              'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+              'C:\Program Files\Inno Setup 6\ISCC.exe',
+              "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $iscc) {
+              Write-Host 'Inno Setup not found on the runner, installing it'
+              choco install innosetup -y --no-progress
+              $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          }
+          if (-not (Test-Path $iscc)) { throw 'ISCC.exe not found' }
+
+          $version = '${{ steps.version.outputs.value }}'
+          $root = (Get-Location).Path
+
           $targets = @(
               @{ Rid = 'win-x64';   Platform = 'x64'   },
               @{ Rid = 'win-arm64'; Platform = 'ARM64' }
@@ -90,6 +106,21 @@ jobs:
                   }
               }
 
+              $arch = $target.Rid -replace '^win-', ''
+
+              Write-Host "::group::Building $arch installer"
+              & $iscc `
+                  "/DAppVersion=$version" `
+                  "/DArch=$arch" `
+                  "/DPublishDir=$root\out\$($target.Rid)" `
+                  "/DOutputDir=$root\out\installer" `
+                  'installer\Pirsa.iss'
+
+              if ($LASTEXITCODE -ne 0) { throw "installer build failed for $arch" }
+
+              $setup = "out/installer/Pirsa-$version-win-$arch-setup.exe"
+              if (-not (Test-Path $setup)) { throw "$setup was not produced" }
+
               Write-Host "::endgroup::"
           }
 
@@ -105,13 +136,14 @@ jobs:
               Write-Host "::endgroup::"
           }
 
-          $lines = Get-ChildItem 'Pirsa-*.zip' | ForEach-Object {
+          $lines = Get-ChildItem 'Pirsa-*.zip', 'out/installer/Pirsa-*-setup.exe' | ForEach-Object {
               $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
               "$hash  $($_.Name)"
           }
           ($lines -join "`n") + "`n" | Set-Content -Path SHA256SUMS.txt -Encoding ascii -NoNewline
 
-          Get-ChildItem 'Pirsa-*.zip' | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB)}}
+          Get-ChildItem 'Pirsa-*.zip', 'out/installer/Pirsa-*-setup.exe' |
+              Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB)}}
 
       - name: Build release notes
         shell: pwsh
@@ -127,11 +159,11 @@ jobs:
           $notes = @(
               '## Install'
               ''
-              '1. Download the ZIP for your architecture.'
-              '2. Unpack it anywhere.'
-              '3. Run `Pirsa.exe`.'
+              '**Installer (recommended):** download `Pirsa-<version>-win-<arch>-setup.exe` and run it. It installs per-user to `%LOCALAPPDATA%\Programs\Pirsa`, needs no admin rights, and uninstalls from Apps & Features.'
               ''
-              'Portable build: no installer and no admin rights. Windows SmartScreen may warn on first run — choose **More info → Run anyway**. Requires Windows 10 1809 or newer.'
+              '**Portable:** download the ZIP, unpack it anywhere, and run `Pirsa.exe`.'
+              ''
+              'Neither is code-signed, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**. Requires Windows 10 1809 or newer.'
               ''
               'Pirsa is free software under the GPL v3.0. See `THIRD-PARTY-NOTICES.md` in the ZIP for bundled components, including libVLC (LGPL-2.1-or-later).'
               ''
@@ -153,7 +185,13 @@ jobs:
         run: |
           $tag = '${{ steps.version.outputs.tag }}'
 
+          $assets = @(
+              (Get-ChildItem 'Pirsa-*.zip').FullName
+              (Get-ChildItem 'out/installer/Pirsa-*-setup.exe').FullName
+              (Resolve-Path 'SHA256SUMS.txt').Path
+          )
+
           gh release create $tag `
               --title "Pirsa $tag" `
               --notes-file RELEASE_NOTES.md `
-              Pirsa-*.zip SHA256SUMS.txt
+              @assets

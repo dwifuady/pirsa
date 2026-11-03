@@ -92,10 +92,17 @@ Catalogs and streams from any configured addon are picked up automatically.
 
 ## Download
 
-Grab `Pirsa-<version>-win-x64.zip` or `Pirsa-<version>-win-arm64.zip` from
-[Releases](https://github.com/dwifuady/pirsa/releases), unpack it anywhere, and
-run `Pirsa.exe`. No installer and no admin rights. It is a portable build, so
-Windows SmartScreen may warn on the first run: **More info → Run anyway**.
+Two build types are published for `win-x64` and `win-arm64`:
+
+- **Installer** — `Pirsa-<version>-win-<arch>-setup.exe`. Per-user install to
+  `%LOCALAPPDATA%\Programs\Pirsa`, no admin rights, Start menu shortcut, and
+  it uninstalls from **Apps & Features**.
+- **Portable** — `Pirsa-<version>-win-<arch>.zip`. Unpack it anywhere and run
+  `Pirsa.exe`.
+
+Download from [Releases](https://github.com/dwifuady/pirsa/releases). Neither
+build is code-signed, so Windows SmartScreen may warn on the first run:
+**More info → Run anyway**.
 
 ## Run it
 
@@ -242,7 +249,8 @@ private const string HeroCatalogId = "top";
 ## Releasing
 
 The git tag is the version. Tag a commit and push it; CI builds both
-architectures and publishes the ZIPs with SHA-256 checksums.
+architectures as portable ZIPs and Inno Setup installers, then publishes them
+with SHA-256 checksums.
 
 ```powershell
 git tag v0.1.0
@@ -255,6 +263,8 @@ overrides it from the tag.
 ## Project map
 
 ```
+installer/
+  Pirsa.iss                     Inno Setup script for the per-user installer
 Pirsa/
   Models/StremioModels.cs         manifest, catalog, meta, stream models + image loading
   Models/PlaybackRequest.cs       movie / episode → player routing
