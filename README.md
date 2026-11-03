@@ -321,11 +321,18 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
-- **Seek cache** — VLC keeps a demuxer cache (its only read-ahead buffer) of
-  **10 seconds** for on-demand titles, so the ±10s skips and short slider jumps
-  play straight from memory instead of re-buffering. Live TV keeps a **3 second**
-  cache so it stays close to the live edge. The buffering overlay waits 500 ms
-  before appearing, so quick top-ups don't flash the spinner.
+- **Seek cache** — VLC's demuxer cache is set to **3 seconds** for on-demand
+  titles and **2.5 seconds** for live TV (kept shorter so it stays near the live
+  edge). It is a jitter buffer, not a seek window: VLC answers every seek with a
+  fresh range request to the provider, and the buffering percentage is measured
+  against this target, so a bigger value means a *longer* wait after each skip. A
+  genuine ±10s seek window needs a local read-ahead cache in front of VLC. The
+  buffering overlay waits 500 ms before appearing, so quick top-ups don't flash
+  the spinner.
+- **Player log** — `%LOCALAPPDATA%\Pirsa\player.log` records every seek, how long
+  VLC spent buffering afterwards, the source format and options, and VLC's own
+  stream-layer messages. It is reset when the player opens, capped at 1 MB, and
+  never leaves the machine.
 - Source discovery can take 10–20 seconds depending on the addon/provider; the
   loading screen stays up until sources arrive. Results are cached per
   movie/episode for 10 minutes (empty results for 1 minute) and dropped when the

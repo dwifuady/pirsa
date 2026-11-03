@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using LibVLCSharp.Platforms.Windows;
 using LibVLCSharp.Shared;
@@ -31,25 +32,29 @@ public sealed partial class PlayerPage : Page
     private const double WheelVolumeStep = 5;
 
     /// <summary>
-    /// LibVLC's demuxer cache for on-demand video. It is the only read-ahead
-    /// buffer that exists: it keeps this many seconds of the stream downloaded
-    /// ahead of the playhead, so a seek that lands inside it costs no network
-    /// round trip and no buffering. Ten seconds covers the ±10s skip buttons
-    /// plus normal jitter at roughly one second of RAM per Mbps.
+    /// LibVLC's demuxer cache for on-demand video. It is a jitter buffer, not a
+    /// seek window: VLC's HTTP access answers a seek with a fresh range request,
+    /// so nothing here is ever replayed from memory. What it does control is how
+    /// long VLC waits for the buffer to refill after a start or a seek (the
+    /// buffering percentage is measured against this target), which is why it is
+    /// kept short. A real seek window needs a local read-ahead cache in front of
+    /// VLC, not a bigger VLC buffer.
     /// </summary>
-    private const int VodNetworkCachingMs = 10000;
+    private const int VodNetworkCachingMs = 3000;
 
     /// <summary>
-    /// The same buffer for live TV, kept small on purpose: every cached second
-    /// is a second further behind the live edge.
+    /// The same buffer for live TV, kept shorter still: every cached second is a
+    /// second further behind the live edge.
     /// </summary>
-    private const int LiveNetworkCachingMs = 3000;
+    private const int LiveNetworkCachingMs = 2500;
 
     /// <summary>A refill shorter than this never shows the buffering overlay.</summary>
     private static readonly TimeSpan BufferOverlayDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
     private readonly DispatcherTimer _chromeTimer;
+    private readonly Stopwatch _seekWatch = new();
+    private bool _bufferingLogged;
     private DispatcherTimer? _bufferShowTimer;
     private string _bufferText = "Buffering…";
 
@@ -169,6 +174,9 @@ public sealed partial class PlayerPage : Page
         }
 
         ViewModel.Request = request;
+        PlayerLog.Write(
+            $"open {request.Type} id={request.VideoId} S{request.Season:00}E{request.Episode:00} " +
+            $"title={request.Title}");
         _selectedSubtitle = null;
         _resumeFromHistoryMs = 0;
         _positionMs = 0;
@@ -211,9 +219,14 @@ public sealed partial class PlayerPage : Page
             {
                 "--no-video-title-show",
                 "--no-osd",
+                "--verbose=2",
             };
 
+            PlayerLog.Reset();
+            PlayerLog.Write($"libvlc options: {string.Join(' ', options)}");
+
             _libVlc = new LibVLC([.. options]);
+            _libVlc.Log += (_, e) => PlayerLog.WriteVlc(e);
             _mediaPlayer = new MediaPlayer(_libVlc)
             {
                 Volume = 80,
@@ -1042,6 +1055,13 @@ public sealed partial class PlayerPage : Page
             media.AddOption(":no-osd");
             media.AddOption($":network-caching={NetworkCachingFor(ViewModel.Request)}");
 
+            PlayerLog.Write(
+                $"play quality={source.QualityLabel} format={source.FormatLabel} " +
+                $"hls={source.IsHls} live={IsLive(ViewModel.Request)} " +
+                $"cache={NetworkCachingFor(ViewModel.Request)}ms resume={resume}ms " +
+                $"headers=[{string.Join(',', source.Headers?.Keys ?? [])}] url={source.Url}");
+            _seekWatch.Restart();
+
             if (resume > 0)
             {
                 media.AddOption($":start-time={resume / 1000.0:0.###}");
@@ -1315,6 +1335,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEncounteredError()
     {
+        PlayerLog.Write($"vlc error, state {_mediaPlayer?.State}, url {_currentSource?.Url}");
         // A remembered source that fails before playing is replaced silently.
         if (_cachedAttempt is not null)
         {
@@ -1338,6 +1359,8 @@ public sealed partial class PlayerPage : Page
 
     private void HandlePlaying()
     {
+        PlayerLog.Write(
+            $"playing at {_mediaPlayer?.Time ?? 0}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start");
         _switching = false;
         _playing = true;
         _ended = false;
@@ -1543,6 +1566,12 @@ public sealed partial class PlayerPage : Page
 
         if (cache is > 0 and < 100 && _playing)
         {
+            if (!_bufferingLogged)
+            {
+                _bufferingLogged = true;
+                PlayerLog.Write($"buffering start at {cache:0}%");
+            }
+
             _bufferText = $"Buffering… {cache:0}%";
 
             if (BufferPanel.Visibility == Visibility.Visible)
@@ -1559,6 +1588,12 @@ public sealed partial class PlayerPage : Page
         }
         else if (cache >= 100)
         {
+            if (_bufferingLogged)
+            {
+                _bufferingLogged = false;
+                PlayerLog.Write($"buffering done after {_seekWatch.ElapsedMilliseconds}ms (seek to here took that long)");
+            }
+
             HideBuffer();
             UpdatePlayPauseUi();
         }
@@ -1628,9 +1663,24 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        _mediaPlayer.Time = Math.Clamp(_mediaPlayer.Time + deltaMs, 0, _mediaPlayer.Length);
+        var target = Math.Clamp(_mediaPlayer.Time + deltaMs, 0, _mediaPlayer.Length);
+        LogSeek(_mediaPlayer.Time, target, "skip");
+        _mediaPlayer.Time = target;
         ShowChrome();
         StartChromeTimer();
+    }
+
+    /// <summary>
+    /// Records a seek and restarts the clock the buffering log reports against,
+    /// so the log says how long VLC actually stalled, not just that it did.
+    /// </summary>
+    private void LogSeek(long from, long to, string origin)
+    {
+        PlayerLog.Write(
+            $"seek {origin} {from} -> {to} (len {_mediaPlayer?.Length ?? 0}, " +
+            $"seekable {_mediaPlayer?.IsSeekable}, state {_mediaPlayer?.State})");
+        _seekWatch.Restart();
+        _bufferingLogged = false;
     }
 
     private void SeekSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -1669,6 +1719,7 @@ public sealed partial class PlayerPage : Page
         _draggingSeek = false;
         if (_mediaPlayer is { IsSeekable: true })
         {
+            LogSeek(_mediaPlayer.Time, (long)SeekSlider.Value, "scrub");
             _mediaPlayer.Time = (long)SeekSlider.Value;
         }
 
