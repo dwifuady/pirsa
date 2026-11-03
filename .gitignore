@@ -1,0 +1,31 @@
+# Build output
+bin/
+obj/
+out/
+AppPackages/
+.publish/
+
+# Generated MSIX assets / manifests
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.msixupload
+*.appxupload
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Release artifacts
+Pirsa-*.zip
+SHA256SUMS.txt
+RELEASE_NOTES.md

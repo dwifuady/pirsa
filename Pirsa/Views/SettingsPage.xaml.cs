@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -23,6 +24,26 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
+    }
+
+    /// <summary>App version from the build, e.g. "v0.1.0". Works packed or unpacked.</summary>
+    public string AppVersion
+    {
+        get
+        {
+            var informational = typeof(SettingsPage).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion;
+
+            if (string.IsNullOrWhiteSpace(informational))
+            {
+                return string.Empty;
+            }
+
+            var buildMetadata = informational.IndexOf('+');
+            var version = buildMetadata > 0 ? informational[..buildMetadata] : informational;
+            return $"v{version}";
+        }
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)

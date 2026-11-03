@@ -1,0 +1,149 @@
+name: Release
+
+# Push a tag:  git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, without the leading v (e.g. 0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('Pirsa/Pirsa.csproj') }}
+          restore-keys: nuget-
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+              '${{ inputs.version }}'
+          } else {
+              '${{ github.ref_name }}'.TrimStart('v')
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+              throw "Version '$version' is not MAJOR.MINOR.PATCH."
+          }
+
+          "value=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Releasing v$version"
+
+      - name: Publish portable builds
+        shell: pwsh
+        run: |
+          $targets = @(
+              @{ Rid = 'win-x64';   Platform = 'x64'   },
+              @{ Rid = 'win-arm64'; Platform = 'ARM64' }
+          )
+
+          foreach ($target in $targets) {
+              Write-Host "::group::Publishing $($target.Rid)"
+
+              dotnet publish Pirsa/Pirsa.csproj `
+                  -c Release `
+                  -r $target.Rid `
+                  -p:Platform=$($target.Platform) `
+                  -p:Version=${{ steps.version.outputs.value }} `
+                  -p:SelfContained=true `
+                  -p:WindowsAppSDKSelfContained=true `
+                  -p:WindowsPackageType=None `
+                  -p:EnableMsixTooling=false `
+                  -p:PublishTrimmed=false `
+                  -p:PublishReadyToRun=true `
+                  -o "out/$($target.Rid)"
+
+              if ($LASTEXITCODE -ne 0) { throw "publish failed for $($target.Rid)" }
+
+              Write-Host "::endgroup::"
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+
+          foreach ($rid in @('win-x64', 'win-arm64')) {
+              $name = "Pirsa-$version-$rid"
+              Write-Host "::group::Packing $name.zip"
+              Compress-Archive -Path "out/$rid/*" -DestinationPath "$name.zip" -CompressionLevel Optimal
+              Write-Host "::endgroup::"
+          }
+
+          Get-ChildItem 'Pirsa-*.zip' | ForEach-Object {
+              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $($_.Name)"
+          } | Set-Content -Path SHA256SUMS.txt -Encoding ascii
+
+          Get-ChildItem 'Pirsa-*.zip' | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB)}}
+
+      - name: Build release notes
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+
+          $previous = git describe --tags --abbrev=0 --match 'v*' "$tag^" 2>$null
+          if ($LASTEXITCODE -ne 0) { $previous = $null }
+
+          $range = if ($previous) { "$previous..$tag" } else { $tag }
+          $changes = git log $range --no-merges --pretty=format:'- %s (`%h`)'
+
+          $notes = @(
+              '## Install'
+              ''
+              '1. Download the ZIP for your architecture.'
+              '2. Unpack it anywhere.'
+              '3. Run `Pirsa.exe`.'
+              ''
+              'Portable build: no installer and no admin rights. Windows SmartScreen may warn on first run — choose **More info → Run anyway**. Requires Windows 10 1809 or newer.'
+              ''
+              'Pirsa is free software under the GPL v3.0. See `THIRD-PARTY-NOTICES.md` in the ZIP for bundled components, including libVLC (LGPL-2.1-or-later).'
+              ''
+              '## Changes'
+              ''
+          ) + $changes + @(
+              ''
+              '## Checksums'
+              ''
+              'See `SHA256SUMS.txt`.'
+          )
+
+          $notes -join "`n" | Set-Content -Path RELEASE_NOTES.md -Encoding utf8
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+
+          gh release create $tag `
+              --title "Pirsa $tag" `
+              --notes-file RELEASE_NOTES.md `
+              Pirsa-*.zip SHA256SUMS.txt

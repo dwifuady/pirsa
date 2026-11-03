@@ -1,4 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#ea580c"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="32" font-weight="600" fill="#ffffff">P</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset="0.5" stop-color="#f97316"/>
+      <stop offset="1" stop-color="#c2410c"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.25"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- background tile -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <rect width="64" height="64" rx="14" fill="url(#sheen)"/>
+  <!-- signal arcs emanating from the play glyph -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" opacity="0.8">
+    <path stroke-width="3.4" d="M27 22 a 11 11 0 0 1 11 11"/>
+    <path stroke-width="3.4" d="M27.5 27.5 a 5.5 5.5 0 0 1 5.5 5.5"/>
+  </g>
+  <!-- play glyph, tilted slightly for motion -->
+  <path d="M23 22 L23 46 L43 34 Z" fill="#ffffff" transform="rotate(8 33 34)"/>
 </svg>

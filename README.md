@@ -90,6 +90,13 @@ Catalogs and streams from any configured addon are picked up automatically.
 `tv`/`channel` catalogs render as **Live TV** rails; the player accepts
 `tv`/`channel`/`pp-live:` ids as well as movies and episodes.
 
+## Download
+
+Grab `Pirsa-<version>-win-x64.zip` or `Pirsa-<version>-win-arm64.zip` from
+[Releases](https://github.com/dwifuady/pirsa/releases), unpack it anywhere, and
+run `Pirsa.exe`. No installer and no admin rights. It is a portable build, so
+Windows SmartScreen may warn on the first run: **More info → Run anyway**.
+
 ## Run it
 
 Requirements:
@@ -161,8 +168,25 @@ Configuration lives in the app's local data:
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\search-history.json
 ```
 
+A portable (unpackaged) build keeps the same files one level up:
+
+```
+%LOCALAPPDATA%\Pirsa\addons.json
+%LOCALAPPDATA%\Pirsa\settings.json
+%LOCALAPPDATA%\Pirsa\watch-progress.json
+%LOCALAPPDATA%\Pirsa\watchlist.json
+%LOCALAPPDATA%\Pirsa\search-history.json
+```
+
 If a manifest URL contains a token, treat it like a password: it is only stored
 on this machine, and you should rotate it if it is ever exposed.
+
+## License
+
+Pirsa is free software under the **GNU General Public License v3.0 or later**
+(see `LICENSE`). Third-party components and their licenses are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — including libVLC, which is
+LGPL-2.1-or-later and ships as unmodified separate binaries.
 
 ## Legal
 
@@ -214,6 +238,19 @@ catalog. Edit `Pirsa/ViewModels/HomeViewModel.cs`:
 private const string HeroType = "movie";
 private const string HeroCatalogId = "top";
 ```
+
+## Releasing
+
+The git tag is the version. Tag a commit and push it; CI builds both
+architectures and publishes the ZIPs with SHA-256 checksums.
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Keep `Version` in `Pirsa/Pirsa.csproj` in sync for local builds; the workflow
+overrides it from the tag.
 
 ## Project map
 

@@ -14,6 +14,11 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!--  Version is overridden from the git tag by the release workflow.  -->
+    <Version>0.1.0</Version>
+    <Product>Pirsa</Product>
+    <Company>Pirsa</Company>
   </PropertyGroup>
 
   <ItemGroup>
@@ -73,10 +78,13 @@
   </PropertyGroup>
 
   <!-- Publish Properties -->
+  <!--
+    Trimming is not supported for WinUI 3 / XAML: it can strip x:Bind and
+    WinRT interop, producing a package that builds clean and fails at runtime.
+  -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 </Project>

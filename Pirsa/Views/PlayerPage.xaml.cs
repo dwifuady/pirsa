@@ -1986,8 +1986,20 @@ public sealed partial class PlayerPage : Page
     {
         if (_subtitleDirectory is null)
         {
+            string baseDirectory;
+
+            try
+            {
+                baseDirectory = ApplicationData.Current.TemporaryFolder.Path;
+            }
+            catch
+            {
+                // Unpackaged builds have no package identity.
+                baseDirectory = Path.GetTempPath();
+            }
+
             _subtitleDirectory = Path.Combine(
-                ApplicationData.Current.TemporaryFolder.Path,
+                baseDirectory,
                 "PirsaSubtitles",
                 Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_subtitleDirectory);
