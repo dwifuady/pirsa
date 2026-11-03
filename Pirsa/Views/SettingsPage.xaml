@@ -133,33 +133,35 @@
                         Severity="Informational" />
 
                     <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="12"
+                        Spacing="8"
                         Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasManyAddons), Mode=OneWay}">
                         <TextBox
-                            Width="260"
+                            MaxWidth="420"
+                            HorizontalAlignment="Stretch"
                             AutomationProperties.AutomationId="AddonSearchBox"
                             AutomationProperties.Name="Search addons"
                             PlaceholderText="Search by name or host"
                             Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                        <SelectorBar
-                            x:Name="AddonFilterBar"
-                            AutomationProperties.Name="Filter addons"
-                            SelectionChanged="AddonFilter_SelectionChanged">
-                            <SelectorBarItem
-                                IsSelected="True"
-                                Tag="0"
-                                Text="All" />
-                            <SelectorBarItem Tag="1" Text="Streams" />
-                            <SelectorBarItem Tag="2" Text="Metadata" />
-                            <SelectorBarItem Tag="3" Text="Catalogs" />
-                            <SelectorBarItem Tag="4" Text="Issues" />
-                        </SelectorBar>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{x:Bind ViewModel.VisibleCountText, Mode=OneWay}" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <SelectorBar
+                                x:Name="AddonFilterBar"
+                                AutomationProperties.Name="Filter addons"
+                                SelectionChanged="AddonFilter_SelectionChanged">
+                                <SelectorBarItem
+                                    IsSelected="True"
+                                    Tag="0"
+                                    Text="All" />
+                                <SelectorBarItem Tag="1" Text="Streams" />
+                                <SelectorBarItem Tag="2" Text="Metadata" />
+                                <SelectorBarItem Tag="3" Text="Catalogs" />
+                                <SelectorBarItem Tag="4" Text="Issues" />
+                            </SelectorBar>
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind ViewModel.VisibleCountText, Mode=OneWay}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <ItemsControl ItemsSource="{x:Bind ViewModel.VisibleAddons}">
@@ -323,6 +325,8 @@
                                                 <Button
                                                     Width="34"
                                                     Height="32"
+                                                    MinWidth="0"
+                                                    Padding="0"
                                                     AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
                                                     AutomationProperties.Name="Move addon up"
                                                     Background="Transparent"
@@ -339,6 +343,8 @@
                                                 <Button
                                                     Width="34"
                                                     Height="32"
+                                                    MinWidth="0"
+                                                    Padding="0"
                                                     AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
                                                     AutomationProperties.Name="Move addon down"
                                                     Background="Transparent"
@@ -355,6 +361,8 @@
                                                 <Button
                                                     Width="34"
                                                     Height="32"
+                                                    MinWidth="0"
+                                                    Padding="0"
                                                     AutomationProperties.Name="Remove addon"
                                                     Background="Transparent"
                                                     BorderThickness="0"
