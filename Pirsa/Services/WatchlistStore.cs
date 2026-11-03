@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Pirsa.Models;
-using Windows.Storage;
 
 namespace Pirsa.Services;
 
@@ -300,20 +299,7 @@ public sealed class WatchlistStore
             return _storagePath;
         }
 
-        try
-        {
-            _storagePath = Path.Combine(
-                ApplicationData.Current.LocalFolder.Path,
-                "watchlist.json");
-        }
-        catch
-        {
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa");
-            _storagePath = Path.Combine(directory, "watchlist.json");
-        }
-
+        _storagePath = Path.Combine(LocalPaths.Root, "watchlist.json");
         return _storagePath;
     }
 }

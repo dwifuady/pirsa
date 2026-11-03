@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Pirsa.Models;
-using Windows.Storage;
 
 namespace Pirsa.Services;
 
@@ -504,19 +503,7 @@ public sealed class WatchProgressStore
             return _storagePath;
         }
 
-        try
-        {
-            _storagePath = Path.Combine(
-                ApplicationData.Current.LocalFolder.Path,
-                "watch-progress.json");
-        }
-        catch
-        {
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa");
-            _storagePath = Path.Combine(directory, "watch-progress.json");
-        }
+        _storagePath = Path.Combine(LocalPaths.Root, "watch-progress.json");
 
         return _storagePath;
     }

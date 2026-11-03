@@ -666,7 +666,7 @@
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Style="{StaticResource BodyTextBlockStyle}"
-                                Text="Pirsa hosts no content and ships without a stream addon. Catalogs, metadata, subtitles, and sources come from third-party addons you add yourself — only add addons you trust and are allowed to use. Nothing is proxied or cached."
+                                Text="Pirsa hosts no content and ships without a stream addon. Catalogs, metadata, subtitles, and sources come from third-party addons you add yourself — only add addons you trust and are allowed to use. Playback is buffered in a temporary file on this device and deleted when it stops; nothing is uploaded anywhere."
                                 TextWrapping="Wrap" />
                             <TextBlock
                                 FontSize="12"

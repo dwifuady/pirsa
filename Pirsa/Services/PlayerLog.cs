@@ -40,7 +40,13 @@ public static class PlayerLog
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
                 File.WriteAllText(
                     path,
-                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Pirsa player log{Environment.NewLine}");
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Pirsa player log{Environment.NewLine}" +
+                    $"data root: {LocalPaths.Root}{Environment.NewLine}" +
+                    $"build: {typeof(PlayerLog).Assembly.GetName().Version}" +
+#if DEBUG
+                    " DEBUG" +
+#endif
+                    Environment.NewLine);
             }
             catch
             {
@@ -97,16 +103,12 @@ public static class PlayerLog
     {
         try
         {
-            return System.IO.Path.Combine(
-                Windows.Storage.ApplicationData.Current.LocalFolder.Path,
-                "player.log");
+            Directory.CreateDirectory(LocalPaths.Root);
         }
         catch
         {
-            return System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa",
-                "player.log");
         }
+
+        return LocalPaths.PlayerLog;
     }
 }

@@ -165,25 +165,23 @@ https://v3-cinemeta.strem.io/manifest.json
   setup and offers **Open addon settings**, and later presses go straight
   there. Pirsa does not ship, recommend, or list stream addons.
 
-Configuration lives in the app's local data:
+Configuration lives in the app's local data, and the folder depends on **how the
+build is launched** so a development session can never touch an installed copy:
 
 ```
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\addons.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\settings.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\watch-progress.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\watchlist.json
-%LOCALAPPDATA%\Packages\<package-id>\LocalState\search-history.json
+# packaged: Store install, or a dev run through winapp / dotnet run
+%LOCALAPPDATA%\Packages\<package-id>\LocalState\        (addons.json, settings.json, …)
+%LOCALAPPDATA%\Packages\<package-id>\LocalState\dev\     (Debug builds of the same identity)
+
+# unpackaged: Inno Setup installer, portable ZIP
+%LOCALAPPDATA%\Pirsa\                                   (Release build)
+%LOCALAPPDATA%\Pirsa-dev\                               (Debug build)
 ```
 
-A portable (unpackaged) build keeps the same files one level up:
-
-```
-%LOCALAPPDATA%\Pirsa\addons.json
-%LOCALAPPDATA%\Pirsa\settings.json
-%LOCALAPPDATA%\Pirsa\watch-progress.json
-%LOCALAPPDATA%\Pirsa\watchlist.json
-%LOCALAPPDATA%\Pirsa\search-history.json
-```
+Every file lives in that one root: `addons.json`, `settings.json`,
+`watch-progress.json`, `watchlist.json`, `search-history.json`, `player.log` and
+the `cache\` folder used while a video plays. `Services/LocalPaths.cs` is the
+only place that resolves it, and the player log header names the root it used.
 
 If a manifest URL contains a token, treat it like a password: it is only stored
 on this machine, and you should rotate it if it is ever exposed.
@@ -271,6 +269,9 @@ Pirsa/
   Services/StremioAddonClient.cs  Stremio addon HTTP client
   Services/AddonRegistry.cs       persisted addon list, manifest loading, add/remove
   Services/StreamDiscovery.cs     per-title stream fetch cache + details-page prefetch
+  Services/StreamCacheSession.cs  localhost read-ahead cache that makes seeks local
+  Services/PlayerLog.cs           per-session seek/buffering log for diagnosis
+  Services/LocalPaths.cs          the one data root: packaged, unpackaged, and Debug runs
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
@@ -321,19 +322,36 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
-- **Seek cache** — VLC's demuxer cache is set to **3 seconds** for on-demand
+- **Local stream cache** — an on-demand HTTP source plays through a small
+  localhost server (`StreamCacheSession`) instead of straight from the addon.
+  Two download slots pull the file into a temporary file in the `cache` folder of
+  the data root (see [Addons](#addons); up to 128 MB ahead of the furthest read)
+  and the player reads ranges from disk. Seeks into the downloaded window are
+  then a disk read — measured at 150–450 ms against a source only 1.5× faster than real
+  time, where the same seek takes 5 s over the network. A seek outside the window
+  redirects a slot and waits, exactly like playing direct. Live TV, HLS, and
+  servers that ignore byte ranges skip the cache and play direct. Temp files are
+  deleted when playback stops or the source changes, and leftovers older than six
+  hours are removed on the next run. Only the newest connection that is waiting
+  may redirect a downloader: VLC opens a fresh connection for every seek and can
+  leave the previous one open, and without that rule two readers in different
+  places send the same downloaders back and forth and neither ever gets its data.
+- **Seek cache** — VLC's own demuxer cache is set to **3 seconds** for on-demand
   titles and **2.5 seconds** for live TV (kept shorter so it stays near the live
   edge). It is a jitter buffer, not a seek window: VLC answers every seek with a
-  fresh range request to the provider, and the buffering percentage is measured
-  against this target, so a bigger value means a *longer* wait after each skip. A
-  genuine ±10s seek window needs a local read-ahead cache in front of VLC.
+  fresh range request, and the buffering percentage is measured against this
+  target, so a bigger value means a *longer* wait after each skip. The local
+  stream cache above is what makes skips instant.
 - **Honest buffering** — the overlay follows the playhead, not VLC's buffering
   percentage. VLC reports "Playing" over a frozen picture while it climbs from
   0% to 100% over several seconds, and keeps reporting low percentages after a
   seek that cost nothing. The overlay now appears only after the position has
-  stood still for 1.2 seconds, and disappears the moment frames move again.
-- **Player log** — `%LOCALAPPDATA%\Pirsa\player.log` records every seek, how long
-  the playhead stayed frozen afterwards, the source format and options, and
+  stood still for 1.2 seconds, and disappears the moment frames move again. The
+  last four seconds of a title never show a spinner: VLC stops advancing the
+  clock while the final buffered frames drain, which looked like a stall at 99%.
+- **Player log** — `player.log` in the data root (see [Addons](#addons)) records
+  every seek, how long the playhead stayed frozen afterwards, the source format
+  and options, and
   VLC's own stream-layer messages. It is reset when the player opens, capped at
   1 MB, and never leaves the machine.
 - Source discovery can take 10–20 seconds depending on the addon/provider; the

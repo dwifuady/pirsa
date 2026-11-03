@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Pirsa.Models;
-using Windows.Storage;
 
 namespace Pirsa.Services;
 
@@ -639,18 +638,7 @@ public sealed class AddonRegistry
             return _storagePath;
         }
 
-        try
-        {
-            _storagePath = Path.Combine(ApplicationData.Current.LocalFolder.Path, "addons.json");
-        }
-        catch
-        {
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa");
-            _storagePath = Path.Combine(directory, "addons.json");
-        }
-
+        _storagePath = Path.Combine(LocalPaths.Root, "addons.json");
         return _storagePath;
     }
 

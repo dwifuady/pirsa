@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Windows.Storage;
 
 namespace Pirsa.Services;
 
@@ -201,20 +200,7 @@ public sealed class SearchHistoryStore
             return _storagePath;
         }
 
-        try
-        {
-            _storagePath = Path.Combine(
-                ApplicationData.Current.LocalFolder.Path,
-                "search-history.json");
-        }
-        catch
-        {
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa");
-            _storagePath = Path.Combine(directory, "search-history.json");
-        }
-
+        _storagePath = Path.Combine(LocalPaths.Root, "search-history.json");
         return _storagePath;
     }
 }
