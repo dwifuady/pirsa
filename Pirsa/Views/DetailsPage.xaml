@@ -12,6 +12,40 @@
     Background="{ThemeResource AppBackgroundBrush}"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <!--
+            Slow "Ken Burns" drift for the hero backdrop. The zoom origin sits
+            off-centre, so the pan comes from the zoom itself. Nothing ever
+            shrinks below 100%, so the image cannot expose an edge, and there
+            is no loop seam (the animation reverses instead of restarting).
+            The page pauses it while the hero is scrolled away and never starts
+            it under reduce motion or High Contrast.
+        -->
+        <Storyboard
+            x:Key="BackdropDriftStoryboard"
+            AutoReverse="True"
+            RepeatBehavior="Forever">
+            <DoubleAnimation
+                Storyboard.TargetProperty="ScaleX"
+                Duration="0:0:18"
+                From="1.0"
+                To="1.06">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation
+                Storyboard.TargetProperty="ScaleY"
+                Duration="0:0:18"
+                From="1.0"
+                To="1.06">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </Page.Resources>
+
     <Grid>
         <ScrollViewer
             x:Name="DetailsScrollViewer"
@@ -20,15 +54,24 @@
             VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <!--  Backdrop hero  -->
-                <Grid MinHeight="560">
+                <Grid MinHeight="560" EffectiveViewportChanged="Hero_EffectiveViewportChanged">
                     <Border Background="{ThemeResource PosterPlaceholderBrush}" />
-                    <Border Opacity="{ThemeResource HeroImageOpacity}">
-                        <Border.Background>
-                            <ImageBrush
-                                ImageSource="{x:Bind ViewModel.BackdropImage, Mode=OneWay}"
-                                Stretch="UniformToFill" />
-                        </Border.Background>
-                    </Border>
+
+                    <!--  Clipped host: the drift's overscan must not bleed over the page.  -->
+                    <Grid x:Name="BackdropHost" SizeChanged="BackdropHost_SizeChanged">
+                        <Border
+                            Opacity="{ThemeResource HeroImageOpacity}"
+                            RenderTransformOrigin="0.35,0.65">
+                            <Border.RenderTransform>
+                                <CompositeTransform x:Name="BackdropDrift" />
+                            </Border.RenderTransform>
+                            <Border.Background>
+                                <ImageBrush
+                                    ImageSource="{x:Bind ViewModel.BackdropImage, Mode=OneWay}"
+                                    Stretch="UniformToFill" />
+                            </Border.Background>
+                        </Border>
+                    </Grid>
 
                     <Border Background="{ThemeResource HeroLeftScrimBrush}" />
                     <Border

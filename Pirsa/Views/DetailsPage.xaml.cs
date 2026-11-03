@@ -2,11 +2,14 @@ using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.ViewModels;
+using Windows.Foundation;
+using Windows.UI.ViewManagement;
 
 namespace Pirsa.Views;
 
@@ -18,8 +21,14 @@ public sealed partial class DetailsPage : Page
     private const string PosterAnimationKey = "PosterAnimation";
 
     private readonly DispatcherTimer _warmTimer;
+    private readonly UISettings _uiSettings = new();
+    private readonly AccessibilitySettings _accessibility = new();
     private ConnectedAnimation? _posterAnimation;
     private PlaybackRequest? _warmRequest;
+    private Storyboard? _backdropDrift;
+    private bool _backdropDriftBegun;
+    private bool _backdropDriftPaused;
+    private bool _heroVisible = true;
 
     public DetailsViewModel ViewModel { get; } = new(App.Addons, App.WatchProgress, App.Watchlist);
 
@@ -30,6 +39,20 @@ public sealed partial class DetailsPage : Page
         // Hovering across episode rows shouldn't fire a fetch for each one.
         _warmTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         _warmTimer.Tick += (_, _) => FlushWarmRequest();
+
+        _backdropDrift = Resources["BackdropDriftStoryboard"] as Storyboard;
+        if (_backdropDrift is not null)
+        {
+            // Bind the animations to the transform here instead of by name:
+            // a Storyboard inside a ResourceDictionary does not resolve
+            // TargetName against the page's namescope.
+            foreach (var animation in _backdropDrift.Children)
+            {
+                Storyboard.SetTarget(animation, BackdropDrift);
+            }
+        }
+
+        Loaded += DetailsPage_Loaded;
 
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
     }
@@ -64,7 +87,88 @@ public sealed partial class DetailsPage : Page
         _posterAnimation = null;
         _warmTimer.Stop();
         _warmRequest = null;
+        StopBackdropDrift();
         ViewModel.Detach();
+    }
+
+    private void DetailsPage_Loaded(object sender, RoutedEventArgs e) => StartBackdropDrift();
+
+    private void BackdropHost_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // The drift scales the backdrop past its own bounds; without this the
+        // overscan would paint over the facts and episodes below the hero.
+        BackdropHost.Clip = new RectangleGeometry
+        {
+            Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height),
+        };
+    }
+
+    private void Hero_EffectiveViewportChanged(FrameworkElement sender, EffectiveViewportChangedEventArgs args)
+    {
+        _heroVisible = args.EffectiveViewport is { Width: > 0, Height: > 0 };
+
+        if (_heroVisible)
+        {
+            StartBackdropDrift();
+        }
+        else
+        {
+            PauseBackdropDrift();
+        }
+    }
+
+    /// <summary>
+    /// Starts the backdrop drift once the hero is on screen and the image is
+    /// there. Decorative motion stays off when Windows is asked to reduce it
+    /// or when a High Contrast theme is active.
+    /// </summary>
+    private void StartBackdropDrift()
+    {
+        if (_backdropDrift is null ||
+            !_heroVisible ||
+            ViewModel.BackdropImage is null ||
+            !_uiSettings.AnimationsEnabled ||
+            _accessibility.HighContrast)
+        {
+            return;
+        }
+
+        if (!_backdropDriftBegun)
+        {
+            _backdropDriftBegun = true;
+            _backdropDriftPaused = false;
+            _backdropDrift.Begin();
+            return;
+        }
+
+        if (_backdropDriftPaused)
+        {
+            _backdropDriftPaused = false;
+            _backdropDrift.Resume();
+        }
+    }
+
+    private void PauseBackdropDrift()
+    {
+        if (_backdropDrift is null || !_backdropDriftBegun || _backdropDriftPaused)
+        {
+            return;
+        }
+
+        _backdropDriftPaused = true;
+        _backdropDrift.Pause();
+    }
+
+    private void StopBackdropDrift()
+    {
+        if (_backdropDrift is null || !_backdropDriftBegun)
+        {
+            return;
+        }
+
+        _backdropDriftBegun = false;
+        _backdropDriftPaused = false;
+        _backdropDrift.Stop();
     }
 
     private void PreparePosterAnimation()
@@ -171,6 +275,14 @@ public sealed partial class DetailsPage : Page
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // The preview meta arrives before the full one; start on whichever
+        // first brings a backdrop.
+        if (e.PropertyName == nameof(DetailsViewModel.BackdropImage))
+        {
+            StartBackdropDrift();
+            return;
+        }
+
         if (e.PropertyName != nameof(DetailsViewModel.SelectedSeason) ||
             ViewModel.Meta is not { } meta)
         {
