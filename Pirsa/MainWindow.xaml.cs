@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using Pirsa.Helpers;
 using Pirsa.ViewModels;
 using Pirsa.Views;
 using Windows.Graphics;
@@ -32,6 +33,10 @@ public sealed partial class MainWindow : Window
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+
+        // Small caption-sized version after the app name, so a bug report can
+        // name the build without opening Settings.
+        AppTitleBar.Subtitle = AppInfo.VersionText;
 
         // Unpackaged builds have no manifest icon, and a relative path resolves
         // against the working directory, so use the deployed asset by full path.
