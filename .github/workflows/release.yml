@@ -84,7 +84,7 @@ jobs:
               # publish that skips that step still produces an exe, but it
               # dies on launch inside Microsoft.UI.Xaml.dll (0xc000027b).
               # Refuse to ship an artifact without its resource file.
-              foreach ($required in @('Pirsa.exe', 'Pirsa.pri', 'Microsoft.UI.Xaml.dll')) {
+              foreach ($required in @('Pirsa.exe', 'Pirsa.pri', 'Microsoft.UI.Xaml.dll', 'Assets/AppIcon.ico', 'Assets/BrandMark.png')) {
                   if (-not (Test-Path "out/$($target.Rid)/$required")) {
                       throw "out/$($target.Rid)/$required is missing from the publish output"
                   }
