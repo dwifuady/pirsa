@@ -48,14 +48,21 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private const int LiveNetworkCachingMs = 2500;
 
-    /// <summary>A refill shorter than this never shows the buffering overlay.</summary>
-    private static readonly TimeSpan BufferOverlayDelay = TimeSpan.FromMilliseconds(500);
+    /// <summary>
+    /// How long the playhead may stand still before the buffering overlay shows.
+    /// VLC only emits time updates a few times a second, and a healthy seek
+    /// pauses decoding for a fraction of that, so this clears normal seeks.
+    /// </summary>
+    private static readonly TimeSpan StallThreshold = TimeSpan.FromMilliseconds(1200);
 
     private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
     private readonly DispatcherTimer _chromeTimer;
+    private readonly DispatcherTimer _stallTimer;
     private readonly Stopwatch _seekWatch = new();
     private bool _bufferingLogged;
-    private DispatcherTimer? _bufferShowTimer;
+    private bool _stallOverlayVisible;
+    private long _advancePositionMs = -1;
+    private DateTime _advanceUtc = DateTime.UtcNow;
     private string _bufferText = "Buffering…";
 
     private LibVLC? _libVlc;
@@ -132,18 +139,13 @@ public sealed partial class PlayerPage : Page
             }
         };
 
-        // Re-filling the demuxer cache after a seek is routine and usually over
-        // in a fraction of a second. Waiting a moment before showing the
-        // spinner keeps quick skips from flashing the overlay.
-        _bufferShowTimer = new DispatcherTimer { Interval = BufferOverlayDelay };
-        _bufferShowTimer.Tick += (_, _) =>
-        {
-            _bufferShowTimer?.Stop();
-            if (_playing && !_ended && !_errorVisible && BufferPanel.Visibility != Visibility.Visible)
-            {
-                ShowBuffer(_bufferText);
-            }
-        };
+        // VLC's buffering percentage is useless as a UI signal: it reports
+        // "Playing" with a frozen picture while it climbs from 0 to 100 over
+        // several seconds, and it keeps reporting low percentages after a seek
+        // that cost nothing. So the overlay follows the playhead instead: no
+        // movement means the user is actually watching a frozen frame.
+        _stallTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _stallTimer.Tick += (_, _) => CheckStall();
 
         SeekSlider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(SeekSlider_PointerPressed), true);
         SeekSlider.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(SeekSlider_PointerReleased), true);
@@ -1365,6 +1367,8 @@ public sealed partial class PlayerPage : Page
         _playing = true;
         _ended = false;
         _errorVisible = false;
+        ResetStallClock(_mediaPlayer?.Time ?? 0);
+        _stallTimer.Start();
 
         LoadingOverlay.Visibility = Visibility.Collapsed;
         ErrorPanel.Visibility = Visibility.Collapsed;
@@ -1405,6 +1409,8 @@ public sealed partial class PlayerPage : Page
     private void HandlePaused()
     {
         _playing = false;
+        _stallTimer.Stop();
+        HideBuffer();
         PersistProgress(_positionMs, _lengthMs);
         UpdatePlayPauseUi();
         ShowChrome();
@@ -1431,6 +1437,8 @@ public sealed partial class PlayerPage : Page
 
         PersistProgress(_positionMs, _lengthMs);
         _playing = false;
+        _stallTimer.Stop();
+        HideBuffer();
         UpdatePlayPauseUi();
         ShowChrome();
     }
@@ -1453,6 +1461,7 @@ public sealed partial class PlayerPage : Page
 
         _playing = false;
         _ended = true;
+        _stallTimer.Stop();
         _positionMs = _lengthMs > 0 ? _lengthMs : _positionMs;
         PersistProgress(_positionMs, _lengthMs, completed: true);
 
@@ -1569,34 +1578,68 @@ public sealed partial class PlayerPage : Page
             if (!_bufferingLogged)
             {
                 _bufferingLogged = true;
-                PlayerLog.Write($"buffering start at {cache:0}%");
+                PlayerLog.Write($"buffering reported at {cache:0}%");
             }
 
             _bufferText = $"Buffering… {cache:0}%";
-
             if (BufferPanel.Visibility == Visibility.Visible)
             {
                 BufferText.Text = _bufferText;
             }
-            else if (_bufferShowTimer is { IsEnabled: false })
-            {
-                // Give a quick top-up a chance to finish before the overlay shows.
-                _bufferShowTimer.Start();
-            }
-
-            CenterPlayButton.Visibility = Visibility.Collapsed;
         }
         else if (cache >= 100)
         {
             if (_bufferingLogged)
             {
                 _bufferingLogged = false;
-                PlayerLog.Write($"buffering done after {_seekWatch.ElapsedMilliseconds}ms (seek to here took that long)");
+                PlayerLog.Write($"buffering reached 100% after {_seekWatch.ElapsedMilliseconds}ms");
             }
+        }
+    }
 
+    /// <summary>
+    /// Shows the buffering overlay only while the playhead is genuinely stuck,
+    /// and takes it down the moment frames move again. This is the only honest
+    /// stall signal the player has: VLC reports "Playing" over a frozen picture
+    /// and reports partial buffering over playback that is perfectly fine.
+    /// </summary>
+    private void CheckStall()
+    {
+        if (_disposed || !_playing || _ended || _errorVisible || _draggingSeek || _mediaPlayer is null)
+        {
+            return;
+        }
+
+        var position = Math.Max(0, _mediaPlayer.Time);
+        if (position != _advancePositionMs)
+        {
+            _advancePositionMs = position;
+            _advanceUtc = DateTime.UtcNow;
+        }
+
+        var stalled = DateTime.UtcNow - _advanceUtc > StallThreshold;
+
+        if (stalled && !_stallOverlayVisible)
+        {
+            _stallOverlayVisible = true;
+            PlayerLog.Write($"stall at {position}ms, overlay shown");
+            ShowBuffer(_bufferText);
+        }
+        else if (!stalled && _stallOverlayVisible)
+        {
+            _stallOverlayVisible = false;
+            PlayerLog.Write($"stall over at {position}ms after {_seekWatch.ElapsedMilliseconds}ms");
             HideBuffer();
             UpdatePlayPauseUi();
         }
+    }
+
+    /// <summary>Restarts stall detection, so a deliberate seek is not a stall.</summary>
+    private void ResetStallClock(long position)
+    {
+        _advancePositionMs = position;
+        _advanceUtc = DateTime.UtcNow;
+        _stallOverlayVisible = false;
     }
 
     // ---------------------------------------------------------------- UI actions
@@ -1681,6 +1724,7 @@ public sealed partial class PlayerPage : Page
             $"seekable {_mediaPlayer?.IsSeekable}, state {_mediaPlayer?.State})");
         _seekWatch.Restart();
         _bufferingLogged = false;
+        ResetStallClock(to);
     }
 
     private void SeekSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
@@ -2453,7 +2497,6 @@ public sealed partial class PlayerPage : Page
 
     private void ShowBuffer(string text)
     {
-        _bufferShowTimer?.Stop();
         _bufferText = text;
         BufferText.Text = text;
         BufferRing.IsActive = true;
@@ -2464,7 +2507,6 @@ public sealed partial class PlayerPage : Page
 
     private void HideBuffer()
     {
-        _bufferShowTimer?.Stop();
         BufferRing.IsActive = false;
         BufferPanel.Visibility = Visibility.Collapsed;
     }
@@ -2521,6 +2563,7 @@ public sealed partial class PlayerPage : Page
         _errorVisible = true;
         _playing = false;
         _switching = false;
+        _stallTimer.Stop();
         HideBuffer();
         ErrorText.Text = message;
         ErrorPanel.Visibility = Visibility.Visible;
@@ -2548,7 +2591,7 @@ public sealed partial class PlayerPage : Page
         _chromeTimer.Stop();
         _resumeHintTimer?.Stop();
         _cachedWatchdog?.Stop();
-        _bufferShowTimer?.Stop();
+        _stallTimer.Stop();
         _nextEpisodeCts?.Cancel();
         _nextEpisodeCts?.Dispose();
         _nextEpisodeCts = null;

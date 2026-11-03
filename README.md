@@ -326,13 +326,16 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   edge). It is a jitter buffer, not a seek window: VLC answers every seek with a
   fresh range request to the provider, and the buffering percentage is measured
   against this target, so a bigger value means a *longer* wait after each skip. A
-  genuine ±10s seek window needs a local read-ahead cache in front of VLC. The
-  buffering overlay waits 500 ms before appearing, so quick top-ups don't flash
-  the spinner.
+  genuine ±10s seek window needs a local read-ahead cache in front of VLC.
+- **Honest buffering** — the overlay follows the playhead, not VLC's buffering
+  percentage. VLC reports "Playing" over a frozen picture while it climbs from
+  0% to 100% over several seconds, and keeps reporting low percentages after a
+  seek that cost nothing. The overlay now appears only after the position has
+  stood still for 1.2 seconds, and disappears the moment frames move again.
 - **Player log** — `%LOCALAPPDATA%\Pirsa\player.log` records every seek, how long
-  VLC spent buffering afterwards, the source format and options, and VLC's own
-  stream-layer messages. It is reset when the player opens, capped at 1 MB, and
-  never leaves the machine.
+  the playhead stayed frozen afterwards, the source format and options, and
+  VLC's own stream-layer messages. It is reset when the player opens, capped at
+  1 MB, and never leaves the machine.
 - Source discovery can take 10–20 seconds depending on the addon/provider; the
   loading screen stays up until sources arrive. Results are cached per
   movie/episode for 10 minutes (empty results for 1 minute) and dropped when the
