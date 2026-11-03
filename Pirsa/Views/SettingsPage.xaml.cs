@@ -1,8 +1,8 @@
-using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using Pirsa.Helpers;
 using Pirsa.Services;
 using Pirsa.ViewModels;
 using Windows.System;
@@ -27,24 +27,7 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>App version from the build, e.g. "v0.1.0". Works packed or unpacked.</summary>
-    public string AppVersion
-    {
-        get
-        {
-            var informational = typeof(SettingsPage).Assembly
-                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                ?.InformationalVersion;
-
-            if (string.IsNullOrWhiteSpace(informational))
-            {
-                return string.Empty;
-            }
-
-            var buildMetadata = informational.IndexOf('+');
-            var version = buildMetadata > 0 ? informational[..buildMetadata] : informational;
-            return $"v{version}";
-        }
-    }
+    public string AppVersion => AppInfo.VersionText;
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
