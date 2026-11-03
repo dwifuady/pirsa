@@ -42,6 +42,9 @@ public partial class App : Application
     /// <summary>Saved titles, persisted in watchlist.json.</summary>
     public static WatchlistStore Watchlist { get; } = new();
 
+    /// <summary>Submitted search queries, persisted in search-history.json.</summary>
+    public static SearchHistoryStore SearchHistory { get; } = new();
+
     /// <summary>
     /// The native window handle (HWND). Use for file pickers,
     /// <c>DataTransferManager</c>, and any WinRT interop that requires
@@ -64,6 +67,7 @@ public partial class App : Application
         _ = Settings.EnsureLoadedAsync();
         _ = WatchProgress.EnsureLoadedAsync();
         _ = Watchlist.EnsureLoadedAsync();
+        _ = SearchHistory.EnsureLoadedAsync();
         _ = VideoEngine.WarmUpAsync();
     }
 }

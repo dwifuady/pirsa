@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:services="using:Pirsa.Services"
     Title="Pirsa"
     mc:Ignorable="d">
     <Window.SystemBackdrop>
@@ -41,7 +42,24 @@
             PlaceholderText="Search across your addons"
             QueryIcon="Find"
             QuerySubmitted="AppSearchBox_QuerySubmitted"
-            TextChanged="AppSearchBox_TextChanged" />
+            TextChanged="AppSearchBox_TextChanged"
+            TextMemberPath="Query">
+            <AutoSuggestBox.ItemTemplate>
+                <DataTemplate x:DataType="services:SearchHistoryEntry">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            FontSize="14"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE81C;" />
+                        <TextBlock
+                            MaxLines="1"
+                            Text="{x:Bind Query, Mode=OneTime}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </DataTemplate>
+            </AutoSuggestBox.ItemTemplate>
+        </AutoSuggestBox>
 
         <NavigationView
             x:Name="NavView"

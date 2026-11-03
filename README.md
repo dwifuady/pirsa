@@ -46,7 +46,10 @@ A native WinUI 3 browser for movies, shows, and live TV sourced from
   just the selected catalog — and groups the hits by **addon + media type**
   (Cinemeta · Movies, Cinemeta · Series), with a title count per section. The
   type/catalog/genre dropdowns apply to browsing only and hide during search.
-  Typing from Home or Settings switches to Discover automatically.
+  Typing from Home or Settings switches to Discover automatically. Submitted
+  searches (and searches you open a result from) are remembered locally and
+  offered as suggestions when the search box is focused, filtered as you type.
+  Clear them in Settings → Search.
 - **Details** — full-bleed backdrop, poster, overview, fact sheet, IMDb link,
   and season/episode browsing. Metadata is fetched from the addon that supplied
   the catalog item. Posters animate into the details hero with a native
@@ -128,6 +131,7 @@ Configuration lives in the app's local data:
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\settings.json
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\watch-progress.json
 %LOCALAPPDATA%\Packages\<package-id>\LocalState\watchlist.json
+%LOCALAPPDATA%\Packages\<package-id>\LocalState\search-history.json
 ```
 
 If a manifest URL contains a token, treat it like a password: it is only stored

@@ -14,7 +14,11 @@ namespace Pirsa.Views;
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
-    public SettingsViewModel ViewModel { get; } = new(App.Addons, App.Settings, App.WatchProgress);
+    public SettingsViewModel ViewModel { get; } = new(
+        App.Addons,
+        App.Settings,
+        App.WatchProgress,
+        App.SearchHistory);
 
     public SettingsPage()
     {
@@ -113,6 +117,24 @@ public sealed partial class SettingsPage : Page
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             await ViewModel.ClearWatchHistoryAsync();
+        }
+    }
+
+    private async void ClearSearchHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Clear search history?",
+            Content = "This removes every saved search suggestion on this device. Your watch history, watchlist and addons stay as they are.",
+            PrimaryButtonText = "Clear searches",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await ViewModel.ClearSearchHistoryAsync();
         }
     }
 

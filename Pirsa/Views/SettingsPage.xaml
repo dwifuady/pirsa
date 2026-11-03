@@ -430,6 +430,49 @@
                     </Border>
                 </StackPanel>
 
+                <!--  Search  -->
+                <StackPanel Spacing="10">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Border
+                            Width="4"
+                            Height="20"
+                            Background="{ThemeResource BrandPrimaryBrush}"
+                            CornerRadius="2" />
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="Search" />
+                    </StackPanel>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Search history" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Queries you submit, and searches that led you to open a result, appear as suggestions when you click the title-bar search box. Suggestions are filtered as you type. Stored on this device only."
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Text="{x:Bind ViewModel.SearchHistoryText, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                HorizontalAlignment="Left"
+                                Click="ClearSearchHistory_Click"
+                                Content="Clear search history"
+                                IsEnabled="{x:Bind ViewModel.HasSearchHistory, Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!--  About  -->
                 <StackPanel Spacing="10">
                     <StackPanel

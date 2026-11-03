@@ -13,16 +13,19 @@ public partial class SettingsViewModel : ObservableObject
     private readonly AddonRegistry _registry;
     private readonly AppSettings _settings;
     private readonly WatchProgressStore _watchProgress;
+    private readonly SearchHistoryStore _searchHistory;
     private bool _loadingSettings;
 
     public SettingsViewModel(
         AddonRegistry registry,
         AppSettings settings,
-        WatchProgressStore watchProgress)
+        WatchProgressStore watchProgress,
+        SearchHistoryStore searchHistory)
     {
         _registry = registry;
         _settings = settings;
         _watchProgress = watchProgress;
+        _searchHistory = searchHistory;
 
         // Off first, then every language the subtitle picker understands.
         SubtitleLanguageOptions.Add(new SubtitleLanguageOption("", "Off"));
@@ -85,6 +88,15 @@ public partial class SettingsViewModel : ObservableObject
         var count => $"{count} saved playback positions on this device.",
     };
 
+    public bool HasSearchHistory => _searchHistory.Entries.Count > 0;
+
+    public string SearchHistoryText => _searchHistory.Entries.Count switch
+    {
+        0 => "No saved searches on this device.",
+        1 => "1 saved search on this device.",
+        var count => $"{count} saved searches on this device.",
+    };
+
     public bool HasAddons => Addons.Count > 0;
 
     public string AddonCountText => Addons.Count switch
@@ -103,6 +115,8 @@ public partial class SettingsViewModel : ObservableObject
             await _settings.EnsureLoadedAsync(cancellationToken);
             await _watchProgress.EnsureLoadedAsync(cancellationToken);
             RaiseWatchHistoryInfo();
+            await _searchHistory.EnsureLoadedAsync(cancellationToken);
+            RaiseSearchHistoryInfo();
 
             _loadingSettings = true;
             AutoplayEnabled = _settings.Autoplay;
@@ -213,6 +227,22 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    public async Task ClearSearchHistoryAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _searchHistory.ClearAsync(cancellationToken);
+            RaiseSearchHistoryInfo();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            SetError($"Couldn't clear the search history. {exception.Message}");
+        }
+    }
+
     partial void OnAutoplayEnabledChanged(bool value)
     {
         if (!_loadingSettings)
@@ -292,5 +322,11 @@ public partial class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasWatchHistory));
         OnPropertyChanged(nameof(WatchHistoryText));
+    }
+
+    private void RaiseSearchHistoryInfo()
+    {
+        OnPropertyChanged(nameof(HasSearchHistory));
+        OnPropertyChanged(nameof(SearchHistoryText));
     }
 }

@@ -48,6 +48,12 @@ public sealed partial class DiscoverPage : Page
             return;
         }
 
+        // Opening a search result makes the query worth remembering.
+        if (ViewModel.IsSearching)
+        {
+            _ = App.SearchHistory.RecordAsync(ViewModel.SearchText);
+        }
+
         Image? poster = null;
         if (sender is GridView gridView &&
             gridView.ContainerFromItem(meta) is GridViewItem container)

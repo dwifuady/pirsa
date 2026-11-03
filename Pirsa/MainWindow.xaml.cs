@@ -4,6 +4,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.ViewModels;
@@ -37,6 +38,13 @@ public sealed partial class MainWindow : Window
 
         RootFrame.Navigated += RootFrame_Navigated;
         RootFrame.Navigate(typeof(HomePage));
+
+        // The inner TextBox handles the click; still offer recent searches
+        // when the box itself is pressed.
+        AppSearchBox.AddHandler(
+            UIElement.PointerPressedEvent,
+            new PointerEventHandler(AppSearchBox_PointerPressed),
+            true);
     }
 
     private void RootFrame_Navigated(object sender, NavigationEventArgs e)
@@ -137,11 +145,50 @@ public sealed partial class MainWindow : Window
         {
             SubmitSearch(sender.Text);
         }
+
+        UpdateSearchSuggestions(sender.Text);
+    }
+
+    private void AppSearchBox_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        UpdateSearchSuggestions(AppSearchBox.Text);
+
+        if (AppSearchBox.ItemsSource is null)
+        {
+            return;
+        }
+
+        // Let the TextBox finish its own press handling before opening the list.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (AppSearchBox.ItemsSource is not null)
+            {
+                AppSearchBox.IsSuggestionListOpen = true;
+            }
+        });
     }
 
     private void AppSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
-        SubmitSearch(sender.Text, immediate: true);
+        // A suggestion list opened on click must not stay over the results.
+        AppSearchBox.IsSuggestionListOpen = false;
+
+        var text = (args.ChosenSuggestion as Services.SearchHistoryEntry)?.Query
+            ?? args.QueryText;
+
+        // Only submitted queries are remembered; live typing is not.
+        _ = App.SearchHistory.RecordAsync(text);
+        SubmitSearch(text, immediate: true);
+    }
+
+    /// <summary>
+    /// Offers recent searches, filtered by what is already typed. The list is
+    /// only assigned here, so it never opens on its own.
+    /// </summary>
+    private void UpdateSearchSuggestions(string? text)
+    {
+        var suggestions = App.SearchHistory.GetSuggestions(text);
+        AppSearchBox.ItemsSource = suggestions.Count > 0 ? suggestions : null;
     }
 
     /// <summary>
