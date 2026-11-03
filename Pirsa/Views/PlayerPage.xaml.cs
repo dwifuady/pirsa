@@ -104,6 +104,9 @@ public sealed partial class PlayerPage : Page
     private DispatcherTimer? _resumeHintTimer;
     private DispatcherTimer? _cachedWatchdog;
     private PlaybackSource? _cachedAttempt;
+    private StreamCacheSession? _streamCache;
+    private readonly CancellationTokenSource _streamCacheCts = new();
+    private int _playAttempt;
     private Task<bool>? _sourceDiscovery;
     private CancellationTokenSource? _nextEpisodeCts;
     private MetaItem? _seriesMeta;
@@ -956,6 +959,13 @@ public sealed partial class PlayerPage : Page
         _media = null;
         _currentSource = null;
 
+        var staleCache = _streamCache;
+        _streamCache = null;
+        if (staleCache is not null)
+        {
+            _ = staleCache.DisposeAsync().AsTask();
+        }
+
         _playing = false;
         _ended = false;
         _errorVisible = false;
@@ -1006,11 +1016,87 @@ public sealed partial class PlayerPage : Page
         PlaySource(source);
     }
 
-    private void PlaySource(PlaybackSource source)
+    private void PlaySource(PlaybackSource source) => _ = PlaySourceAsync(source);
+
+    /// <summary>
+    /// Resolves where the source should actually play from, then hands it to
+    /// VLC. On-demand files go through a local read-ahead cache so a seek is a
+    /// disk read instead of another trip to the provider; anything the cache
+    /// can't help with (live TV, HLS, servers without range support) plays
+    /// straight from the addon URL.
+    /// </summary>
+    private async Task PlaySourceAsync(PlaybackSource source)
     {
         if (_mediaPlayer is null || _libVlc is null)
         {
             _pendingSource = source;
+            return;
+        }
+
+        var attempt = ++_playAttempt;
+        var url = source.Url;
+        StreamCacheSession? cache = null;
+
+        if (ShouldCacheSource(source))
+        {
+            try
+            {
+                cache = await StreamCacheSession.TryCreateAsync(
+                    new Uri(source.Url), source.Headers, _streamCacheCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                // A broken cache must never stop a source from playing.
+                PlayerLog.Write($"cache setup failed, playing direct: {exception.Message}");
+            }
+
+            if (_disposed || attempt != _playAttempt)
+            {
+                if (cache is not null)
+                {
+                    await cache.DisposeAsync();
+                }
+
+                return;
+            }
+
+            if (cache is not null)
+            {
+                url = cache.Url;
+            }
+        }
+
+        PlaySourceCore(source, url, cache);
+    }
+
+    /// <summary>Only plain on-demand HTTP files benefit from the local cache.</summary>
+    private bool ShouldCacheSource(PlaybackSource source)
+    {
+        if (ViewModel.Request is null || IsLive(ViewModel.Request) || source.IsHls)
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(source.Url, UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https"))
+        {
+            return false;
+        }
+
+        var path = uri.AbsolutePath;
+        return !path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase) &&
+               !path.EndsWith(".m3u", StringComparison.OrdinalIgnoreCase) &&
+               !path.EndsWith(".mpd", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void PlaySourceCore(PlaybackSource source, string url, StreamCacheSession? cache)
+    {
+        if (_mediaPlayer is null || _libVlc is null)
+        {
             return;
         }
 
@@ -1046,13 +1132,20 @@ public sealed partial class PlayerPage : Page
             _media?.Dispose();
             _media = null;
 
+            var previousCache = _streamCache;
+            _streamCache = cache;
+            if (previousCache is not null)
+            {
+                _ = previousCache.DisposeAsync().AsTask();
+            }
+
             // The discarded source's tracks must not leak into the new menu.
             _audioTracks = new List<TrackDescriptionTile>();
             _selectedAudioTrackId = -1;
             _audioListDirty = true;
             UpdateAudioIndicator();
 
-            var media = new Media(_libVlc, new Uri(source.Url));
+            var media = new Media(_libVlc, new Uri(url));
             media.AddOption(":no-video-title-show");
             media.AddOption(":no-osd");
             media.AddOption($":network-caching={NetworkCachingFor(ViewModel.Request)}");
@@ -1061,7 +1154,8 @@ public sealed partial class PlayerPage : Page
                 $"play quality={source.QualityLabel} format={source.FormatLabel} " +
                 $"hls={source.IsHls} live={IsLive(ViewModel.Request)} " +
                 $"cache={NetworkCachingFor(ViewModel.Request)}ms resume={resume}ms " +
-                $"headers=[{string.Join(',', source.Headers?.Keys ?? [])}] url={source.Url}");
+                $"local={cache is not null} headers=[{string.Join(',', source.Headers?.Keys ?? [])}] " +
+                $"url={url}");
             _seekWatch.Restart();
 
             if (resume > 0)
@@ -1069,7 +1163,12 @@ public sealed partial class PlayerPage : Page
                 media.AddOption($":start-time={resume / 1000.0:0.###}");
             }
 
-            ApplyRequestHeaders(media, source.Headers);
+            // The proxy already attaches the provider headers upstream, and
+            // sending them to 127.0.0.1 would only confuse VLC's cache keys.
+            if (cache is null)
+            {
+                ApplyRequestHeaders(media, source.Headers);
+            }
             _media = media;
             _currentSource = source;
             _subtitleApplied = false;
@@ -2592,6 +2691,14 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer?.Stop();
         _cachedWatchdog?.Stop();
         _stallTimer.Stop();
+        _streamCacheCts.Cancel();
+        var cacheSession = _streamCache;
+        _streamCache = null;
+        if (cacheSession is not null)
+        {
+            _ = cacheSession.DisposeAsync().AsTask();
+        }
+
         _nextEpisodeCts?.Cancel();
         _nextEpisodeCts?.Dispose();
         _nextEpisodeCts = null;

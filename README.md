@@ -271,6 +271,8 @@ Pirsa/
   Services/StremioAddonClient.cs  Stremio addon HTTP client
   Services/AddonRegistry.cs       persisted addon list, manifest loading, add/remove
   Services/StreamDiscovery.cs     per-title stream fetch cache + details-page prefetch
+  Services/StreamCacheSession.cs  localhost read-ahead cache that makes seeks local
+  Services/PlayerLog.cs           per-session seek/buffering log for diagnosis
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
@@ -321,12 +323,23 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
-- **Seek cache** — VLC's demuxer cache is set to **3 seconds** for on-demand
+- **Local stream cache** — an on-demand HTTP source plays through a small
+  localhost server (`StreamCacheSession`) instead of straight from the addon.
+  Two download slots pull the file into a temp file under
+  `%LOCALAPPDATA%\Pirsa\cache` (up to 128 MB ahead of the furthest read) and the
+  player reads ranges from disk. Seeks into the downloaded window are then a
+  disk read — measured at 150–450 ms against a source only 1.5× faster than real
+  time, where the same seek takes 5 s over the network. A seek outside the window
+  redirects a slot and waits, exactly like playing direct. Live TV, HLS, and
+  servers that ignore byte ranges skip the cache and play direct. Temp files are
+  deleted when playback stops or the source changes, and leftovers older than six
+  hours are removed on the next run.
+- **Seek cache** — VLC's own demuxer cache is set to **3 seconds** for on-demand
   titles and **2.5 seconds** for live TV (kept shorter so it stays near the live
   edge). It is a jitter buffer, not a seek window: VLC answers every seek with a
-  fresh range request to the provider, and the buffering percentage is measured
-  against this target, so a bigger value means a *longer* wait after each skip. A
-  genuine ±10s seek window needs a local read-ahead cache in front of VLC.
+  fresh range request, and the buffering percentage is measured against this
+  target, so a bigger value means a *longer* wait after each skip. The local
+  stream cache above is what makes skips instant.
 - **Honest buffering** — the overlay follows the playhead, not VLC's buffering
   percentage. VLC reports "Playing" over a frozen picture while it climbs from
   0% to 100% over several seconds, and keeps reporting low percentages after a
