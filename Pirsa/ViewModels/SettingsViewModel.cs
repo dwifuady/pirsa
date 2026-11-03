@@ -95,6 +95,9 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>The rows shown after applying the search text and filter.</summary>
     public ObservableCollection<AddonEntry> VisibleAddons { get; } = [];
 
+    /// <summary>Short pinned-catalogs summary for the Home settings card.</summary>
+    public string HomeSummary => _registry.HomeSummary;
+
     [ObservableProperty]
     public partial string NewManifestUrl { get; set; }
 
@@ -214,6 +217,7 @@ public partial class SettingsViewModel : ObservableObject
             _loadingSettings = false;
 
             await _registry.LoadManifestsAsync(cancellationToken, includeDisabled: true);
+            OnPropertyChanged(nameof(HomeSummary));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -366,6 +370,7 @@ public partial class SettingsViewModel : ObservableObject
         await entry.LoadManifestAsync(cancellationToken);
         RaiseAddonInfo();
         RebuildVisible();
+        OnPropertyChanged(nameof(HomeSummary));
     }
 
     public void ClearFilters()
@@ -610,3 +615,4 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SearchHistoryText));
     }
 }
+

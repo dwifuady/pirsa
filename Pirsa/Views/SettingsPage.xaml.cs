@@ -72,6 +72,11 @@ public sealed partial class SettingsPage : Page
         await ViewModel.AddAsync();
     }
 
+    private void HomeSettings_Click(object sender, RoutedEventArgs e)
+    {
+        Frame.Navigate(typeof(HomeSettingsPage));
+    }
+
     private async void AddonEnabled_Toggled(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not AddonEntry entry ||

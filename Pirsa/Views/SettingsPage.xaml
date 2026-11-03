@@ -7,6 +7,7 @@
     xmlns:helpers="using:Pirsa.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:services="using:Pirsa.Services"
+    xmlns:vm="using:Pirsa.ViewModels"
     x:DefaultBindMode="OneWay"
     Background="{ThemeResource AppBackgroundBrush}"
     mc:Ignorable="d">
@@ -454,8 +455,61 @@
                     </Border>
                 </StackPanel>
 
+                <!--  Home  -->
+                <StackPanel Spacing="10">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Border
+                            Width="4"
+                            Height="20"
+                            Background="{ThemeResource BrandPrimaryBrush}"
+                            CornerRadius="2" />
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="Home" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.HomeSummary, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="6">
+                                <TextBlock
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    Text="Home catalog rows" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Text="Choose which addon catalogs appear on the Home screen as poster rows, and in what order — from any addon, in any mix."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Open Home catalog settings"
+                                Click="HomeSettings_Click"
+                                Content="Manage" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
                 <!--  Playback  -->
                 <StackPanel Spacing="10">
+
                     <StackPanel
                         Orientation="Horizontal"
                         Spacing="10"

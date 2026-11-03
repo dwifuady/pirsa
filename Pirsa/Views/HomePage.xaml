@@ -432,10 +432,12 @@
                                             VerticalAlignment="Center">
                                             <TextBlock
                                                 Style="{StaticResource SectionSubtitleTextBlockStyle}"
-                                                Text="{x:Bind AddonName}" />
+                                                Text="{x:Bind AddonName}"
+                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ShowAddonName)}" />
                                             <TextBlock
                                                 Style="{StaticResource SectionSubtitleTextBlockStyle}"
-                                                Text="·" />
+                                                Text="·"
+                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ShowAddonName)}" />
                                             <TextBlock
                                                 Style="{StaticResource SectionSubtitleTextBlockStyle}"
                                                 Text="{x:Bind CountLabel}" />

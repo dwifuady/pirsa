@@ -185,7 +185,7 @@ public sealed class StremioAddonClient
         HttpResponseMessage response;
         try
         {
-            response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            response = await SendAsync(url, cancellationToken);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -230,5 +230,46 @@ public sealed class StremioAddonClient
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Pirsa/1.0 (WinUI)");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         return client;
+    }
+
+    /// <summary>
+    /// Sends one request, retrying once on HTTP 429 and waiting the
+    /// Retry-After the server asked for (clamped) or a short fallback so
+    /// rate-limiting addons don't turn into permanent row failures.
+    /// </summary>
+    private static async Task<HttpResponseMessage> SendAsync(
+        Uri url,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            if ((int)response.StatusCode != 429 || attempt >= 1)
+            {
+                return response;
+            }
+
+            var delay = RetryDelay(response);
+            response.Dispose();
+            await Task.Delay(delay, cancellationToken);
+        }
+    }
+
+    private static TimeSpan RetryDelay(HttpResponseMessage response)
+    {
+        var delay = response.Headers.RetryAfter?.Delta;
+        if (delay is null && response.Headers.RetryAfter?.Date is { } date)
+        {
+            delay = date - DateTimeOffset.UtcNow;
+        }
+
+        if (delay is not { } wait || wait < TimeSpan.Zero)
+        {
+            wait = TimeSpan.FromSeconds(3);
+        }
+
+        // Never stall the UI feed for long; a slow limit is treated as a miss.
+        return wait > TimeSpan.FromSeconds(15) ? TimeSpan.FromSeconds(15) : wait;
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -233,6 +234,58 @@ public sealed class AddonCatalog
     /// (genre/year) or can be omitted (search, skip). Catalogs that need ids
     /// supplied by another addon (Cinemeta's lastVideosIds) are not browsable.
     /// </summary>
+    /// <summary>
+    /// The value Pirsa sends for a required genre extra: the current year when
+    /// offered (Cinemeta's "New" catalogs), otherwise the first option.
+    /// </summary>
+    [JsonIgnore]
+    public string? RequiredGenreValue
+    {
+        get
+        {
+            var required = RequiredGenre;
+            if (required is null)
+            {
+                return null;
+            }
+
+            var currentYear = DateTime.Now.Year.ToString(CultureInfo.InvariantCulture);
+            return required.Options.FirstOrDefault(option => option == currentYear)
+                ?? required.Options[0];
+        }
+    }
+
+    /// <summary>The row title shown on Home and in Settings, e.g. "Popular Movies".</summary>
+    [JsonIgnore]
+    public string DisplayName
+    {
+        get
+        {
+            var typePlural = TypePlural(Type);
+            var name = string.IsNullOrWhiteSpace(Name) ? typePlural : Name.Trim();
+
+            if (name.Contains(typePlural, StringComparison.OrdinalIgnoreCase) ||
+                name.Contains(Type, StringComparison.OrdinalIgnoreCase))
+            {
+                return name;
+            }
+
+            return $"{name} {typePlural}";
+        }
+    }
+
+    private static string TypePlural(string type) => type.ToLowerInvariant() switch
+    {
+        "movie" => "Movies",
+        "series" => "Series",
+        "tv" or "channel" => "Live TV",
+        "music" => "Music",
+        "podcast" => "Podcasts",
+        _ => string.IsNullOrWhiteSpace(type)
+            ? "Catalog"
+            : char.ToUpper(type[0], CultureInfo.InvariantCulture) + type[1..] + "s",
+    };
+
     [JsonIgnore]
     public bool IsBrowsable =>
         Extra.Where(extra => extra.IsRequired).All(extra =>

@@ -23,6 +23,10 @@ public partial class HomeViewModel : ObservableObject
     private readonly WatchProgressStore _watchProgress;
     private int _rowFailures;
 
+    /// <summary>One gate per addon host, so no addon is asked for more than two catalogs at once.</summary>
+    private static readonly Dictionary<string, SemaphoreSlim> HostGates = [];
+    private static readonly object HostGateLock = new();
+
     public HomeViewModel(AddonRegistry registry, WatchProgressStore watchProgress)
     {
         _registry = registry;
@@ -59,6 +63,10 @@ public partial class HomeViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string AddonName { get; set; }
+
+    /// <summary>False while every Home row comes from a bundled default addon.</summary>
+    [ObservableProperty]
+    public partial bool ShowSourceLabels { get; set; } = true;
 
     [ObservableProperty]
     public partial int HeroSlides { get; set; }
@@ -161,32 +169,66 @@ public partial class HomeViewModel : ObservableObject
             AddonName = entries.Count == 1 ? entries[0].Name : $"{entries.Count} addons";
             OnPropertyChanged(nameof(LoadingText));
 
+            // Home shows exactly the flat pinned list, in the order stored in
+            // Settings → Home. Unconfigured installs fall back to the default
+            // rule: bundled addons show everything, added ones nothing.
             var catalogRefs = new List<CatalogRef>();
-            var order = 0;
-            foreach (var entry in entries)
+            if (_registry.HomeConfigured)
             {
-                var manifest = entry.Manifest!;
-                if (!manifest.SupportsCatalog)
+                var order = 0;
+                foreach (var reference in _registry.HomeList)
                 {
-                    continue;
-                }
+                    var entry = _registry.GetEnabledEntry(reference.Url);
+                    var manifest = entry?.Manifest;
+                    if (entry is null || manifest?.SupportsCatalog != true)
+                    {
+                        continue;
+                    }
 
-                foreach (var catalog in manifest.Catalogs.Where(IsUsableCatalog))
+                    var catalog = manifest.Catalogs.FirstOrDefault(candidate =>
+                        candidate.Type.Equals(reference.Type, StringComparison.OrdinalIgnoreCase) &&
+                        candidate.Id.Equals(reference.Id, StringComparison.OrdinalIgnoreCase));
+                    if (catalog is not null && IsUsableCatalog(catalog))
+                    {
+                        catalogRefs.Add(new CatalogRef(entry, catalog, order++));
+                    }
+                }
+            }
+            else
+            {
+                var order = 0;
+                foreach (var entry in entries)
                 {
-                    catalogRefs.Add(new CatalogRef(entry, catalog, order++));
+                    var manifest = entry.Manifest!;
+                    if (!entry.IsDefault || !manifest.SupportsCatalog)
+                    {
+                        continue;
+                    }
+
+                    foreach (var catalog in manifest.Catalogs.Where(IsUsableCatalog))
+                    {
+                        catalogRefs.Add(new CatalogRef(entry, catalog, order++));
+                    }
                 }
             }
 
             if (catalogRefs.Count == 0)
             {
                 HasError = true;
-                ErrorMessage = "Your addons don't expose any catalog this app can browse.";
+                ErrorMessage = entries.Any(entry => entry.Manifest!.SupportsCatalog && !entry.IsDefault)
+                    ? "No catalogs are pinned to Home yet. Open Settings to choose which catalogs appear here."
+                    : "Your addons don't expose any catalog this app can browse.";
                 return;
             }
 
             var heroRef = PickHeroCatalog(catalogRefs);
-            var heroTitle = BuildCatalogTitle(heroRef.Catalog);
+            var heroTitle = heroRef.Catalog.DisplayName;
             var heroGenre = ResolveGenre(heroRef.Catalog, out _);
+
+            // Source labels are noise while Pirsa only shows its bundled
+            // default catalogs; naming the addon matters again once a
+            // user-added one contributes rows.
+            ShowSourceLabels = catalogRefs.Any(catalogRef => !catalogRef.Entry.IsDefault);
 
             var heroMetas = await heroRef.Entry.Client.GetCatalogAsync(
                 heroRef.Catalog,
@@ -207,7 +249,7 @@ public partial class HomeViewModel : ObservableObject
                 HeroItems.Add(new HeroItemViewModel(
                     meta,
                     rank++,
-                    $"{heroRef.Entry.Name} · {heroTitle}"));
+                    ShowSourceLabels ? $"{heroRef.Entry.Name} · {heroTitle}" : heroTitle));
             }
 
             HeroSlides = HeroItems.Count;
@@ -263,10 +305,20 @@ public partial class HomeViewModel : ObservableObject
         try
         {
             var genre = ResolveGenre(catalogRef.Catalog, out var subtitle);
-            var metas = await catalogRef.Entry.Client.GetCatalogAsync(
-                catalogRef.Catalog,
-                new CatalogQuery { Genre = genre },
-                cancellationToken);
+            var gate = HostGate(catalogRef.Entry.Host);
+            await gate.WaitAsync(cancellationToken);
+            IReadOnlyList<MetaItem> metas;
+            try
+            {
+                metas = await catalogRef.Entry.Client.GetCatalogAsync(
+                    catalogRef.Catalog,
+                    new CatalogQuery { Genre = genre },
+                    cancellationToken);
+            }
+            finally
+            {
+                gate.Release();
+            }
 
             if (metas.Count == 0)
             {
@@ -277,9 +329,10 @@ public partial class HomeViewModel : ObservableObject
 
             return new CatalogRowViewModel(
                 order,
-                BuildCatalogTitle(catalogRef.Catalog),
+                catalogRef.Catalog.DisplayName,
                 subtitle,
                 catalogRef.Entry.Name,
+                ShowSourceLabels,
                 metas.ToList());
         }
         catch (OperationCanceledException)
@@ -361,45 +414,24 @@ public partial class HomeViewModel : ObservableObject
     private static string? ResolveGenre(AddonCatalog catalog, out string? subtitle)
     {
         subtitle = null;
-        var required = catalog.RequiredGenre;
-        if (required is null)
-        {
-            return null;
-        }
-
-        var currentYear = DateTime.Now.Year.ToString(CultureInfo.InvariantCulture);
-        var value = required.Options.FirstOrDefault(option => option == currentYear)
-            ?? required.Options[0];
-
+        var value = catalog.RequiredGenreValue;
         subtitle = value;
         return value;
     }
 
-    private static string BuildCatalogTitle(AddonCatalog catalog)
+    private static SemaphoreSlim HostGate(string host)
     {
-        var typePlural = TypePlural(catalog.Type);
-        var name = string.IsNullOrWhiteSpace(catalog.Name) ? typePlural : catalog.Name.Trim();
-
-        if (name.Contains(typePlural, StringComparison.OrdinalIgnoreCase) ||
-            name.Contains(catalog.Type, StringComparison.OrdinalIgnoreCase))
+        lock (HostGateLock)
         {
-            return name;
+            if (!HostGates.TryGetValue(host, out var gate))
+            {
+                gate = new SemaphoreSlim(2, 2);
+                HostGates[host] = gate;
+            }
+
+            return gate;
         }
-
-        return $"{name} {typePlural}";
     }
-
-    private static string TypePlural(string type) => type.ToLowerInvariant() switch
-    {
-        "movie" => "Movies",
-        "series" => "Series",
-        "tv" or "channel" => "Live TV",
-        "music" => "Music",
-        "podcast" => "Podcasts",
-        _ => string.IsNullOrWhiteSpace(type)
-            ? "Catalog"
-            : char.ToUpper(type[0], CultureInfo.InvariantCulture) + type[1..] + "s",
-    };
 
     private static string Describe(Exception exception) => exception switch
     {
@@ -418,6 +450,7 @@ public sealed class CatalogRowViewModel(
     string title,
     string? subtitle,
     string addonName,
+    bool showAddonName,
     IReadOnlyList<MetaItem> items) : ObservableObject
 {
     public int Order { get; } = order;
@@ -427,6 +460,8 @@ public sealed class CatalogRowViewModel(
     public string? Subtitle { get; } = subtitle;
 
     public string AddonName { get; } = addonName;
+
+    public bool ShowAddonName { get; } = showAddonName;
 
     public IReadOnlyList<MetaItem> Items { get; } = items;
 

@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.HomeSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:Pirsa.ViewModels"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            MaxWidth="1000"
+            Margin="40,26,40,64"
+            HorizontalAlignment="Stretch">
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock
+                        FontSize="32"
+                        FontWeight="SemiBold"
+                        Style="{StaticResource TitleTextBlockStyle}"
+                        Text="Home" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Text="Choose which catalogs appear on the Home screen as poster rows, and in what order. Rows can come from any addon, in any mix. Every catalog stays available in Discover and Search no matter what is pinned here."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <ProgressRing
+                    Width="16"
+                    Height="16"
+                    HorizontalAlignment="Left"
+                    IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+
+                <!--  On Home  -->
+                <StackPanel Spacing="10">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Border
+                            Width="4"
+                            Height="20"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource BrandPrimaryBrush}"
+                            CornerRadius="2" />
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="{x:Bind ViewModel.PinnedLabel, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="Order here is top-to-bottom on Home. Use the arrows to reorder."
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasPinned), Mode=OneWay}" />
+
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Pinned}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="8" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:HomePinItemViewModel">
+                                <Border
+                                    Padding="16,14"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="12">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel
+                                            Orientation="Horizontal"
+                                            Spacing="10"
+                                            VerticalAlignment="Center">
+                                            <FontIcon
+                                                FontSize="14"
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Glyph="&#xE7C9;"
+                                                ToolTipService.ToolTip="Row on the Home feed" />
+                                            <StackPanel Spacing="2">
+                                                <StackPanel
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        FontSize="14"
+                                                        FontWeight="SemiBold"
+                                                        MaxLines="1"
+                                                        Text="{x:Bind Title}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        VerticalAlignment="Center" />
+                                                    <Border
+                                                        Padding="7,2"
+                                                        VerticalAlignment="Center"
+                                                        Background="{ThemeResource BrandSubtleBrush}"
+                                                        CornerRadius="4"
+                                                        Visibility="{x:Bind helpers:XamlHelpers.Visible(HasValueLine)}">
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="{ThemeResource BrandPrimaryBrush}"
+                                                            Text="{x:Bind ValueLine}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Text="{x:Bind AddonName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            HorizontalAlignment="Right"
+                                            Orientation="Horizontal"
+                                            Spacing="4"
+                                            VerticalAlignment="Center">
+                                            <Button
+                                                Width="34"
+                                                Height="32"
+                                                MinWidth="0"
+                                                Padding="0"
+                                                AutomationProperties.Name="Move row up"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Click="MovePinUp_Click"
+                                                CornerRadius="6"
+                                                IsEnabled="{x:Bind CanMoveUp, Mode=OneWay}"
+                                                ToolTipService.ToolTip="Move up">
+                                                <FontIcon
+                                                    FontSize="13"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Glyph="&#xE70E;" />
+                                            </Button>
+                                            <Button
+                                                Width="34"
+                                                Height="32"
+                                                MinWidth="0"
+                                                Padding="0"
+                                                AutomationProperties.Name="Move row down"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Click="MovePinDown_Click"
+                                                CornerRadius="6"
+                                                IsEnabled="{x:Bind CanMoveDown, Mode=OneWay}"
+                                                ToolTipService.ToolTip="Move down">
+                                                <FontIcon
+                                                    FontSize="13"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Glyph="&#xE70D;" />
+                                            </Button>
+                                            <Button
+                                                Width="34"
+                                                Height="32"
+                                                MinWidth="0"
+                                                Padding="0"
+                                                AutomationProperties.Name="Remove from Home"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Click="Unpin_Click"
+                                                CornerRadius="6"
+                                                ToolTipService.ToolTip="Remove from Home">
+                                                <FontIcon
+                                                    FontSize="15"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Glyph="&#xE74D;" />
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border
+                        Padding="24"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasNoPinned), Mode=OneWay}">
+                        <StackPanel Spacing="6">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="Nothing pinned" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="The Home screen shows only your Continue watching rail right now. Add catalogs below."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  Available catalogs  -->
+                <StackPanel Spacing="10">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Border
+                            Width="4"
+                            Height="20"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource BrandPrimaryBrush}"
+                            CornerRadius="2" />
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="{x:Bind ViewModel.AvailableLabel, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.Available}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="10" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:HomeCatalogGroupViewModel">
+                                <Border
+                                    Padding="18"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="12">
+                                    <StackPanel Spacing="12">
+                                        <StackPanel
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            VerticalAlignment="Center">
+                                            <TextBlock
+                                                FontSize="16"
+                                                FontWeight="SemiBold"
+                                                Text="{x:Bind Name}" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Text="{x:Bind Host}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <ItemsControl ItemsSource="{x:Bind Items}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:HomeCatalogOptionViewModel">
+                                                    <Grid ColumnSpacing="12" Padding="0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel
+                                                            Orientation="Horizontal"
+                                                            Spacing="10"
+                                                            VerticalAlignment="Center">
+                                                            <TextBlock
+                                                                FontSize="14"
+                                                                MaxLines="1"
+                                                                Text="{x:Bind Title}"
+                                                                TextTrimming="CharacterEllipsis"
+                                                                VerticalAlignment="Center" />
+                                                            <Border
+                                                                Padding="7,2"
+                                                                VerticalAlignment="Center"
+                                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                                CornerRadius="4"
+                                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(HasValueLine)}">
+                                                                <TextBlock
+                                                                    FontSize="11"
+                                                                    FontWeight="SemiBold"
+                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                    Text="{x:Bind ValueLine}" />
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <Button
+                                                            Grid.Column="1"
+                                                            VerticalAlignment="Center"
+                                                            AutomationProperties.Name="Pin on Home"
+
+                                                            Click="Pin_Click"
+                                                            Content="Pin on Home" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border
+                        Padding="24"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasNoAvailable), Mode=OneWay}">
+                        <StackPanel Spacing="6">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="Everything is pinned" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="Every catalog your enabled addons provide is already on Home. Add another catalog addon in Settings to get more."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

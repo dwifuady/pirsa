@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Pirsa.Models;
 
@@ -366,6 +367,7 @@ public sealed class AddonRegistry
             throw new StremioException("That manifest doesn't expose any catalogs or streams.");
         }
 
+        entry.LoadManifestAsync(cancellationToken);
         Entries.Add(entry);
         Attach(entry);
         Revision++;
@@ -406,6 +408,200 @@ public sealed class AddonRegistry
         return true;
     }
 
+    /// <summary>
+    /// The pinned Home feed in display order, across all addons. A flat list
+    /// is what makes interleaving rows from different addons possible. An
+    /// empty list with <see cref="HomeConfigured"/> false means unconfigured:
+    /// default addons show every manifest catalog on Home, others none.
+    /// </summary>
+    public List<HomeRef> HomeList { get; } = [];
+
+    public bool HomeConfigured { get; private set; }
+
+    /// <summary>Short summary for the Settings card, e.g. "5 catalogs pinned".</summary>
+    public string HomeSummary
+    {
+        get
+        {
+            if (!HomeConfigured)
+            {
+                return "Default catalogs";
+            }
+
+            return HomeList.Count switch
+            {
+                0 => "Nothing pinned",
+                1 => "1 catalog pinned",
+                var count => $"{count} catalogs pinned",
+            };
+        }
+    }
+
+    /// <summary>Whether one manifest catalog is pinned to the Home feed.</summary>
+    public bool IsCatalogOnHome(AddonEntry entry, AddonCatalog catalog) =>
+        !HomeConfigured
+            ? entry.IsDefault
+            : FindHomeRef(entry.ManifestUrl, catalog.Type, catalog.Id) is not null;
+
+    private HomeRef? FindHomeRef(string url, string type, string id)
+    {
+        foreach (var reference in HomeList)
+        {
+            if (UrlEquals(reference.Url, url) &&
+                reference.Type.Equals(type, StringComparison.OrdinalIgnoreCase) &&
+                reference.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+            {
+                return reference;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Seeds the flat pinned list with today's unconfigured default behavior
+    /// (the bundled default addons' catalogs). Runs before the first
+    /// mutation, so editing one catalog preserves everything else the user
+    /// already sees on Home.
+    /// </summary>
+    private void EnsureHomeList()
+    {
+        if (HomeConfigured)
+        {
+            return;
+        }
+
+        foreach (var entry in Entries)
+        {
+            if (!entry.IsEnabled || !entry.IsDefault ||
+                entry.Manifest?.SupportsCatalog != true)
+            {
+                continue;
+            }
+
+            foreach (var catalog in entry.Manifest.Catalogs)
+            {
+                HomeList.Add(new HomeRef
+                {
+                    Url = entry.ManifestUrl,
+                    Type = catalog.Type,
+                    Id = catalog.Id,
+                });
+            }
+        }
+
+        HomeConfigured = true;
+    }
+
+    /// <summary>
+    /// Pins or unpins one catalog on Home. The pin list is global, so a newly
+    /// pinned catalog joins the end of the Home order whichever addon owns it.
+    /// </summary>
+    public async Task SetHomeCatalogAsync(
+        AddonEntry entry,
+        string type,
+        string id,
+        bool on,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+
+        if (on)
+        {
+            if (FindHomeRef(entry.ManifestUrl, type, id) is not null)
+            {
+                return;
+            }
+
+            EnsureHomeList();
+            HomeList.Add(new HomeRef { Url = entry.ManifestUrl, Type = type, Id = id });
+        }
+        else
+        {
+            if (HomeConfigured && FindHomeRef(entry.ManifestUrl, type, id) is null)
+            {
+                return;
+            }
+
+            // Unpinning while unconfigured materializes the current default
+            // feed first, then removes this catalog from it.
+            EnsureHomeList();
+            var existing = FindHomeRef(entry.ManifestUrl, type, id);
+            if (existing is null)
+            {
+                return;
+            }
+
+            HomeList.Remove(existing);
+        }
+
+        Revision++;
+        await RaiseChangedAsync(cancellationToken);
+    }
+
+    /// <summary>Moves one pinned catalog one row up (-1) or down (+1) globally.</summary>
+    public async Task<bool> MoveHomeCatalogAsync(
+        AddonEntry entry,
+        string type,
+        string id,
+        int offset,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+        EnsureHomeList();
+
+        var index = HomeList.FindIndex(reference =>
+            UrlEquals(reference.Url, entry.ManifestUrl) &&
+            reference.Type.Equals(type, StringComparison.OrdinalIgnoreCase) &&
+            reference.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        var target = index + offset;
+        if (index < 0 || target < 0 || target >= HomeList.Count)
+        {
+            return false;
+        }
+
+        var reference = HomeList[index];
+        HomeList.RemoveAt(index);
+        HomeList.Insert(target, reference);
+        Revision++;
+        await RaiseChangedAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>
+    /// Persists a new global pin order (after a drag-reorder in Home
+    /// settings). Refs missing from the supplied list keep their old
+    /// position, appended at the end.
+    /// </summary>
+    public async Task SetHomeOrderAsync(
+        IReadOnlyList<HomeRef> order,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+        EnsureHomeList();
+
+        var missed = HomeList.Where(current =>
+            !order.Any(ordered =>
+                UrlEquals(ordered.Url, current.Url) &&
+                ordered.Type.Equals(current.Type, StringComparison.OrdinalIgnoreCase) &&
+                ordered.Id.Equals(current.Id, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        HomeList.Clear();
+        foreach (var reference in order)
+        {
+            HomeList.Add(reference);
+        }
+
+        foreach (var reference in missed)
+        {
+            HomeList.Add(reference);
+        }
+
+        Revision++;
+        await RaiseChangedAsync(cancellationToken);
+    }
+
     /// <summary>Removes every entry and restores the bundled addons in their default order.</summary>
     public async Task RestoreDefaultsAsync(CancellationToken cancellationToken = default)
     {
@@ -417,6 +613,8 @@ public sealed class AddonRegistry
         }
 
         Entries.Clear();
+        HomeList.Clear();
+        HomeConfigured = false;
 
         foreach (var manifestUrl in DefaultManifestUrls)
         {
@@ -440,13 +638,14 @@ public sealed class AddonRegistry
     {
         var path = GetStoragePath();
         List<AddonRecord> records;
+        List<HomeRef>? homeList = null;
         var shouldSave = false;
 
         try
         {
             if (File.Exists(path))
             {
-                records = ParseStore(await File.ReadAllTextAsync(path));
+                (records, homeList) = ParseStore(await File.ReadAllTextAsync(path), DefaultManifestUrls);
             }
             else
             {
@@ -477,7 +676,45 @@ public sealed class AddonRegistry
             Attach(entry);
         }
 
-        RefreshOrder();
+        // New format: a flat ordered pin list. Previous format: per-addon pin
+        // configs, migrated here in addon order. Either way the presence of
+        // pins means the user tailored Home; otherwise the default rule still
+        // applies (bundled addons show everything).
+        if (homeList is not null)
+        {
+            foreach (var reference in homeList)
+            {
+                if (string.IsNullOrWhiteSpace(reference.Type) || string.IsNullOrWhiteSpace(reference.Id))
+                {
+                    continue;
+                }
+
+                HomeList.Add(reference);
+            }
+
+            HomeConfigured = true;
+        }
+        else
+        {
+            foreach (var record in records)
+            {
+                if (record.LegacyHomeCatalogs is not { Count: > 0 } legacy)
+                {
+                    continue;
+                }
+
+                HomeConfigured = true;
+                foreach (var reference in legacy)
+                {
+                    HomeList.Add(new HomeRef
+                    {
+                        Url = reference.Url,
+                        Type = reference.Type,
+                        Id = reference.Id,
+                    });
+                }
+            }
+        }
 
         if (shouldSave)
         {
@@ -486,10 +723,14 @@ public sealed class AddonRegistry
     }
 
     /// <summary>
-    /// Accepts both the current format ({ version, addons: [...] }) and the
-    /// original bare array of manifest URLs.
+    /// Accepts the pinned Home feed ("home") plus the current format
+    /// ({ version, addons: [...] }) and the original bare array of manifest
+    /// URLs. Per-addon pin configs written by intermediate builds migrate
+    /// into the flat list in addon order.
     /// </summary>
-    private static List<AddonRecord> ParseStore(string json)
+    private static (List<AddonRecord>, List<HomeRef>?) ParseStore(
+        string json,
+        string[] defaultUrls)
     {
         var records = new List<AddonRecord>();
         using var document = JsonDocument.Parse(json);
@@ -504,14 +745,20 @@ public sealed class AddonRegistry
                 }
             }
 
-            return records;
+            return (records, null);
         }
 
-        if (document.RootElement.ValueKind != JsonValueKind.Object ||
-            !TryGetProperty(document.RootElement, "addons", out var addons) ||
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return (records, null);
+        }
+
+        var home = ParseHomeKeys(document.RootElement, defaultUrls);
+
+        if (!TryGetProperty(document.RootElement, "addons", out var addons) ||
             addons.ValueKind != JsonValueKind.Array)
         {
-            return records;
+            return (records, home);
         }
 
         foreach (var element in addons.EnumerateArray())
@@ -531,10 +778,82 @@ public sealed class AddonRegistry
 
             var enabled = !TryGetProperty(element, "enabled", out var flag) ||
                           flag.ValueKind != JsonValueKind.False;
-            records.Add(new AddonRecord { Url = url.GetString() ?? "", Enabled = enabled });
+            records.Add(new AddonRecord
+            {
+                Url = url.GetString() ?? "",
+                Enabled = enabled,
+                LegacyHomeCatalogs = ParseLegacyHomeCatalogs(element),
+            });
         }
 
-        return records;
+        return (records, home);
+    }
+
+    private static List<HomeRef>? ParseHomeKeys(JsonElement root, string[] defaultUrls)
+    {
+        List<HomeRef>? home = null;
+
+        if (TryGetProperty(root, "home", out var pinned) &&
+            pinned.ValueKind == JsonValueKind.Array)
+        {
+            home = [];
+            foreach (var element in pinned.EnumerateArray())
+            {
+                if (element.ValueKind == JsonValueKind.Object &&
+                    TryGetProperty(element, "url", out var url) &&
+                    TryGetProperty(element, "type", out var type) &&
+                    TryGetProperty(element, "id", out var id) &&
+                    url.ValueKind == JsonValueKind.String)
+                {
+                    home.Add(new HomeRef
+                    {
+                        Url = url.GetString() ?? "",
+                        Type = type.GetString() ?? "",
+                        Id = id.GetString() ?? "",
+                    });
+                }
+            }
+        }
+
+        return home;
+    }
+
+    private static List<HomeRef>? ParseLegacyHomeCatalogs(JsonElement element)
+    {
+        if (!TryGetProperty(element, "homeCatalogs", out var configs) ||
+            configs.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var legacy = new List<HomeRef>();
+        foreach (var config in configs.EnumerateArray())
+        {
+            if (config.ValueKind != JsonValueKind.Object ||
+                !TryGetProperty(config, "type", out var type) ||
+                !TryGetProperty(config, "id", out var id) ||
+                type.ValueKind != JsonValueKind.String ||
+                !TryGetProperty(config, "onHome", out var onHome) ||
+                onHome.ValueKind != JsonValueKind.True)
+            {
+                continue;
+            }
+
+            if (!TryGetProperty(element, "url", out var url) ||
+                url.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            legacy.Add(new HomeRef
+            {
+                Url = url.GetString() ?? "",
+                Type = type.GetString() ?? "",
+                Id = id.GetString() ?? "",
+            });
+        }
+
+        return legacy.Count > 0 ? legacy : null;
     }
 
     private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
@@ -614,6 +933,9 @@ public sealed class AddonRegistry
                         Enabled = entry.IsEnabled,
                     })
                     .ToList(),
+                Home = HomeConfigured
+                    ? [.. HomeList]
+                    : [],
             };
 
             await File.WriteAllTextAsync(
@@ -668,9 +990,12 @@ public sealed class AddonRegistry
 
     private sealed class AddonStore
     {
-        public int Version { get; set; } = 2;
+        public int Version { get; set; } = 3;
 
         public List<AddonRecord> Addons { get; set; } = [];
+
+        /// <summary>The flat pinned Home feed in display order. Written only once tailored.</summary>
+        public List<HomeRef> Home { get; set; } = [];
     }
 
     private sealed class AddonRecord
@@ -678,5 +1003,18 @@ public sealed class AddonRegistry
         public string Url { get; set; } = "";
 
         public bool Enabled { get; set; } = true;
+
+        [JsonIgnore]
+        public List<HomeRef>? LegacyHomeCatalogs { get; set; }
     }
+}
+
+/// <summary>One catalog pinned on the Home feed, at one position in the order.</summary>
+public sealed class HomeRef
+{
+    public string Url { get; set; } = "";
+
+    public string Type { get; set; } = "";
+
+    public string Id { get; set; } = "";
 }
