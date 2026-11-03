@@ -51,15 +51,17 @@ and live TV. Pirsa hosts no content: it plays what the third-party
   searches (and searches you open a result from) are remembered locally and
   offered as suggestions when the search box is focused, filtered as you type.
   Clear them in Settings → Search.
-- **Details** — full-bleed backdrop, poster, overview, fact sheet, IMDb link,
-  and season/episode browsing. Metadata follows your addon priority order: the
-  first enabled metadata addon that understands the title's id supplies it,
-  with the next addon as a fallback. Custom id prefixes only match the addon
-  that declared them. Posters animate into the details hero with a native
-  connected animation. Opening a title also **warms stream discovery in the
-  background** for the episode Play would start (and for an episode you hover),
-  so Play shows the source list — or starts playing — without waiting for the
-  addons.
+- **Details** — full-bleed backdrop with a slow drift, poster, overview, fact
+  sheet, IMDb link, and season/episode browsing. The drift pauses while the
+  hero is scrolled away, and never starts when Windows is set to reduce motion
+  or a High Contrast theme is active. Metadata follows your addon priority
+  order: the first enabled metadata addon that understands the title's id
+  supplies it, with the next addon as a fallback. Custom id prefixes only match
+  the addon that declared them. Posters animate into the details hero with a
+  native connected animation. Opening a title also **warms stream discovery in
+  the background** for the episode Play would start (and for an episode you
+  hover), so Play shows the source list — or starts playing — without waiting
+  for the addons.
 - **Settings → Addons** — add, remove, enable/disable, and reorder Stremio
   addon manifest URLs. A fresh install contains **Cinemeta and OpenSubtitles
   v3**; the app is fully usable without any stream addon, and stream sources
