@@ -55,6 +55,13 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private static readonly TimeSpan StallThreshold = TimeSpan.FromMilliseconds(1200);
 
+    /// <summary>
+    /// The last seconds of a title are not watched through a spinner. VLC stops
+    /// advancing the clock while the final buffered frames drain, so the playhead
+    /// looks frozen at ~99% even though the picture is fine.
+    /// </summary>
+    private const long EndOfTitleGraceMs = 4000;
+
     private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
     private readonly DispatcherTimer _chromeTimer;
     private readonly DispatcherTimer _stallTimer;
@@ -1716,7 +1723,10 @@ public sealed partial class PlayerPage : Page
             _advanceUtc = DateTime.UtcNow;
         }
 
-        var stalled = DateTime.UtcNow - _advanceUtc > StallThreshold;
+        // Draining the last frames is not a stall, whatever the clock says.
+        var length = _mediaPlayer.Length;
+        var draining = length > 0 && position >= length - EndOfTitleGraceMs;
+        var stalled = !draining && DateTime.UtcNow - _advanceUtc > StallThreshold;
 
         if (stalled && !_stallOverlayVisible)
         {

@@ -701,25 +701,10 @@ public sealed class StreamCacheSession : IAsyncDisposable
 
     private static string CreateCacheFile(Uri source)
     {
-        var directory = Directory.CreateDirectory(
-            System.IO.Path.Combine(CacheRoot(), "cache"));
+        var directory = Directory.CreateDirectory(LocalPaths.StreamCache);
 
         return System.IO.Path.Combine(
             directory.FullName, $"{Guid.NewGuid():N}{ExtensionFor(source)}");
-    }
-
-    private static string CacheRoot()
-    {
-        try
-        {
-            return Windows.Storage.ApplicationData.Current.LocalFolder.Path;
-        }
-        catch
-        {
-            return System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa");
-        }
     }
 
     /// <summary>Removes files a crashed or killed session left behind.</summary>
@@ -735,8 +720,7 @@ public sealed class StreamCacheSession : IAsyncDisposable
             _cleaned = true;
             try
             {
-                var directory = new DirectoryInfo(
-                    System.IO.Path.Combine(CacheRoot(), "cache"));
+                var directory = new DirectoryInfo(LocalPaths.StreamCache);
 
                 if (!directory.Exists)
                 {

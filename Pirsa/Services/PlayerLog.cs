@@ -97,16 +97,12 @@ public static class PlayerLog
     {
         try
         {
-            return System.IO.Path.Combine(
-                Windows.Storage.ApplicationData.Current.LocalFolder.Path,
-                "player.log");
+            Directory.CreateDirectory(LocalPaths.Root);
         }
         catch
         {
-            return System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Pirsa",
-                "player.log");
         }
+
+        return LocalPaths.PlayerLog;
     }
 }

@@ -273,6 +273,7 @@ Pirsa/
   Services/StreamDiscovery.cs     per-title stream fetch cache + details-page prefetch
   Services/StreamCacheSession.cs  localhost read-ahead cache that makes seeks local
   Services/PlayerLog.cs           per-session seek/buffering log for diagnosis
+  Services/LocalPaths.cs          %LOCALAPPDATA%\Pirsa paths, same for packaged and dev runs
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
@@ -347,7 +348,9 @@ The Pirsa mark is generated from `assets/icon.svg`; icon and tile PNGs live in
   percentage. VLC reports "Playing" over a frozen picture while it climbs from
   0% to 100% over several seconds, and keeps reporting low percentages after a
   seek that cost nothing. The overlay now appears only after the position has
-  stood still for 1.2 seconds, and disappears the moment frames move again.
+  stood still for 1.2 seconds, and disappears the moment frames move again. The
+  last four seconds of a title never show a spinner: VLC stops advancing the
+  clock while the final buffered frames drain, which looked like a stall at 99%.
 - **Player log** — `%LOCALAPPDATA%\Pirsa\player.log` records every seek, how long
   the playhead stayed frozen afterwards, the source format and options, and
   VLC's own stream-layer messages. It is reset when the player opens, capped at
