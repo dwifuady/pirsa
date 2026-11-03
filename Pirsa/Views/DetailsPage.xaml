@@ -182,6 +182,36 @@
                                     </StackPanel>
                                 </HyperlinkButton>
                             </StackPanel>
+
+                            <Border
+                                MaxWidth="760"
+                                Padding="14,10"
+                                HorizontalAlignment="Left"
+                                Background="{ThemeResource HeroBadgeBackgroundBrush}"
+                                CornerRadius="8"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasStreamAddonHint), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="13"
+                                        Foreground="{ThemeResource HeroBadgeForegroundBrush}"
+                                        Glyph="&#xE7BA;" />
+                                    <TextBlock
+                                        MaxWidth="520"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource HeroBadgeForegroundBrush}"
+                                        Style="{StaticResource HeroMetaTextBlockStyle}"
+                                        Text="{x:Bind ViewModel.StreamAddonHintText, Mode=OneWay}"
+                                        TextWrapping="Wrap" />
+                                    <HyperlinkButton
+                                        Padding="0"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Manage addons"
+                                        Click="ManageAddons_Click"
+                                        Content="Manage addons"
+                                        Style="{StaticResource BrandHyperlinkButtonStyle}" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Grid>
                 </Grid>

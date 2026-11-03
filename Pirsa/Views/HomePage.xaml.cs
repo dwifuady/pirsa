@@ -151,16 +151,27 @@ public sealed partial class HomePage : Page
         }
     }
 
-    private void HeroPlay_Click(object sender, RoutedEventArgs e)
+    private async void HeroPlay_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is HeroItemViewModel hero)
+        if ((sender as FrameworkElement)?.DataContext is not HeroItemViewModel hero)
         {
-            Frame.Navigate(
-                typeof(PlayerPage),
-                PlaybackRequest.ForMeta(hero.Meta),
-                new DrillInNavigationTransitionInfo());
+            return;
         }
+
+        // Same guard as the details page: no stream addon means setup, not a
+        // player error screen.
+        if (!await StreamSetupPrompt.EnsurePlayableAsync(XamlRoot, OpenAddonSettings))
+        {
+            return;
+        }
+
+        Frame.Navigate(
+            typeof(PlayerPage),
+            PlaybackRequest.ForMeta(hero.Meta),
+            new DrillInNavigationTransitionInfo());
     }
+
+    private void OpenAddonSettings() => Frame.Navigate(typeof(SettingsPage));
 
     private void Continue_ItemClick(object sender, ItemClickEventArgs e)
     {

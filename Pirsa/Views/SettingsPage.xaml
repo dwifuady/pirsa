@@ -66,7 +66,7 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Add a Stremio addon manifest URL. Catalog resources appear on Home and Discover; stream resources power the player. Only Cinemeta is included by default."
+                        Text="Add a Stremio addon manifest URL. Catalog resources appear on Home and Discover; stream resources power the player. Pirsa ships with Cinemeta and OpenSubtitles v3 only — no stream addon is bundled, so add one you trust to play."
                         TextWrapping="Wrap" />
 
                     <Border
@@ -646,7 +646,12 @@
                             <TextBlock
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Style="{StaticResource BodyTextBlockStyle}"
-                                Text="A native Stremio addon browser for Windows."
+                                Text="An unofficial, Stremio-compatible addon client for Windows. Not affiliated with Stremio."
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="Pirsa hosts no content and ships without a stream addon. Catalogs, metadata, subtitles, and sources come from third-party addons you add yourself — only add addons you trust and are allowed to use. Nothing is proxied or cached."
                                 TextWrapping="Wrap" />
                             <TextBlock
                                 FontSize="12"

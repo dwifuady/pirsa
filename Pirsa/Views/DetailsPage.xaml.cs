@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
+using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.ViewModels;
 
@@ -45,6 +46,7 @@ public sealed partial class DetailsPage : Page
         }
 
         // Show the catalog preview immediately, then refresh with full meta.
+        ViewModel.Attach();
         ViewModel.Meta = preview;
         PreparePosterAnimation();
 
@@ -62,6 +64,7 @@ public sealed partial class DetailsPage : Page
         _posterAnimation = null;
         _warmTimer.Stop();
         _warmRequest = null;
+        ViewModel.Detach();
     }
 
     private void PreparePosterAnimation()
@@ -95,9 +98,14 @@ public sealed partial class DetailsPage : Page
         _posterAnimation = null;
     }
 
-    private void Play_Click(object sender, RoutedEventArgs e)
+    private async void Play_Click(object sender, RoutedEventArgs e)
     {
         if (BuildPlayRequest() is not { } request)
+        {
+            return;
+        }
+
+        if (!await StreamSetupPrompt.EnsurePlayableAsync(XamlRoot, OpenAddonSettings))
         {
             return;
         }
@@ -108,10 +116,15 @@ public sealed partial class DetailsPage : Page
             new DrillInNavigationTransitionInfo());
     }
 
-    private void Episode_Click(object sender, RoutedEventArgs e)
+    private async void Episode_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.Meta is not { } series ||
             ((FrameworkElement)sender).DataContext is not MetaVideo episode)
+        {
+            return;
+        }
+
+        if (!await StreamSetupPrompt.EnsurePlayableAsync(XamlRoot, OpenAddonSettings))
         {
             return;
         }
@@ -121,6 +134,10 @@ public sealed partial class DetailsPage : Page
             PlaybackRequest.ForEpisode(series, episode),
             new DrillInNavigationTransitionInfo());
     }
+
+    private void OpenAddonSettings() => Frame.Navigate(typeof(SettingsPage));
+
+    private void ManageAddons_Click(object sender, RoutedEventArgs e) => OpenAddonSettings();
 
     /// <summary>
     /// The request the Play button uses: continue a saved movie or episode when
@@ -140,6 +157,12 @@ public sealed partial class DetailsPage : Page
 
     private void WarmPlaybackTarget()
     {
+        // Nothing to warm when no addon can produce a stream.
+        if (ViewModel.StreamAddonsKnown && !ViewModel.HasEnabledStreamAddon)
+        {
+            return;
+        }
+
         if (BuildPlayRequest() is { } request)
         {
             App.StreamDiscovery.Warm(request);

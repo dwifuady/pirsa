@@ -723,6 +723,10 @@
                             Click="NextSource_Click"
                             Content="Next source" />
                         <Button Click="Back_Click" Content="Back" />
+                        <Button
+                            AutomationProperties.Name="Manage addons"
+                            Click="ManageAddons_Click"
+                            Content="Manage addons" />
                     </StackPanel>
                 </StackPanel>
             </Border>

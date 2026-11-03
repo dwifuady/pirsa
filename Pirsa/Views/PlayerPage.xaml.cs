@@ -1522,6 +1522,13 @@ public sealed partial class PlayerPage : Page
 
     private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
 
+    /// <summary>
+    /// The player can be reached without the details page (resume, up next,
+    /// deep link), so a missing or broken addon still has a way forward.
+    /// </summary>
+    private void ManageAddons_Click(object sender, RoutedEventArgs e) =>
+        Frame.Navigate(typeof(SettingsPage));
+
     private void GoBack()
     {
         if (Frame.CanGoBack)

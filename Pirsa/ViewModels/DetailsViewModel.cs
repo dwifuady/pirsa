@@ -15,8 +15,10 @@ public partial class DetailsViewModel : ObservableObject
     private readonly AddonRegistry _registry;
     private readonly WatchProgressStore _watchProgress;
     private readonly WatchlistStore _watchlist;
+    private readonly EventHandler _registryChangedHandler;
     private string _type = "";
     private string _id = "";
+    private bool _streamAddonsKnown;
 
     public DetailsViewModel(
         AddonRegistry registry,
@@ -27,7 +29,20 @@ public partial class DetailsViewModel : ObservableObject
         _watchProgress = watchProgress;
         _watchlist = watchlist;
         ErrorMessage = "";
+
+        _registryChangedHandler = (_, _) => RaiseStreamAddonInfo();
+        Attach();
     }
+
+    /// <summary>Subscribes to the shared addon list (also after a cached navigation).</summary>
+    public void Attach()
+    {
+        _registry.Changed -= _registryChangedHandler;
+        _registry.Changed += _registryChangedHandler;
+    }
+
+    /// <summary>Stops listening to the shared addon list when the page goes away.</summary>
+    public void Detach() => _registry.Changed -= _registryChangedHandler;
 
     public ObservableCollection<MetaFact> Facts { get; } = [];
 
@@ -77,6 +92,25 @@ public partial class DetailsViewModel : ObservableObject
         { IsSeries: true } entry => $"Resume {entry.EpisodeTag}",
         { } entry => $"Resume {WatchProgressEntry.FormatPosition(entry.PositionMs)}",
     };
+
+    /// <summary>True once the enabled addon manifests have been inspected.</summary>
+    public bool StreamAddonsKnown => _streamAddonsKnown;
+
+    /// <summary>At least one enabled addon declares a stream resource.</summary>
+    public bool HasEnabledStreamAddon =>
+        _registry.EnabledEntries.Any(entry => entry.HasStreams);
+
+    /// <summary>A configured stream addon exists but is turned off.</summary>
+    public bool HasDisabledStreamAddon =>
+        !HasEnabledStreamAddon &&
+        _registry.Entries.Any(entry => !entry.IsEnabled && entry.HasStreams);
+
+    /// <summary>Shows the setup hint once we know there is nothing to play with.</summary>
+    public bool HasStreamAddonHint => _streamAddonsKnown && !HasEnabledStreamAddon;
+
+    public string StreamAddonHintText => HasDisabledStreamAddon
+        ? "Your stream addon is turned off, so this title can't find sources."
+        : "No stream addon is enabled. Addons are third-party — only add ones you trust.";
 
     public string Title => Meta?.Name ?? "";
 
@@ -158,6 +192,9 @@ public partial class DetailsViewModel : ObservableObject
 
             await _registry.EnsureLoadedAsync(cancellationToken);
             await _registry.LoadManifestsAsync(cancellationToken);
+
+            _streamAddonsKnown = true;
+            RaiseStreamAddonInfo();
 
             var sourceUrl = Meta?.SourceAddonUrl;
 
@@ -250,6 +287,15 @@ public partial class DetailsViewModel : ObservableObject
     [RelayCommand]
     private Task ReloadAsync(CancellationToken cancellationToken) =>
         LoadAsync(_type, _id, cancellationToken);
+
+    private void RaiseStreamAddonInfo()
+    {
+        OnPropertyChanged(nameof(StreamAddonsKnown));
+        OnPropertyChanged(nameof(HasEnabledStreamAddon));
+        OnPropertyChanged(nameof(HasDisabledStreamAddon));
+        OnPropertyChanged(nameof(HasStreamAddonHint));
+        OnPropertyChanged(nameof(StreamAddonHintText));
+    }
 
     private static bool NeedsEpisodes(string type) =>
         type.Equals("series", StringComparison.OrdinalIgnoreCase) ||

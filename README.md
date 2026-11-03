@@ -2,8 +2,9 @@
 
 # Pirsa
 
-A native WinUI 3 browser for movies, shows, and live TV sourced from
-[Stremio addons](https://stremio.github.io/stremio-addon-sdk/).
+An unofficial, Stremio-compatible WinUI 3 addon client for movies, shows,
+and live TV. Pirsa hosts no content: it plays what the third-party
+[Stremio addons](https://stremio.github.io/stremio-addon-sdk/) you add return.
 
 ![WinUI 3](https://img.shields.io/badge/WinUI-3-0E7A0D) ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
 
@@ -144,6 +145,11 @@ https://v3-cinemeta.strem.io/manifest.json
   OpenSubtitles v3, resetting the order to the defaults.
 - Changing the list bumps the registry revision; Home and Discover reload when
   you return to them, and an open player re-ranks its sources.
+- **No stream addon ships by default.** Cinemeta supplies catalogs and metadata
+  and OpenSubtitles v3 supplies subtitles; neither returns video sources. Play
+  therefore stays visible instead of disappearing: the first press explains the
+  setup and offers **Open addon settings**, and later presses go straight
+  there. Pirsa does not ship, recommend, or list stream addons.
 
 Configuration lives in the app's local data:
 
@@ -157,6 +163,21 @@ Configuration lives in the app's local data:
 
 If a manifest URL contains a token, treat it like a password: it is only stored
 on this machine, and you should rotate it if it is ever exposed.
+
+## Legal
+
+- Pirsa is an unofficial, Stremio-compatible client. It is not affiliated with,
+  endorsed by, or connected to Stremio.
+- It hosts, indexes, proxies, and caches no media and ships no addon directory.
+  It ships no stream addon and no torrent engine; only direct HTTP(S) sources
+  are played. Catalogs, metadata, subtitles, and sources come from third-party
+  addons that you add yourself.
+- You are responsible for the addons you configure and for using them where you
+  have the rights to. Add only addons you trust and are allowed to use.
+- If you believe an addon infringes your rights, contact that addon's operator;
+  Pirsa has no content to remove. To report a problem with this client, use the
+  project's GitHub issue tracker.
+- This is a product description, not legal advice.
 
 ## Subtitles
 
