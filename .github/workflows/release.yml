@@ -105,10 +105,11 @@ jobs:
               Write-Host "::endgroup::"
           }
 
-          Get-ChildItem 'Pirsa-*.zip' | ForEach-Object {
+          $lines = Get-ChildItem 'Pirsa-*.zip' | ForEach-Object {
               $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
               "$hash  $($_.Name)"
-          } | Set-Content -Path SHA256SUMS.txt -Encoding ascii
+          }
+          ($lines -join "`n") + "`n" | Set-Content -Path SHA256SUMS.txt -Encoding ascii -NoNewline
 
           Get-ChildItem 'Pirsa-*.zip' | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB)}}
 
