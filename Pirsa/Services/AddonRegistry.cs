@@ -367,7 +367,6 @@ public sealed class AddonRegistry
             throw new StremioException("That manifest doesn't expose any catalogs or streams.");
         }
 
-        entry.LoadManifestAsync(cancellationToken);
         Entries.Add(entry);
         Attach(entry);
         Revision++;

@@ -249,12 +249,12 @@
                                             <TextBlock
                                                 FontSize="16"
                                                 FontWeight="SemiBold"
-                                                Text="{x:Bind Name}" />
+                                                Text="{x:Bind Name, Mode=OneTime}" />
                                             <TextBlock
                                                 FontSize="12"
                                                 VerticalAlignment="Center"
                                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                Text="{x:Bind Host}"
+                                                Text="{x:Bind Host, Mode=OneTime}"
                                                 TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
 

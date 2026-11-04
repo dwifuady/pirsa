@@ -14,7 +14,6 @@ namespace Pirsa.ViewModels;
 public partial class HomeSettingsViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
-    private bool _mutatingPins;
     private bool _suppressRegistryChange;
 
     private readonly EventHandler _registryChangedHandler;
@@ -140,15 +139,7 @@ public partial class HomeSettingsViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            _mutatingPins = true;
-            try
-            {
-                Pinned.Remove(item);
-            }
-            finally
-            {
-                _mutatingPins = false;
-            }
+            Pinned.Remove(item);
 
             await _registry.SetHomeCatalogAsync(item.Entry, item.Type, item.Id, on: false);
             Rebuild();
@@ -175,7 +166,6 @@ public partial class HomeSettingsViewModel : ObservableObject
         }
 
         IsBusy = true;
-        _mutatingPins = true;
         try
         {
             Pinned.Move(index, target);
@@ -186,7 +176,6 @@ public partial class HomeSettingsViewModel : ObservableObject
         finally
         {
             _suppressRegistryChange = false;
-            _mutatingPins = false;
             IsBusy = false;
         }
     }
@@ -284,18 +273,10 @@ public partial class HomeSettingsViewModel : ObservableObject
         }
         else
         {
-            _mutatingPins = true;
-            try
+            Pinned.Clear();
+            foreach (var item in pinned)
             {
-                Pinned.Clear();
-                foreach (var item in pinned)
-                {
-                    Pinned.Add(item);
-                }
-            }
-            finally
-            {
-                _mutatingPins = false;
+                Pinned.Add(item);
             }
 
             RefreshMoveFlags();
