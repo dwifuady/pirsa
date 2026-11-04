@@ -22,6 +22,9 @@ public partial class PlayerViewModel : ObservableObject
     private CancellationTokenSource? _loadCts;
     private Task _fillTask = Task.CompletedTask;
     private int _loadVersion;
+    private IReadOnlyList<SourceTab> _sourceTabs = [];
+
+    private const int MaxSourceTabTitleLength = 22;
 
     public PlayerViewModel(
         AddonRegistry registry,
@@ -66,8 +69,20 @@ public partial class PlayerViewModel : ObservableObject
 
     public ObservableCollection<PlaybackSource> Sources { get; } = [];
 
-    /// <summary>Flat picker rows: addon group headers interleaved with sources.</summary>
-    public ObservableCollection<SourceListItem> SourceItems { get; } = [];
+    /// <summary>
+    /// Picker tabs: "All" first, then one per addon that returned a source, in
+    /// addon order. Replaced as a whole so the page rebuilds the bar once.
+    /// </summary>
+    public IReadOnlyList<SourceTab> SourceTabs => _sourceTabs;
+
+    /// <summary>Rows for the selected tab.</summary>
+    public ObservableCollection<PlaybackSource> VisibleSources { get; } = [];
+
+    /// <summary>
+    /// All + at least two addons. With one addon the "All" tab would just
+    /// repeat it, so the picker hides the tab bar.
+    /// </summary>
+    public bool HasMultipleSourceTabs => _sourceTabs.Count > 2;
 
     /// <summary>Off + one entry per available language.</summary>
     public ObservableCollection<SubtitleLanguageChoice> SubtitleMenu { get; } = [];
@@ -85,6 +100,11 @@ public partial class PlayerViewModel : ObservableObject
 
     [ObservableProperty]
     public partial PlaybackSource? SelectedSource { get; set; }
+
+    [ObservableProperty]
+    public partial SourceTab? SelectedSourceTab { get; set; }
+
+    partial void OnSelectedSourceTabChanged(SourceTab? value) => RefreshVisibleSources();
 
     [ObservableProperty]
     public partial bool IsLoading { get; set; }
@@ -164,6 +184,14 @@ public partial class PlayerViewModel : ObservableObject
     };
 
     /// <summary>
+    /// The picker subheading: the total on "All", otherwise how much of the
+    /// total the selected addon contributed.
+    /// </summary>
+    public string SourceTabDetail => SelectedSourceTab is { Key: not null } tab
+        ? $"{tab.Count} of {SourceCount} sources"
+        : SourcesLabel;
+
+    /// <summary>
     /// True while addons are still answering for the current request.
     /// </summary>
     public bool IsDiscovering => !_fillTask.IsCompleted;
@@ -179,7 +207,7 @@ public partial class PlayerViewModel : ObservableObject
         Request = request;
         SelectedSource = null;
         Sources.Clear();
-        SourceItems.Clear();
+        ClearSourceTabs();
         _results.Clear();
         HasError = false;
         ErrorMessage = "";
@@ -473,32 +501,74 @@ public partial class PlayerViewModel : ObservableObject
                 ? selected
                 : ordered.FirstOrDefault();
 
-            RebuildSourceItems(ordered);
+            RebuildSourceTabs(ordered);
         }
 
         RaiseSourceInfo();
     }
 
-    private void RebuildSourceItems(IReadOnlyList<PlaybackSource> ordered)
+    /// <summary>
+    /// Splits the ranked list into "All" plus one tab per addon, keeping the
+    /// tab the user is looking at when a rebuild leaves it in place.
+    /// </summary>
+    private void RebuildSourceTabs(IReadOnlyList<PlaybackSource> ordered)
     {
-        SourceItems.Clear();
+        var selectedKey = SelectedSourceTab?.Key;
 
-        foreach (var group in ordered.GroupBy(
-            source => source.AddonUrl ?? source.AddonName,
-            StringComparer.OrdinalIgnoreCase))
+        var tabs = new List<SourceTab>
         {
-            SourceItems.Add(new SourceListItem
-            {
-                IsHeader = true,
-                HeaderTitle = group.First().AddonName,
-                HeaderDetail = group.Count() == 1 ? "1 source" : $"{group.Count()} sources",
-            });
+            new() { Key = null, Title = "All", Sources = ordered },
+        };
 
-            foreach (var source in group)
+        tabs.AddRange(ordered
+            .GroupBy(
+                source => source.AddonUrl ?? source.AddonName,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => new SourceTab
             {
-                SourceItems.Add(new SourceListItem { Source = source });
+                Key = group.Key,
+                Title = TabTitleFor(group.First().AddonName),
+                Sources = group.ToList(),
+            }));
+
+        _sourceTabs = tabs;
+        OnPropertyChanged(nameof(SourceTabs));
+        OnPropertyChanged(nameof(HasMultipleSourceTabs));
+
+        SelectedSourceTab = tabs.FirstOrDefault(tab =>
+            string.Equals(tab.Key, selectedKey, StringComparison.OrdinalIgnoreCase)) ?? tabs[0];
+    }
+
+    private void ClearSourceTabs()
+    {
+        _sourceTabs = [];
+        SelectedSourceTab = null;
+        OnPropertyChanged(nameof(SourceTabs));
+        OnPropertyChanged(nameof(HasMultipleSourceTabs));
+    }
+
+    private void RefreshVisibleSources()
+    {
+        VisibleSources.Clear();
+
+        if (SelectedSourceTab is { } tab)
+        {
+            foreach (var source in tab.Sources)
+            {
+                VisibleSources.Add(source);
             }
         }
+
+        OnPropertyChanged(nameof(SourceTabDetail));
+    }
+
+    /// <summary>Long addon names would make the tab bar scroll for no reason.</summary>
+    private static string TabTitleFor(string addonName)
+    {
+        var name = addonName.Trim();
+        return name.Length > MaxSourceTabTitleLength
+            ? string.Concat(name.AsSpan(0, MaxSourceTabTitleLength - 1), "…")
+            : name;
     }
 
     private bool IsBetter(PlaybackSource candidate, PlaybackSource existing)
@@ -839,6 +909,23 @@ public sealed class SubtitleVersionChoice : ObservableObject
     }
 }
 
+/// <summary>
+/// One tab in the source picker. A null <see cref="Key"/> is the "All" tab,
+/// otherwise the key is the manifest URL (or name) of the addon.
+/// </summary>
+public sealed class SourceTab
+{
+    public string? Key { get; init; }
+
+    public required string Title { get; init; }
+
+    public required IReadOnlyList<PlaybackSource> Sources { get; init; }
+
+    public int Count => Sources.Count;
+
+    public override string ToString() => Title;
+}
+
 /// <summary>A season group in the in-player episode list.</summary>
 public sealed class PlayerSeason(int number, IReadOnlyList<PlayerEpisode> episodes)
 {
@@ -901,21 +988,6 @@ public sealed class PlayerEpisode : ObservableObject
     public bool HasWatchProgress => WatchProgress is > 0 and < 1 && !IsWatched;
 
     public override string ToString() => $"{EpisodeTag} {Title}";
-}
-
-/// <summary>A picker row: either an addon group header or one playable source.</summary>
-public sealed class SourceListItem : ObservableObject
-{
-    public bool IsHeader { get; init; }
-
-    public string HeaderTitle { get; init; } = "";
-
-    public string HeaderDetail { get; init; } = "";
-
-    public PlaybackSource? Source { get; init; }
-
-    public override string ToString() =>
-        IsHeader ? HeaderTitle : Source?.Title ?? "";
 }
 
 /// <summary>

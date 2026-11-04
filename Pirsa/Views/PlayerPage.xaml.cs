@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using LibVLCSharp.Platforms.Windows;
@@ -105,6 +106,7 @@ public sealed partial class PlayerPage : Page
     private bool _switching;
     private bool _errorVisible;
     private bool _sourcePanelOpen;
+    private bool _syncingSourceTabs;
     private bool _subtitlesFlyoutOpen;
     private bool _episodesFlyoutOpen;
     private bool _subtitleApplied;
@@ -190,6 +192,8 @@ public sealed partial class PlayerPage : Page
 
         Loaded += (_, _) => VideoSurface.Focus(FocusState.Programmatic);
 
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+
         VolumeSlider.Value = 80;
     }
 
@@ -235,6 +239,7 @@ public sealed partial class PlayerPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
         DisposePlayback();
         if (App.Window is MainWindow shell)
         {
@@ -2272,6 +2277,62 @@ public sealed partial class PlayerPage : Page
 
     // -------------------------------------------------------------- source picker
 
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PlayerViewModel.SourceTabs) or nameof(PlayerViewModel.SelectedSourceTab))
+        {
+            SyncSourceTabs();
+        }
+    }
+
+    /// <summary>
+    /// SelectorBar has no ItemsSource, so its items follow the view model by
+    /// hand. Rebuilding the bar on every notification also survives addon
+    /// answers that arrive one by one while the panel is open.
+    /// </summary>
+    private void SyncSourceTabs()
+    {
+        _syncingSourceTabs = true;
+        try
+        {
+            SourceTabBar.Items.Clear();
+
+            foreach (var tab in ViewModel.SourceTabs)
+            {
+                SourceTabBar.Items.Add(new SelectorBarItem
+                {
+                    Text = tab.Title,
+                    Tag = tab,
+                });
+            }
+
+            SourceTabBar.SelectedItem =
+                SourceTabBar.Items.FirstOrDefault(item => ReferenceEquals(item.Tag, ViewModel.SelectedSourceTab))
+                ?? SourceTabBar.Items.FirstOrDefault();
+        }
+        finally
+        {
+            _syncingSourceTabs = false;
+        }
+    }
+
+    private void SourceTabBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (_syncingSourceTabs)
+        {
+            return;
+        }
+
+        if (sender.SelectedItem?.Tag is SourceTab tab)
+        {
+            ViewModel.SelectedSourceTab = tab;
+
+            // A shorter list keeps the old offset otherwise, opening the new
+            // tab halfway down.
+            VisualTreeHelpers.FindDescendant<ScrollViewer>(SourceList)?.ChangeView(null, 0, null, true);
+        }
+    }
+
     private void OpenSources_Click(object sender, RoutedEventArgs e) => OpenSources();
 
     private void OpenSources()
@@ -2282,6 +2343,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _sourcePanelOpen = true;
+        SyncSourceTabs();
         SourceScrim.Visibility = Visibility.Visible;
         SourcePanel.Visibility = Visibility.Visible;
         _chromeTimer.Stop();
@@ -2312,7 +2374,7 @@ public sealed partial class PlayerPage : Page
 
     private void SourceList_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not SourceListItem { IsHeader: false, Source: { } source })
+        if (e.ClickedItem is not PlaybackSource source)
         {
             return;
         }

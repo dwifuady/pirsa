@@ -131,6 +131,11 @@ Everything Pirsa does, in detail. For install and build steps see
   volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
+- Sources are grouped into horizontal tabs: **All** plus one tab per addon that
+  answered, in your addon order. A long addon list stays a short scroll instead
+  of one endless list, and the tab strip scrolls sideways when the names don't
+  fit. With a single addon the tabs are hidden because they would just repeat
+  **All**.
 - **Episodes** — for a series, the **Episodes** button (or **E**) opens a season
   picker and episode list over the video. Rows show the thumbnail, episode tag,
   title, local watch progress, a **Now playing** marker and a watched check.
