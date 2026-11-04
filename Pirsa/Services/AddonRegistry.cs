@@ -336,14 +336,17 @@ public sealed class AddonRegistry
         id.StartsWith("imdb:", StringComparison.OrdinalIgnoreCase) ||
         id.StartsWith("tmdb:", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Validates and adds a manifest URL, then persists the list.</summary>
+    /// <summary>
+    /// Validates and adds a manifest URL (or a <c>stremio://</c> addon link),
+    /// then persists the list.
+    /// </summary>
     public async Task<AddonEntry> AddAsync(string manifestUrl, CancellationToken cancellationToken = default)
     {
         await EnsureLoadedAsync(cancellationToken);
 
-        if (!TryNormalizeManifestUrl(manifestUrl, out var normalized))
+        if (!StremioAddonLink.TryParse(manifestUrl, out var normalized))
         {
-            throw new StremioException("Enter a valid http(s) Stremio addon manifest URL.");
+            throw new StremioException("Enter a valid http(s) Stremio addon manifest URL or stremio:// addon link.");
         }
 
         var existing = Entries.FirstOrDefault(entry => UrlEquals(entry.ManifestUrl, normalized));
@@ -963,7 +966,7 @@ public sealed class AddonRegistry
         return _storagePath;
     }
 
-    private static bool TryNormalizeManifestUrl(string? manifestUrl, out string normalized)
+    internal static bool TryNormalizeManifestUrl(string? manifestUrl, out string normalized)
     {
         normalized = "";
         var value = manifestUrl?.Trim();

@@ -25,6 +25,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly EventHandler _registryChangedHandler;
     private readonly NotifyCollectionChangedEventHandler _entriesChangedHandler;
     private bool _loadingSettings;
+    private bool _loadingLinkRegistration;
     private bool _rebuilding;
 
     public SettingsViewModel(
@@ -140,6 +141,49 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial SubtitleLanguageOption? SelectedSubtitleLanguage { get; set; }
 
+    /// <summary>True for the Store/winapp build, which registers links in its manifest.</summary>
+    public bool IsPackagedBuild => StremioProtocolRegistration.IsPackaged;
+
+    /// <summary>Only an unpackaged copy can be registered from Settings.</summary>
+    public bool CanManageLinkRegistration => !IsPackagedBuild;
+
+    /// <summary>Whether this copy currently handles <c>stremio://</c> links.</summary>
+    [ObservableProperty]
+    public partial bool HandlesStremioLinks { get; set; }
+
+    partial void OnHandlesStremioLinksChanged(bool value)
+    {
+        if (_loadingLinkRegistration || !CanManageLinkRegistration)
+        {
+            return;
+        }
+
+        try
+        {
+            if (value)
+            {
+                StremioProtocolRegistration.Register();
+            }
+            else
+            {
+                StremioProtocolRegistration.Unregister();
+            }
+
+            HasError = false;
+            ErrorMessage = "";
+            SetNotice(value
+                ? "Pirsa now opens stremio:// addon links."
+                : "Pirsa no longer opens stremio:// addon links.");
+        }
+        catch (Exception exception)
+        {
+            _loadingLinkRegistration = true;
+            HandlesStremioLinks = !value;
+            _loadingLinkRegistration = false;
+            SetError($"Couldn't update stremio:// link handling. {exception.Message}");
+        }
+    }
+
     public static readonly string[] QualityCodes = ["", "4K", "1440p", "1080p", "720p", "480p"];
 
     public bool IsEmpty => Addons.Count == 0;
@@ -207,6 +251,10 @@ public partial class SettingsViewModel : ObservableObject
             RaiseWatchHistoryInfo();
             await _searchHistory.EnsureLoadedAsync(cancellationToken);
             RaiseSearchHistoryInfo();
+
+            _loadingLinkRegistration = true;
+            HandlesStremioLinks = CanManageLinkRegistration && StremioProtocolRegistration.IsRegistered;
+            _loadingLinkRegistration = false;
 
             _loadingSettings = true;
             AutoplayEnabled = _settings.Autoplay;
