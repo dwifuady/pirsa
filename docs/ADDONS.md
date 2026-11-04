@@ -29,6 +29,43 @@ OpenSubtitles v3  https://opensubtitles-v3.strem.io/manifest.json
 - `tv`/`channel` catalogs render as **Live TV** rails; the player accepts
   `tv`/`channel`/`pp-live:` ids as well as movies and episodes.
 
+## Addon links
+
+Addon authors and sites share install links such as
+
+```
+stremio://v3-cinemeta.strem.io/manifest.json
+```
+
+Clicking one opens Pirsa with an **Install addon?** prompt. It reads the
+manifest first, then shows the addon's name, version, host and what it provides
+(catalogs, metadata, streams, subtitles). Nothing is installed until you choose
+**Install**; cancelling, using an invalid link, or a manifest that cannot be
+loaded leaves your list unchanged. After a successful install, Settings →
+Addons opens with a notice. While the player is open the outcome is shown in a
+dialog instead, so a link never closes a running video.
+
+The same links can be pasted into Settings → Addons instead of a manifest URL,
+and the web share form `https://web.stremio.com/#/addons?addon=<encoded manifest
+URL>` is accepted too.
+
+- Only links that resolve to an `http(s)` manifest are accepted; `file:`,
+  `javascript:` and other schemes are rejected.
+- The prompt shows the addon's host, never the full manifest URL, so a token in
+  the link or manifest query is not displayed. **Cancel** works while the
+  manifest is still loading.
+- Windows routes `stremio://` through the protocol handler. Packaged builds
+  (Store, or a `winapp` debug run) declare it in the app package. The installer
+  registers it per user for installed copies. Portable copies use the **Open
+  stremio:// links in Pirsa** switch in Settings → Addons, which writes the same
+  per-user keys; turning it off removes them again.
+- With more than one client installed, Windows decides which one receives the
+  link. The Settings switch lets this copy claim or release it.
+- A link that arrives while Pirsa is running opens a second window; there is no
+  single-instance hand-off yet.
+- Opening a link contacts that addon's server to read its manifest. Nothing is
+  sent anywhere else, and the addon is stored locally like one added by hand.
+
 ## Order, enablement and filtering
 
 - **Order is priority.** The first enabled addon wins for metadata details and

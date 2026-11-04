@@ -179,6 +179,24 @@ Everything Pirsa does, in detail. For install and build steps see
 - Adding another subtitle addon in Settings automatically adds its languages to
   the same picker.
 
+## Addon links
+
+- Clicking a `stremio://` addon link opens Pirsa and asks before anything is
+  installed. The prompt reads the manifest and shows the addon's name, version,
+  host and what it provides, then explains that addons are third-party.
+- **Install** adds it; **Cancel** works even while the manifest is loading. An
+  invalid link or a manifest that cannot be loaded changes nothing.
+- A successful install opens Settings → Addons with a notice. While the player
+  is open the outcome is shown in a dialog instead, so a running video is never
+  closed silently.
+- A link for an addon that is already configured opens Settings with that
+  message instead of adding a duplicate.
+- Addon links can also be pasted into Settings → Addons, including the
+  `https://web.stremio.com/#/addons?addon=…` share form.
+- Portable builds can turn Windows link handling on or off in Settings →
+  Addons. Packaged builds register it through the app package, and the installer
+  registers it per user.
+
 ## Limitations
 
 - Auto-advance stops at the end of the last known episode and does not know
@@ -186,5 +204,7 @@ Everything Pirsa does, in detail. For install and build steps see
 - Watch history is per device; there is no sync between machines.
 - Addon order is global: per-type or per-catalog priorities are not supported
   yet.
+- A `stremio://` link opened while Pirsa is already running starts a second
+  window instead of handing the link to the running one.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only
   direct HTTP(S) sources are played.

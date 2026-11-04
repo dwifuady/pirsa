@@ -49,6 +49,7 @@ public sealed partial class MainWindow : Window
         SizeAndCenterWindow();
 
         RootFrame.Navigated += RootFrame_Navigated;
+        RootFrame.Loaded += RootFrame_Loaded;
         RootFrame.Navigate(typeof(HomePage));
 
         // The inner TextBox handles the click; still offer recent searches
@@ -58,6 +59,58 @@ public sealed partial class MainWindow : Window
             new PointerEventHandler(AppSearchBox_PointerPressed),
             true);
     }
+
+    private async void RootFrame_Loaded(object sender, RoutedEventArgs e)
+    {
+        RootFrame.Loaded -= RootFrame_Loaded;
+
+        if (App.TakePendingAddonLink() is { } link)
+        {
+            await HandleAddonLinkAsync(link);
+        }
+    }
+
+    /// <summary>
+    /// Shows the install prompt for an addon link. Called for a link the app
+    /// was launched with, and for one redirected to a running instance.
+    /// </summary>
+    public async Task HandleAddonLinkAsync(string link)
+    {
+        if (RootFrame.XamlRoot is { } xamlRoot)
+        {
+            await AddonLinkPrompt.HandleAsync(link, xamlRoot);
+        }
+    }
+
+    /// <summary>Opens Settings → Addons, optionally showing a message on arrival.</summary>
+    public void OpenAddonSettings(SettingsMessage? message = null)
+    {
+        if (RootFrame.CurrentSourcePageType == typeof(SettingsPage) &&
+            RootFrame.Content is SettingsPage settings)
+        {
+            if (message is not null)
+            {
+                if (message.IsError)
+                {
+                    settings.ViewModel.ShowError(message.Text);
+                }
+                else
+                {
+                    settings.ViewModel.ShowNotice(message.Text);
+                }
+            }
+
+            NavView.IsPaneOpen = false;
+            return;
+        }
+
+        RootFrame.BackStack.Clear();
+        RootFrame.Navigate(typeof(SettingsPage), message, new SuppressNavigationTransitionInfo());
+        NavView.IsPaneOpen = false;
+    }
+
+    /// <summary>True while the player owns the window, so nothing should navigate away.</summary>
+    public bool IsPlayerActive => RootFrame.CurrentSourcePageType == typeof(PlayerPage);
 
     private void RootFrame_Navigated(object sender, NavigationEventArgs e)
     {

@@ -67,7 +67,7 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Add a Stremio addon manifest URL. Catalog resources appear on Home and Discover; stream resources power the player. Pirsa ships with Cinemeta and OpenSubtitles v3 only — no stream addon is bundled, so add one you trust to play."
+                        Text="Add a Stremio addon manifest URL or a stremio:// addon link. Catalog resources appear on Home and Discover; stream resources power the player. Pirsa ships with Cinemeta and OpenSubtitles v3 only — no stream addon is bundled, so add one you trust to play."
                         TextWrapping="Wrap" />
 
                     <Border
@@ -85,8 +85,8 @@
                                 <TextBox
                                     x:Name="UrlBox"
                                     AutomationProperties.AutomationId="AddonUrlBox"
-                                    Header="Manifest URL"
-                                    PlaceholderText="https://example.com/manifest.json"
+                                    Header="Manifest URL or addon link"
+                                    PlaceholderText="https://example.com/manifest.json or stremio://example.com/manifest.json"
                                     Text="{x:Bind ViewModel.NewManifestUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                     KeyDown="UrlBox_KeyDown" />
                                 <Button
@@ -122,6 +122,41 @@
                                     Style="{StaticResource CaptionTextBlockStyle}"
                                     Text="Checking the manifest…" />
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="20"
+                        AutomationProperties.Name="Addon link settings"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Addon links" />
+
+                            <ToggleSwitch
+                                AutomationProperties.AutomationId="LinkHandlingToggle"
+                                AutomationProperties.Name="Open stremio:// links in Pirsa"
+                                Header="Open stremio:// links in Pirsa"
+                                IsOn="{x:Bind ViewModel.HandlesStremioLinks, Mode=TwoWay}"
+                                OffContent="Off"
+                                OnContent="On"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanManageLinkRegistration), Mode=OneWay}" />
+
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Windows opens Stremio addon links in the app registered for the stremio:// protocol. The installer registers Pirsa for you; use this switch for portable copies, or turn it off to let another app handle links. Pirsa always asks before adding an addon from a link."
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanManageLinkRegistration), Mode=OneWay}" />
+
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="This build handles stremio:// links through its app package. Another app can take over in Windows Settings → Apps → Default apps. Pirsa always asks before adding an addon from a link."
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsPackagedBuild), Mode=OneWay}" />
                         </StackPanel>
                     </Border>
 
