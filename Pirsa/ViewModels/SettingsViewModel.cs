@@ -429,6 +429,12 @@ public partial class SettingsViewModel : ObservableObject
 
     public void DismissNotice() => HasNotice = false;
 
+    /// <summary>Shows the same informational bar the addon page uses.</summary>
+    public void ShowNotice(string message) => SetNotice(message);
+
+    /// <summary>Shows the same error bar the addon page uses.</summary>
+    public void ShowError(string message) => SetError(message);
+
     public async Task ClearWatchHistoryAsync(CancellationToken cancellationToken = default)
     {
         try

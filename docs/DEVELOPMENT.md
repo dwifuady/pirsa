@@ -49,11 +49,11 @@ start stremio://v3-cinemeta.strem.io/manifest.json
 ```
 
 A link for a bundled addon shows **That addon is already configured**; a new
-addon shows the confirmation dialog naming its host.
+addon shows the confirmation with its manifest details once they arrive.
 
 An unpackaged build has no package identity, so it uses the per-user
 `HKCU\Software\Classes\stremio` keys. The installer writes them, or for a
-portable copy use Settings → Addons → **Open stremio:// addon links in Pirsa**.
+portable copy use Settings → Addons → **Open stremio:// links in Pirsa**.
 A direct command-line launch exercises the same path:
 
 ```powershell

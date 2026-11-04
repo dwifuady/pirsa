@@ -182,12 +182,15 @@ Everything Pirsa does, in detail. For install and build steps see
 ## Addon links
 
 - Clicking a `stremio://` addon link opens Pirsa and asks before anything is
-  installed. The prompt names the addon's host and explains that addons are
-  third-party.
-- Cancelling, an invalid link, or a manifest that cannot be loaded changes
-  nothing.
-- A link for an addon that is already configured offers a shortcut to Settings
-  instead of adding a duplicate.
+  installed. The prompt reads the manifest and shows the addon's name, version,
+  host and what it provides, then explains that addons are third-party.
+- **Install** adds it; **Cancel** works even while the manifest is loading. An
+  invalid link or a manifest that cannot be loaded changes nothing.
+- A successful install opens Settings → Addons with a notice. While the player
+  is open the outcome is shown in a dialog instead, so a running video is never
+  closed silently.
+- A link for an addon that is already configured opens Settings with that
+  message instead of adding a duplicate.
 - Addon links can also be pasted into Settings → Addons, including the
   `https://web.stremio.com/#/addons?addon=…` share form.
 - Portable builds can turn Windows link handling on or off in Settings →

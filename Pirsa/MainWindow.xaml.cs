@@ -82,12 +82,35 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Opens Settings → Addons from a prompt or the player.</summary>
-    public void OpenAddonSettings()
+    /// <summary>Opens Settings → Addons, optionally showing a message on arrival.</summary>
+    public void OpenAddonSettings(SettingsMessage? message = null)
     {
-        NavigateSection(typeof(SettingsPage));
+        if (RootFrame.CurrentSourcePageType == typeof(SettingsPage) &&
+            RootFrame.Content is SettingsPage settings)
+        {
+            if (message is not null)
+            {
+                if (message.IsError)
+                {
+                    settings.ViewModel.ShowError(message.Text);
+                }
+                else
+                {
+                    settings.ViewModel.ShowNotice(message.Text);
+                }
+            }
+
+            NavView.IsPaneOpen = false;
+            return;
+        }
+
+        RootFrame.BackStack.Clear();
+        RootFrame.Navigate(typeof(SettingsPage), message, new SuppressNavigationTransitionInfo());
         NavView.IsPaneOpen = false;
     }
+
+    /// <summary>True while the player owns the window, so nothing should navigate away.</summary>
+    public bool IsPlayerActive => RootFrame.CurrentSourcePageType == typeof(PlayerPage);
 
     private void RootFrame_Navigated(object sender, NavigationEventArgs e)
     {

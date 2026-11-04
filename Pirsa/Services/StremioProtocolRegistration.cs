@@ -53,6 +53,7 @@ public static class StremioProtocolRegistration
             ?? throw new InvalidOperationException("Windows didn't allow the protocol key to be created.");
         protocol.SetValue(null, FriendlyName);
         protocol.SetValue("URL Protocol", "");
+        protocol.SetValue("FriendlyTypeName", "Stremio addon link");
 
         using (var icon = Registry.CurrentUser.CreateSubKey(IconKeyPath, writable: true))
         {

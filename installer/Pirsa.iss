@@ -86,6 +86,7 @@ Name: "{autodesktop}\Pirsa"; Filename: "{app}\Pirsa.exe"; Tasks: desktopicon
 ; itself, because a packaged build of Pirsa may share it.
 Root: HKCU; Subkey: "Software\Classes\stremio"; ValueType: string; ValueName: ""; ValueData: "URL:Stremio addon link"
 Root: HKCU; Subkey: "Software\Classes\stremio"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\stremio"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "Stremio addon link"
 Root: HKCU; Subkey: "Software\Classes\stremio\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\Pirsa.exe"",0"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\stremio\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Pirsa.exe"" ""%1"""; Flags: uninsdeletekey
 

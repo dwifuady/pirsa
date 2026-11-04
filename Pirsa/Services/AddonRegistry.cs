@@ -340,7 +340,18 @@ public sealed class AddonRegistry
     /// Validates and adds a manifest URL (or a <c>stremio://</c> addon link),
     /// then persists the list.
     /// </summary>
-    public async Task<AddonEntry> AddAsync(string manifestUrl, CancellationToken cancellationToken = default)
+    public Task<AddonEntry> AddAsync(string manifestUrl, CancellationToken cancellationToken = default) =>
+        AddAsync(manifestUrl, preloadedManifest: null, cancellationToken);
+
+    /// <summary>
+    /// Adds an addon whose manifest the caller already fetched. The addon link
+    /// prompt uses this so confirming a link does not download the manifest a
+    /// second time.
+    /// </summary>
+    internal async Task<AddonEntry> AddAsync(
+        string manifestUrl,
+        AddonManifest? preloadedManifest,
+        CancellationToken cancellationToken = default)
     {
         await EnsureLoadedAsync(cancellationToken);
 
@@ -358,7 +369,7 @@ public sealed class AddonRegistry
         }
 
         var entry = new AddonEntry(normalized);
-        var manifest = await entry.LoadManifestAsync(cancellationToken);
+        var manifest = preloadedManifest ?? await entry.LoadManifestAsync(cancellationToken);
 
         if (manifest is null)
         {
@@ -368,6 +379,12 @@ public sealed class AddonRegistry
         if (manifest.Resources.Count == 0 && manifest.Catalogs.Count == 0)
         {
             throw new StremioException("That manifest doesn't expose any catalogs or streams.");
+        }
+
+        if (preloadedManifest is not null)
+        {
+            entry.Manifest = preloadedManifest;
+            entry.Client.UseManifest(preloadedManifest);
         }
 
         Entries.Add(entry);

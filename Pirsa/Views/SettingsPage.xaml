@@ -137,8 +137,8 @@
 
                             <ToggleSwitch
                                 AutomationProperties.AutomationId="LinkHandlingToggle"
-                                AutomationProperties.Name="Open stremio:// addon links in Pirsa"
-                                Header="Open stremio:// addon links in Pirsa"
+                                AutomationProperties.Name="Open stremio:// links in Pirsa"
+                                Header="Open stremio:// links in Pirsa"
                                 IsOn="{x:Bind ViewModel.HandlesStremioLinks, Mode=TwoWay}"
                                 OffContent="Off"
                                 OnContent="On"
