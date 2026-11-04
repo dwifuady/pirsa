@@ -31,6 +31,12 @@ public sealed partial class PlayerPage : Page
     /// <summary>Volume points changed per mouse-wheel detent.</summary>
     private const double WheelVolumeStep = 5;
 
+    /// <summary>One tap of the timing control, fine enough to land on most offsets.</summary>
+    private const long SubtitleDelayStepMs = 100;
+
+    /// <summary>Beyond a minute the subtitle file belongs to a different release.</summary>
+    private const long SubtitleDelayMaxMs = 60_000;
+
     /// <summary>
     /// LibVLC's demuxer cache for on-demand video. It is a jitter buffer, not a
     /// seek window: VLC's HTTP access answers a seek with a fresh range request,
@@ -83,6 +89,11 @@ public sealed partial class PlayerPage : Page
     private SubtitleLanguageChoice? _versionsLanguage;
     private string? _selectedSubtitlePath;
     private string? _subtitleDirectory;
+    private int _selectedEmbeddedTrackId = -1;
+    private string? _selectedEmbeddedName;
+    private string? _selectedEmbeddedCode;
+    private long _subtitleDelayMs;
+    private DispatcherTimer? _subtitleHudTimer;
 
     private bool _disposed;
     private bool _vlcReady;
@@ -137,6 +148,13 @@ public sealed partial class PlayerPage : Page
 
         _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _resumeHintTimer.Tick += (_, _) => HideResumeHint();
+
+        _subtitleHudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.4) };
+        _subtitleHudTimer.Tick += (_, _) =>
+        {
+            _subtitleHudTimer?.Stop();
+            SubtitleHudPanel.Visibility = Visibility.Collapsed;
+        };
 
         // A remembered source that never reaches "playing" is treated as dead.
         _cachedWatchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
@@ -194,6 +212,12 @@ public sealed partial class PlayerPage : Page
         _positionMs = 0;
         _lengthMs = 0;
         _ended = false;
+        _subtitleDelayMs = 0;
+        _selectedEmbeddedTrackId = -1;
+        _selectedEmbeddedName = null;
+        _selectedEmbeddedCode = null;
+        ViewModel.SetEmbeddedSubtitles([]);
+        UpdateSubtitleTimingUi();
         ResumePanel.Visibility = Visibility.Collapsed;
         HideUpNext();
         _upNextDismissed = false;
@@ -326,7 +350,7 @@ public sealed partial class PlayerPage : Page
             // the picker, unless something was already selected for this title.
             if (!_disposed &&
                 !token.IsCancellationRequested &&
-                _selectedSubtitle is null &&
+                !HasActiveSubtitle &&
                 ViewModel.FindSubtitleForLanguage(App.Settings.PreferredSubtitleLanguage) is { } preferred)
             {
                 // Playback may not have started yet; the track is attached when it does.
@@ -349,7 +373,10 @@ public sealed partial class PlayerPage : Page
 
     private void RefreshSubtitleFlyout()
     {
-        SubtitleLanguageList.ItemsSource ??= ViewModel.SubtitleMenu;
+        if (SubtitleLanguageList.ItemsSource is null)
+        {
+            SubtitleLanguageList.ItemsSource = ViewModel.SubtitleMenu;
+        }
 
         if (_versionsLanguage is not null)
         {
@@ -367,18 +394,25 @@ public sealed partial class PlayerPage : Page
             : Visibility.Collapsed;
 
         UpdateSubtitleCurrent();
+        UpdateSubtitleTimingUi();
     }
 
     private void UpdateSubtitleCurrent()
     {
-        if (_selectedSubtitle is null)
+        var current = _selectedSubtitle is { } version
+            ? $"{version.LanguageName} · {version.Label}"
+            : _selectedEmbeddedName is { Length: > 0 } embedded
+                ? $"{embedded} · Embedded"
+                : null;
+
+        if (current is null)
         {
             SubtitleCurrentText.Text = "";
             SubtitleCurrentText.Visibility = Visibility.Collapsed;
         }
         else
         {
-            SubtitleCurrentText.Text = $"Current: {_selectedSubtitle.LanguageName} · {_selectedSubtitle.Label}";
+            SubtitleCurrentText.Text = $"Current: {current}";
             SubtitleCurrentText.Visibility = Visibility.Visible;
         }
 
@@ -406,6 +440,7 @@ public sealed partial class PlayerPage : Page
 
         await App.Settings.EnsureLoadedAsync();
         await RestoreProgressAsync(request);
+        await RestoreSubtitleDelayAsync(request);
 
         // Fast path: start the last source that actually played, while the
         // normal source search runs in parallel. A dead URL therefore costs
@@ -986,6 +1021,11 @@ public sealed partial class PlayerPage : Page
         _selectedSubtitle = null;
         _selectedSubtitlePath = null;
         _versionsLanguage = null;
+        _selectedEmbeddedTrackId = -1;
+        _selectedEmbeddedName = null;
+        _selectedEmbeddedCode = null;
+        ViewModel.SetEmbeddedSubtitles([]);
+        UpdateSubtitleTimingUi();
         SubtitleActiveDot.Visibility = Visibility.Collapsed;
         ViewModel.SelectSubtitle(null);
         ViewModel.SubtitleStatus = "";
@@ -1152,6 +1192,15 @@ public sealed partial class PlayerPage : Page
             _audioListDirty = true;
             UpdateAudioIndicator();
 
+            // Embedded subtitle ids belong to the previous stream. The chosen
+            // language is kept so the same track can be re-selected when the
+            // new stream exposes its own tracks.
+            _selectedEmbeddedTrackId = -1;
+            _selectedEmbeddedName = null;
+            ViewModel.SetEmbeddedSubtitles([]);
+            UpdateSubtitleCurrent();
+            UpdateSubtitleTimingUi();
+
             var media = new Media(_libVlc, new Uri(url));
             media.AddOption(":no-video-title-show");
             media.AddOption(":no-osd");
@@ -1269,25 +1318,41 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEsChanged(TrackType type)
     {
-        if (type is not TrackType.Audio || _switching)
+        if (_switching)
         {
             return;
         }
 
-        // Elementary-stream events arrive off the UI thread.
-        _audioListDirty = true;
-        Dispatch(() =>
+        if (type is TrackType.Audio)
         {
-            if (_audioListDirty)
+            // Elementary-stream events arrive off the UI thread.
+            _audioListDirty = true;
+            Dispatch(() =>
             {
-                RefreshAudioTracks();
-            }
+                if (_audioListDirty)
+                {
+                    RefreshAudioTracks();
+                }
 
-            if (AudioMenu.IsOpen)
+                if (AudioMenu.IsOpen)
+                {
+                    RebuildAudioMenu();
+                }
+            });
+            return;
+        }
+
+        if (type is TrackType.Text)
+        {
+            Dispatch(() =>
             {
-                RebuildAudioMenu();
-            }
-        });
+                RefreshEmbeddedSubtitles();
+                if (SubtitlesFlyout.IsOpen)
+                {
+                    RefreshSubtitleFlyout();
+                }
+            });
+        }
     }
 
     /// <summary>
@@ -1510,6 +1575,14 @@ public sealed partial class PlayerPage : Page
         {
             ApplyLocalSubtitle(_selectedSubtitlePath);
         }
+
+        // libvlc resets subtitle timing for every new media.
+        ApplySubtitleDelay();
+        UpdateSubtitleTimingUi();
+
+        // Tracks that parsed while the new source was starting can be picked
+        // up here; later ones arrive through the ES events.
+        RefreshEmbeddedSubtitles();
     }
 
     private void HandlePaused()
@@ -2128,6 +2201,26 @@ public sealed partial class PlayerPage : Page
                 SeekRelative(10_000);
                 e.Handled = true;
                 break;
+
+            // OEM brackets: nudge subtitle timing while watching. Repeated key
+            // events are welcome here, so they are not filtered like Space.
+            case (VirtualKey)0xDB: // [
+                if (HasActiveSubtitle)
+                {
+                    AdjustSubtitleDelay(-SubtitleDelayStepMs);
+                    e.Handled = true;
+                }
+
+                break;
+
+            case (VirtualKey)0xDD: // ]
+                if (HasActiveSubtitle)
+                {
+                    AdjustSubtitleDelay(SubtitleDelayStepMs);
+                    e.Handled = true;
+                }
+
+                break;
         }
     }
 
@@ -2211,6 +2304,8 @@ public sealed partial class PlayerPage : Page
         _chromeTimer.Stop();
         ShowChrome();
 
+        // Tracks parse while the panel is closed, so read them fresh each time.
+        RefreshEmbeddedSubtitles();
         ShowSubtitleLanguages();
         RefreshSubtitleFlyout();
     }
@@ -2224,6 +2319,116 @@ public sealed partial class PlayerPage : Page
             StartChromeTimer();
         }
     }
+
+    // ------------------------------------------------------- subtitle timing
+
+    /// <summary>A subtitle is on screen, so timing is worth showing and adjusting.</summary>
+    private bool HasActiveSubtitle =>
+        _selectedSubtitle is not null || _selectedEmbeddedTrackId >= 0;
+
+    /// <summary>
+    /// Timing belongs to the title, not one episode or one source: a release
+    /// pack shares its offset across episodes, and a source switch must not
+    /// make the user find the same number again.
+    /// </summary>
+    private static string SubtitleOffsetKey(PlaybackRequest request) =>
+        string.IsNullOrWhiteSpace(request.Meta.Id) ? request.VideoId : request.Meta.Id;
+
+    private async Task RestoreSubtitleDelayAsync(PlaybackRequest request)
+    {
+        _subtitleDelayMs = await App.SubtitleOffsets.GetDelayAsync(SubtitleOffsetKey(request));
+        ApplySubtitleDelay();
+        UpdateSubtitleTimingUi();
+    }
+
+    private void AdjustSubtitleDelay(long deltaMs) =>
+        SetSubtitleDelay(_subtitleDelayMs + deltaMs, announce: true);
+
+    private void SetSubtitleDelay(long delayMs, bool announce)
+    {
+        _subtitleDelayMs = Math.Clamp(delayMs, -SubtitleDelayMaxMs, SubtitleDelayMaxMs);
+        ApplySubtitleDelay();
+        UpdateSubtitleTimingUi();
+
+        if (announce)
+        {
+            ShowSubtitleTimingHud();
+        }
+
+        if (ViewModel.Request is { } request)
+        {
+            _ = App.SubtitleOffsets.SetDelayAsync(SubtitleOffsetKey(request), _subtitleDelayMs);
+        }
+    }
+
+    /// <summary>
+    /// libvlc measures the delay in microseconds and resets it for every new
+    /// media, so this is reapplied on each source start as well as each change.
+    /// </summary>
+    private void ApplySubtitleDelay()
+    {
+        try
+        {
+            _mediaPlayer?.SetSpuDelay(_subtitleDelayMs * 1000);
+        }
+        catch
+        {
+            // Timing is best effort; playback continues either way.
+        }
+    }
+
+    private void UpdateSubtitleTimingUi()
+    {
+        SubtitleTimingPanel.Visibility = HasActiveSubtitle
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        SubtitleTimingValue.Text = FormatSubtitleDelayValue(_subtitleDelayMs);
+        SubtitleTimingHint.Text = _subtitleDelayMs switch
+        {
+            0 => "Subtitles are in sync",
+            > 0 => $"Subtitles appear {FormatSubtitleDelaySeconds(_subtitleDelayMs)} later",
+            _ => $"Subtitles appear {FormatSubtitleDelaySeconds(_subtitleDelayMs)} earlier",
+        };
+        SubtitleResetButton.Visibility = _subtitleDelayMs == 0
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private static string FormatSubtitleDelaySeconds(long delayMs) =>
+        $"{Math.Abs(delayMs) / 1000.0:0.0#} s";
+
+    private static string FormatSubtitleDelayValue(long delayMs) => delayMs switch
+    {
+        0 => "0.0 s",
+        > 0 => $"+{FormatSubtitleDelaySeconds(delayMs)}",
+        _ => $"\u2212{FormatSubtitleDelaySeconds(delayMs)}",
+    };
+
+    /// <summary>
+    /// A short toast over the picture, so a keyboard adjustment is visible
+    /// without opening the panel or waking the whole chrome.
+    /// </summary>
+    private void ShowSubtitleTimingHud()
+    {
+        SubtitleHudText.Text = _subtitleDelayMs == 0
+            ? "Subtitle timing reset"
+            : $"Subtitle timing · {FormatSubtitleDelaySeconds(_subtitleDelayMs)} {(_subtitleDelayMs > 0 ? "later" : "earlier")}";
+        SubtitleHudPanel.Visibility = Visibility.Visible;
+        _subtitleHudTimer?.Stop();
+        _subtitleHudTimer?.Start();
+    }
+
+    private void SubtitleEarlier_Click(object sender, RoutedEventArgs e) =>
+        AdjustSubtitleDelay(-SubtitleDelayStepMs);
+
+    private void SubtitleLater_Click(object sender, RoutedEventArgs e) =>
+        AdjustSubtitleDelay(SubtitleDelayStepMs);
+
+    private void SubtitleReset_Click(object sender, RoutedEventArgs e) =>
+        SetSubtitleDelay(0, announce: true);
+
+    // ------------------------------------------------- embedded subtitle tracks
 
     private async void SubtitleLanguageList_ItemClick(object sender, ItemClickEventArgs e)
     {
@@ -2239,6 +2444,12 @@ public sealed partial class PlayerPage : Page
                 SubtitlesFlyout.Hide();
             }
 
+            return;
+        }
+
+        if (language.IsEmbedded)
+        {
+            SelectEmbeddedSubtitle(language, closeFlyout: true);
             return;
         }
 
@@ -2269,6 +2480,138 @@ public sealed partial class PlayerPage : Page
         _suppressSubtitleSelection = false;
         SubtitleVersionView.Visibility = Visibility.Collapsed;
         SubtitleLanguageView.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Reads the subtitle tracks muxed into the current stream. They need no
+    /// download and are usually timed for the picture, so they belong at the
+    /// top of the list, right under Off.
+    /// </summary>
+    private void RefreshEmbeddedSubtitles()
+    {
+        var tracks = new List<SubtitleLanguageChoice>();
+
+        try
+        {
+            var descriptions = _mediaPlayer?.SpuDescription;
+            if (descriptions is not null)
+            {
+                foreach (var track in descriptions)
+                {
+                    if (track.Id < 0 || string.IsNullOrWhiteSpace(track.Name))
+                    {
+                        continue;
+                    }
+
+                    var (name, code) = DescribeSubtitleTrack(track.Name);
+                    tracks.Add(new SubtitleLanguageChoice(
+                        name,
+                        code,
+                        isOff: false,
+                        [],
+                        "Embedded in this video",
+                        track.Id));
+                }
+            }
+        }
+        catch
+        {
+            // A stream may disappear between reading the id and its tracks.
+        }
+
+        ViewModel.SetEmbeddedSubtitles(tracks);
+
+        // A source switch re-enumerates tracks; keep the language the viewer
+        // already picked instead of silently dropping to Off. Once the new
+        // stream has exposed its tracks, stop waiting for a match.
+        if (tracks.Count > 0 && _selectedEmbeddedTrackId < 0 && !string.IsNullOrEmpty(_selectedEmbeddedCode))
+        {
+            var match = tracks.FirstOrDefault(track =>
+                SubtitleLanguages.SameLanguage(track.LanguageCode, _selectedEmbeddedCode));
+            if (match is not null)
+            {
+                SelectEmbeddedSubtitle(match, closeFlyout: false);
+            }
+            else
+            {
+                _selectedEmbeddedCode = null;
+            }
+        }
+    }
+
+    private bool SelectEmbeddedSubtitle(SubtitleLanguageChoice track, bool closeFlyout)
+    {
+        if (_mediaPlayer is null || track.EmbeddedTrackId < 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!_mediaPlayer.SetSpu(track.EmbeddedTrackId))
+            {
+                return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        _selectedEmbeddedTrackId = track.EmbeddedTrackId;
+        _selectedEmbeddedName = track.LanguageName;
+        _selectedEmbeddedCode = track.LanguageCode;
+        _selectedSubtitle = null;
+        _selectedSubtitlePath = null;
+        _subtitleApplied = true;
+        ViewModel.SubtitleStatus = "";
+
+        ViewModel.SelectSubtitle(null);
+        SubtitleActiveDot.Visibility = Visibility.Visible;
+        ApplySubtitleDelay();
+        UpdateSubtitleCurrent();
+        UpdateSubtitleTimingUi();
+
+        if (closeFlyout)
+        {
+            SubtitlesFlyout.Hide();
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// VLC names tracks like "Track 1 - [eng]"; the bracketed tag is the only
+    /// reliable language signal in the container.
+    /// </summary>
+    private static (string Name, string Code) DescribeSubtitleTrack(string raw)
+    {
+        var cleaned = raw.Trim();
+        var bracketStart = cleaned.IndexOf('[', StringComparison.Ordinal);
+        var bracketEnd = cleaned.IndexOf(']', StringComparison.Ordinal);
+
+        if (bracketStart >= 0 && bracketEnd > bracketStart)
+        {
+            var tag = cleaned[(bracketStart + 1)..bracketEnd].Trim();
+            cleaned = cleaned[..bracketStart].Trim().TrimEnd('-', ' ');
+
+            if (!string.IsNullOrWhiteSpace(tag) &&
+                tag.Length <= 8 &&
+                !tag.Equals("und", StringComparison.OrdinalIgnoreCase) &&
+                !tag.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                var language = SubtitleLanguages.DisplayName(tag);
+                if (!string.IsNullOrWhiteSpace(language))
+                {
+                    var name = string.IsNullOrWhiteSpace(cleaned)
+                        ? language
+                        : $"{language} · {cleaned}";
+                    return (name, tag);
+                }
+            }
+        }
+
+        return (string.IsNullOrWhiteSpace(cleaned) ? raw : cleaned, "");
     }
 
     private void ShowSubtitleVersions(SubtitleLanguageChoice language)
@@ -2328,8 +2671,9 @@ public sealed partial class PlayerPage : Page
     {
         _selectedSubtitle = version;
         ViewModel.SelectSubtitle(version);
-        SubtitleActiveDot.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
+        SubtitleActiveDot.Visibility = HasActiveSubtitle ? Visibility.Visible : Visibility.Collapsed;
         UpdateSubtitleCurrent();
+        UpdateSubtitleTimingUi();
         RefreshSubtitleFlyout();
     }
 
@@ -2350,10 +2694,14 @@ public sealed partial class PlayerPage : Page
         if (version is null)
         {
             _selectedSubtitlePath = null;
+            _selectedEmbeddedTrackId = -1;
+            _selectedEmbeddedName = null;
+            _selectedEmbeddedCode = null;
             _mediaPlayer?.SetSpu(-1);
             _subtitleApplied = true;
             ViewModel.SubtitleStatus = "";
             UpdateSubtitleCurrent();
+            UpdateSubtitleTimingUi();
             return true;
         }
 
@@ -2380,8 +2728,13 @@ public sealed partial class PlayerPage : Page
         }
 
         _selectedSubtitlePath = path;
+        // The addon file replaces any embedded track that was active.
+        _selectedEmbeddedTrackId = -1;
+        _selectedEmbeddedName = null;
+        _selectedEmbeddedCode = null;
         ViewModel.SubtitleStatus = "";
         UpdateSubtitleCurrent();
+        UpdateSubtitleTimingUi();
         RememberSubtitleLanguage(version);
 
         if (!applyNow && _currentSource is null)
@@ -2490,6 +2843,8 @@ public sealed partial class PlayerPage : Page
             }
 
             _subtitleApplied = true;
+            // Adding a slave can reset the input's timing; put the saved offset back.
+            ApplySubtitleDelay();
             return true;
         }
         catch (Exception exception)
@@ -2699,6 +3054,7 @@ public sealed partial class PlayerPage : Page
         _disposed = true;
         _chromeTimer.Stop();
         _resumeHintTimer?.Stop();
+        _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();
         _stallTimer.Stop();
         _streamCacheCts.Cancel();
@@ -2719,6 +3075,9 @@ public sealed partial class PlayerPage : Page
         _subtitleCts?.Cancel();
         _subtitleCts?.Dispose();
         _subtitleCts = null;
+
+        // A timing change made just before leaving must reach the next session.
+        _ = App.SubtitleOffsets.FlushAsync();
 
         if (_subtitleDirectory is not null)
         {

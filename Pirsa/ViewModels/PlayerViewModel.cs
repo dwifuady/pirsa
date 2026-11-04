@@ -490,8 +490,17 @@ public partial class PlayerViewModel : ObservableObject
                 .ThenBy(language => language.LanguageName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
+            // Embedded tracks belong to the stream, not to the addon query, so
+            // they survive the language list being rebuilt.
+            var embedded = SubtitleMenu.Where(language => language.IsEmbedded).ToList();
+
             SubtitleMenu.Clear();
             SubtitleMenu.Add(OffSubtitle);
+            foreach (var language in embedded)
+            {
+                SubtitleMenu.Add(language);
+            }
+
             foreach (var language in languages)
             {
                 SubtitleMenu.Add(language);
@@ -517,6 +526,38 @@ public partial class PlayerViewModel : ObservableObject
     public void SelectSubtitle(SubtitleVersionChoice? version)
     {
         SelectedSubtitle = version;
+    }
+
+    /// <summary>
+    /// Replaces the subtitle tracks embedded in the current stream with the
+    /// ones libvlc just parsed. They sit directly under Off, before the addon
+    /// languages, because they need no download and are usually the best match
+    /// for the picture.
+    /// </summary>
+    public void SetEmbeddedSubtitles(IReadOnlyList<SubtitleLanguageChoice> tracks)
+    {
+        for (var i = SubtitleMenu.Count - 1; i >= 0; i--)
+        {
+            if (SubtitleMenu[i].IsEmbedded)
+            {
+                SubtitleMenu.RemoveAt(i);
+            }
+        }
+
+        var index = 1;
+        foreach (var track in tracks)
+        {
+            SubtitleMenu.Insert(index++, track);
+        }
+
+        // "No subtitles found" only refers to the addon query, and an embedded
+        // track makes the panel useful again.
+        if (tracks.Count > 0 && SubtitleStatus == "No subtitles found")
+        {
+            SubtitleStatus = "";
+        }
+
+        OnPropertyChanged(nameof(HasSubtitles));
     }
 
     /// <summary>
@@ -567,13 +608,15 @@ public sealed class SubtitleLanguageChoice : ObservableObject
         string languageCode,
         bool isOff,
         IReadOnlyList<SubtitleVersionChoice> versions,
-        string detail)
+        string detail,
+        int embeddedTrackId = -1)
     {
         LanguageName = languageName;
         LanguageCode = languageCode;
         IsOff = isOff;
         Versions = versions;
         Detail = detail;
+        EmbeddedTrackId = embeddedTrackId;
     }
 
     public string LanguageName { get; }
@@ -581,6 +624,11 @@ public sealed class SubtitleLanguageChoice : ObservableObject
     public string LanguageCode { get; }
 
     public bool IsOff { get; }
+
+    /// <summary>libvlc track id when this row is embedded in the video itself.</summary>
+    public int EmbeddedTrackId { get; }
+
+    public bool IsEmbedded => EmbeddedTrackId >= 0;
 
     public IReadOnlyList<SubtitleVersionChoice> Versions { get; }
 

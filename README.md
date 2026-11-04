@@ -25,8 +25,9 @@ Indonesian *memirsa* ("to watch") and *pemirsa* ("viewer, audience").
   every search-capable addon in parallel.
 - **Details** — backdrop hero, metadata by addon priority, and season/episode
   browsing.
-- **Native player** — libvlc with custom Windows 11-style controls, subtitle
-  picking, speed, fullscreen, autoplay, auto-advance and source switching.
+- **Native player** — libvlc with custom Windows 11-style controls, embedded
+  and addon subtitles with live timing, audio tracks, speed, fullscreen,
+  autoplay, auto-advance and source switching.
 - **Addon manager** — add, enable, disable, reorder and remove Stremio addons.
   Cinemeta and OpenSubtitles v3 are included; no stream addon ships by default.
 

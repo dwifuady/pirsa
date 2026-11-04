@@ -45,6 +45,9 @@ public partial class App : Application
     /// <summary>Submitted search queries, persisted in search-history.json.</summary>
     public static SearchHistoryStore SearchHistory { get; } = new();
 
+    /// <summary>Per-title subtitle timing, persisted in subtitle-offsets.json.</summary>
+    public static SubtitleOffsetStore SubtitleOffsets { get; } = new();
+
     /// <summary>
     /// The native window handle (HWND). Use for file pickers,
     /// <c>DataTransferManager</c>, and any WinRT interop that requires
@@ -68,6 +71,7 @@ public partial class App : Application
         _ = WatchProgress.EnsureLoadedAsync();
         _ = Watchlist.EnsureLoadedAsync();
         _ = SearchHistory.EnsureLoadedAsync();
+        _ = SubtitleOffsets.EnsureLoadedAsync();
         _ = VideoEngine.WarmUpAsync();
     }
 }

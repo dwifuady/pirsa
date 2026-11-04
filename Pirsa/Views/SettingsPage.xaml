@@ -622,7 +622,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Pirsa remembers where you stopped in each movie and episode, which titles you marked watched, and the last stream source that worked for them, so Continue watching can start instantly. All of it is stored on this device only."
+                                Text="Pirsa remembers where you stopped in each movie and episode, which titles you marked watched, the last stream source that worked for them, and any subtitle timing you adjusted, so Continue watching can start instantly. All of it is stored on this device only."
                                 TextWrapping="Wrap" />
                             <TextBlock
                                 FontSize="12"

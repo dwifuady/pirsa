@@ -386,6 +386,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             await _watchProgress.ClearAsync(cancellationToken);
+            await App.SubtitleOffsets.ClearAsync(cancellationToken);
             RaiseWatchHistoryInfo();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

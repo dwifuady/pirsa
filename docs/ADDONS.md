@@ -76,9 +76,10 @@ build is launched**, so a development session can never touch an installed copy:
 ```
 
 Every file lives in that one root: `addons.json`, `settings.json`,
-`watch-progress.json`, `watchlist.json`, `search-history.json`, `player.log` and
-the `cache\` folder used while a video plays. `Services/LocalPaths.cs` is the
-only place that resolves it, and the player log header names the root it used.
+`watch-progress.json`, `watchlist.json`, `search-history.json`,
+`subtitle-offsets.json`, `player.log` and the `cache\` folder used while a
+video plays. `Services/LocalPaths.cs` is the only place that resolves it, and
+the player log header names the root it used.
 
 ## Privacy
 
@@ -87,4 +88,5 @@ only place that resolves it, and the player log header names the root it used.
 - `addons.json` and `watch-progress.json` can both contain private stream URLs
   or tokens. Nothing is sent anywhere except to the addon/provider that supplied
   the source.
-- Watch history, watchlist, search history and settings never leave the machine.
+- Watch history, watchlist, search history, subtitle timing and settings never
+  leave the machine.

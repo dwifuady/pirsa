@@ -36,7 +36,7 @@ Everything Pirsa does, in detail. For install and build steps see
   title for a few seconds is ignored, and a small bit of playback never rewinds
   an existing position.
 - Settings → Playback → **Watch history** shows how many positions are stored
-  and clears them all, including remembered sources.
+  and clears them all, including remembered sources and subtitle timing.
 - The history holds at most 500 entries; the oldest are dropped.
 - History is per device; there is no sync between machines.
 
@@ -126,8 +126,9 @@ Everything Pirsa does, in detail. For install and build steps see
   source picker, and a **CC subtitle picker**.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
   fullscreen, **M** mute, **Esc** exits fullscreen or closes the
-  source/subtitle panels. Enter activates a focused button. Arrow keys adjust
-  volume when the volume slider itself has focus.
+  source/subtitle panels, **[** and **]** shift subtitle timing, Enter
+  activates a focused button. Arrow keys adjust volume when the volume slider
+  itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
 - **Autoplay** — Settings → Playback has a single **Start playing
@@ -148,32 +149,40 @@ Everything Pirsa does, in detail. For install and build steps see
 ## Subtitles
 
 - The **CC** button in the player opens a two-step picker:
-  1. **Off** plus one row per language. Languages are grouped across all
-     subtitle addons and sorted by how many tracks are available.
+  1. **Off**, the tracks **embedded in this video**, then one row per addon
+     language. Languages are grouped across all subtitle addons and sorted by
+     how many tracks are available. Embedded tracks apply instantly and need
+     no download.
   2. For a language with multiple tracks, a version list opens. Every row shows
      the release group, file name, addon, frame rate and encoding, so you can
      pick the version that matches your release. The active version is shown
      above the list and remains selected when you reopen the picker.
 - Languages with a single track apply immediately. **Off** disables subtitles
-  immediately. Selecting a different version is how you test subtitle sync.
+  immediately.
+- **Subtitle timing** sits in the same panel: **Earlier** and **Later** shift
+  the active track in 0.1-second steps, the value and a plain-language hint
+  update live, and **Reset** appears only once you have changed it. Hold either
+  button to sweep faster. **`[`** and **`]`** do the same while watching and
+  show a short timing toast over the picture, so the panel does not need to be
+  open. Timing works for embedded and addon tracks alike and is remembered per
+  title, including across source switches and the next episode.
 - **Preferred subtitle language** (Settings → Playback) turns the first matching
   track on automatically for every title and episode, including the next episode
   after auto-advance. Picking a language in the player remembers it as the
   preference, while choosing **Off** there only applies to the title you are
   watching. Two- and three-letter codes (en / eng) count as the same language.
-- The current subtitle stays selected across source switches.
+- The current subtitle and its timing stay selected across source switches; an
+  embedded language is re-selected when the new source has a matching track.
 - Subtitle files are downloaded with .NET first and handed to VLC as local
   files. This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote
   subtitle downloads overlap with stream TLS sessions.
 - Adding another subtitle addon in Settings automatically adds its languages to
   the same picker.
-- Embedded subtitle tracks are not listed yet; only addon-provided tracks.
 
 ## Limitations
 
-- Embedded subtitle tracks are not exposed in the CC list; only addon tracks.
-- No audio-track picker. Auto-advance stops at the end of the last known
-  episode and does not know about unaired episodes.
+- Auto-advance stops at the end of the last known episode and does not know
+  about unaired episodes.
 - Watch history is per device; there is no sync between machines.
 - Addon order is global: per-type or per-catalog priorities are not supported
   yet.

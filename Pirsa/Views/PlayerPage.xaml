@@ -30,6 +30,20 @@
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
+        <Style x:Key="SubtitleTimingButtonStyle" TargetType="RepeatButton">
+            <Setter Property="Width" Value="104" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="{ThemeResource PlayerControlBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Delay" Value="400" />
+            <Setter Property="Interval" Value="80" />
+        </Style>
         <DataTemplate x:Key="SubtitleLanguageTemplate" x:DataType="vm:SubtitleLanguageChoice">
             <StackPanel Spacing="1">
                 <TextBlock
@@ -386,7 +400,7 @@
 
                                                 <Grid>
                                                     <Grid x:Name="SubtitleLanguageView">
-                                                        <ListView x:Name="SubtitleLanguageList" MaxHeight="360" IsItemClickEnabled="True" ItemClick="SubtitleLanguageList_ItemClick" ItemContainerStyle="{StaticResource SubtitleListItemStyle}" ItemTemplate="{StaticResource SubtitleLanguageTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionMode="None" />
+                                                        <ListView x:Name="SubtitleLanguageList" MaxHeight="280" IsItemClickEnabled="True" ItemClick="SubtitleLanguageList_ItemClick" ItemContainerStyle="{StaticResource SubtitleListItemStyle}" ItemTemplate="{StaticResource SubtitleLanguageTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionMode="None" />
                                                     </Grid>
 
                                                     <Grid x:Name="SubtitleVersionView" Visibility="Collapsed">
@@ -404,10 +418,48 @@
                                                                     <TextBlock x:Name="SubtitleVersionHint" FontSize="11" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" TextWrapping="Wrap" />
                                                                 </StackPanel>
                                                             </Grid>
-                                                            <ListView x:Name="SubtitleVersionList" MaxHeight="320" ItemContainerStyle="{StaticResource SubtitleListItemStyle}" ItemTemplate="{StaticResource SubtitleVersionTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionChanged="SubtitleVersionList_SelectionChanged" SelectionMode="Single" />
+                                                            <ListView x:Name="SubtitleVersionList" MaxHeight="260" ItemContainerStyle="{StaticResource SubtitleListItemStyle}" ItemTemplate="{StaticResource SubtitleVersionTemplate}" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionChanged="SubtitleVersionList_SelectionChanged" SelectionMode="Single" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </Grid>
+
+                                                <!--  Subtitle timing: only relevant once a track is on  -->
+                                                <Border x:Name="SubtitleTimingPanel" Padding="12,10" Background="{ThemeResource PlayerPanelBackgroundBrush}" BorderBrush="{ThemeResource PlayerPanelBorderBrush}" BorderThickness="1" CornerRadius="10" Visibility="Collapsed">
+                                                    <StackPanel Spacing="8">
+                                                        <Grid>
+                                                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource PlayerForegroundBrush}" Text="Subtitle timing" />
+                                                            <TextBlock HorizontalAlignment="Right" FontSize="10" Foreground="{ThemeResource PlayerTertiaryForegroundBrush}" Text="[ and ] while watching" />
+                                                        </Grid>
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <RepeatButton x:Name="SubtitleEarlierButton" AutomationProperties.AutomationId="SubtitleEarlierButton" AutomationProperties.Name="Show subtitles earlier" Click="SubtitleEarlier_Click" Style="{StaticResource SubtitleTimingButtonStyle}" ToolTipService.ToolTip="Show subtitles earlier ([)">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <FontIcon FontSize="12" Glyph="&#xE738;" />
+                                                                    <TextBlock Text="Earlier" />
+                                                                </StackPanel>
+                                                            </RepeatButton>
+                                                            <TextBlock x:Name="SubtitleTimingValue" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{ThemeResource PlayerForegroundBrush}" AutomationProperties.AutomationId="SubtitleTimingValue" Text="0.0 s" />
+                                                            <RepeatButton x:Name="SubtitleLaterButton" Grid.Column="2" AutomationProperties.AutomationId="SubtitleLaterButton" AutomationProperties.Name="Show subtitles later" Click="SubtitleLater_Click" Style="{StaticResource SubtitleTimingButtonStyle}" ToolTipService.ToolTip="Show subtitles later (])">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Text="Later" />
+                                                                    <FontIcon FontSize="12" Glyph="&#xE710;" />
+                                                                </StackPanel>
+                                                            </RepeatButton>
+                                                        </Grid>
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock x:Name="SubtitleTimingHint" VerticalAlignment="Center" FontSize="11" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" Text="Subtitles are in sync" TextWrapping="Wrap" />
+                                                            <HyperlinkButton x:Name="SubtitleResetButton" Grid.Column="1" Padding="6,0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.AutomationId="SubtitleResetButton" AutomationProperties.Name="Reset subtitle timing" Click="SubtitleReset_Click" Content="Reset" FontSize="11" MinHeight="0" Visibility="Collapsed" />
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </Border>
                                             </StackPanel>
                                         </Border>
                                     </Flyout>
@@ -447,6 +499,25 @@
                 </StackPanel>
             </Grid>
         </Grid>
+
+        <!--  Subtitle timing toast: visible without the chrome, never hit-testable  -->
+        <Border
+            x:Name="SubtitleHudPanel"
+            Margin="0,0,0,112"
+            Padding="14,8"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource PlayerPanelBackgroundBrush}"
+            BorderBrush="{ThemeResource PlayerPanelBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource BrandPrimaryBrush}" Text="CC" />
+                <TextBlock x:Name="SubtitleHudText" VerticalAlignment="Center" FontSize="12" Foreground="{ThemeResource PlayerForegroundBrush}" AutomationProperties.LiveSetting="Polite" Text="Subtitle timing" />
+            </StackPanel>
+        </Border>
 
         <!--  Resume hint, kept outside the chrome so it survives auto-hide  -->
         <Border

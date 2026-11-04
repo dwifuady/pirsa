@@ -68,6 +68,7 @@ Pirsa/
   Services/PlayerLog.cs           per-session seek/buffering log for diagnosis
   Services/LocalPaths.cs          the one data root: packaged, unpackaged, and Debug runs
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
+  Services/SubtitleOffsetStore.cs per-title subtitle timing, in subtitle-offsets.json
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   ViewModels/HomeViewModel.cs     hero + rails across addons
