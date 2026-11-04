@@ -165,6 +165,8 @@ jobs:
               ''
               'Neither is code-signed, so Windows SmartScreen may warn on first run — choose **More info → Run anyway**. Requires Windows 10 1809 or newer.'
               ''
+              'Existing installs check for updates on launch and can download and install this release from the in-app notice.'
+              ''
               'Pirsa is free software under the GPL v3.0. See `THIRD-PARTY-NOTICES.md` in the ZIP for bundled components, including libVLC (LGPL-2.1-or-later).'
               ''
               '## Changes'

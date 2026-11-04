@@ -77,6 +77,18 @@ git push origin v0.1.0
 Keep `Version` in `Pirsa/Pirsa.csproj` in sync for local builds; the workflow
 overrides it from the tag.
 
+The in-app updater reads the latest release through the GitHub API and expects
+the asset names the workflow already produces:
+`Pirsa-<version>-win-<arch>-setup.exe`, `Pirsa-<version>-win-<arch>.zip`, and
+`SHA256SUMS.txt`. Renaming or dropping one of those assets disables the update
+path that needs it. The installer accepts `/RELAUNCH=1`, which the app passes
+when it starts a silent update so the new version opens when it is done.
+
+The release must be readable without signing in: an anonymous request to a
+private repository returns 404, and the check is silently skipped. Make the
+repository (and its releases) public before shipping the updater, or change
+`UpdateService.Repository` to a public repository with the same asset layout.
+
 ## Project map
 
 ```
@@ -95,6 +107,7 @@ Pirsa/
   Services/LocalPaths.cs          the one data root: packaged, unpackaged, and Debug runs
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
   Services/SubtitleOffsetStore.cs per-title subtitle timing, in subtitle-offsets.json
+  Services/UpdateService.cs        update check, download, checksum, install hand-off
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   Helpers/AddonLinkPrompt.cs      confirmation + install for an activated link
@@ -103,6 +116,7 @@ Pirsa/
   ViewModels/DetailsViewModel.cs  meta routing, facts, seasons, episodes
   ViewModels/PlayerViewModel.cs   stream discovery, ranking, dedupe
   ViewModels/SettingsViewModel.cs addon manager state
+  ViewModels/UpdateViewModel.cs   launch update notice, download and install state
   Views/HomePage.xaml             hero carousel + catalog rails
   Views/DiscoverPage.xaml         catalog browser filters, search and poster grid
   Views/DetailsPage.xaml          backdrop hero + facts + episodes

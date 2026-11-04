@@ -208,6 +208,24 @@ Everything Pirsa does, in detail. For install and build steps see
   Addons. Packaged builds register it through the app package, and the installer
   registers it per user.
 
+## Updates
+
+- Every launch of an installer or portable build checks the project's latest
+  GitHub Release in the background. A failed check is silent, so an offline
+  launch is unchanged. The request carries no account, device or viewing data.
+- When a newer version exists, a notice appears in the corner with the version
+  and download size. **Download** fetches the release inside Pirsa; the notice
+  shows progress and the app stays usable.
+- The download is checked against the release's published SHA-256 before
+  **Install** appears. A corrupted or tampered download is discarded.
+- **Install** closes Pirsa and hands off:
+  - An installed copy runs the per-user installer silently, then reopens the
+    new version.
+  - A portable copy replaces its own folder from the release ZIP, then reopens.
+    It falls back to a clear message when the folder is not writable.
+- Packaged builds (Store, or a development run through `winapp`) do not
+  self-update; updates belong to the package owner.
+
 ## Limitations
 
 - Auto-advance stops at the end of the last known episode and does not know
