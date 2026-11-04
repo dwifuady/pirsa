@@ -66,6 +66,17 @@
             <SolidColorBrush x:Key="PlayerBadgeBackgroundBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="PlayerBadgeForegroundBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="PlayerOverlayScrimBrush" Color="#A6000000" />
+            <!--
+                Startup overlay: dark at the edges for the chrome, lighter behind
+                the title artwork so the poster stays readable.
+            -->
+            <LinearGradientBrush x:Key="PlayerLoadingScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#D9000000" />
+                <GradientStop Offset="0.28" Color="#73000000" />
+                <GradientStop Offset="0.55" Color="#59000000" />
+                <GradientStop Offset="0.82" Color="#99000000" />
+                <GradientStop Offset="1" Color="#E6000000" />
+            </LinearGradientBrush>
             <LinearGradientBrush x:Key="PlayerTopScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                 <GradientStop Offset="0" Color="#CC000000" />
                 <GradientStop Offset="1" Color="#00000000" />
@@ -132,6 +143,17 @@
             <SolidColorBrush x:Key="PlayerBadgeBackgroundBrush" Color="#33FFFFFF" />
             <SolidColorBrush x:Key="PlayerBadgeForegroundBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="PlayerOverlayScrimBrush" Color="#A6000000" />
+            <!--
+                Startup overlay: dark at the edges for the chrome, lighter behind
+                the title artwork so the poster stays readable.
+            -->
+            <LinearGradientBrush x:Key="PlayerLoadingScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#D9000000" />
+                <GradientStop Offset="0.28" Color="#73000000" />
+                <GradientStop Offset="0.55" Color="#59000000" />
+                <GradientStop Offset="0.82" Color="#99000000" />
+                <GradientStop Offset="1" Color="#E6000000" />
+            </LinearGradientBrush>
             <LinearGradientBrush x:Key="PlayerTopScrimBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                 <GradientStop Offset="0" Color="#CC000000" />
                 <GradientStop Offset="1" Color="#00000000" />
@@ -183,6 +205,7 @@
             <SolidColorBrush x:Key="PlayerBadgeBackgroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="PlayerBadgeForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="PlayerOverlayScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerLoadingScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="PlayerTopScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="PlayerBottomScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>

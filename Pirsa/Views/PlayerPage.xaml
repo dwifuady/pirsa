@@ -23,6 +23,46 @@
     </Page.KeyboardAccelerators>
 
     <Page.Resources>
+        <!--
+            Slow breathing pulse for the title artwork on the startup overlay.
+            It reassures the eye that the app is still working without the
+            spinner being the only thing moving. The target is bound in code:
+            a Storyboard inside a ResourceDictionary cannot resolve the page's
+            namescope by TargetName.
+        -->
+        <Storyboard
+            x:Key="LoadingBreathStoryboard"
+            AutoReverse="True"
+            RepeatBehavior="Forever">
+            <DoubleAnimation
+                Storyboard.TargetProperty="Opacity"
+                Duration="0:0:2"
+                From="1"
+                To="0.45">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation
+                Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.ScaleX)"
+                Duration="0:0:2"
+                From="1"
+                To="1.015">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation
+                Storyboard.TargetProperty="(UIElement.RenderTransform).(CompositeTransform.ScaleY)"
+                Duration="0:0:2"
+                From="1"
+                To="1.015">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
         <Style x:Key="SubtitleListItemStyle" TargetType="ListViewItem">
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="MinHeight" Value="0" />
@@ -823,12 +863,12 @@
 
         <!--  Source discovery / startup  -->
         <Grid x:Name="LoadingOverlay" Background="{ThemeResource PlayerSurfaceBrush}">
-            <Border Opacity="0.45">
+            <Border Opacity="{ThemeResource HeroImageOpacity}">
                 <Border.Background>
-                    <ImageBrush ImageSource="{x:Bind ViewModel.BackdropImage}" Stretch="UniformToFill" />
+                    <ImageBrush ImageSource="{x:Bind ViewModel.LoadingArtworkImage, Mode=OneWay}" Stretch="UniformToFill" />
                 </Border.Background>
             </Border>
-            <Border Background="{ThemeResource PlayerOverlayScrimBrush}" />
+            <Border Background="{ThemeResource PlayerLoadingScrimBrush}" />
 
             <Button
                 AutomationProperties.Name="Back"
@@ -847,20 +887,32 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Spacing="12">
-                <Image
-                    Width="56"
-                    Height="56"
+                <Grid
+                    x:Name="LoadingBrand"
+                    MaxWidth="440"
                     HorizontalAlignment="Center"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Source="ms-appx:///Assets/BrandMark.png" />
-                <TextBlock
-                    HorizontalAlignment="Center"
-                    FontSize="24"
-                    FontWeight="SemiBold"
-                    Foreground="{ThemeResource PlayerForegroundBrush}"
-                    Text="{x:Bind ViewModel.Title}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
+                    RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <CompositeTransform />
+                    </Grid.RenderTransform>
+                    <Image
+                        MaxWidth="420"
+                        MaxHeight="132"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.Name="{x:Bind ViewModel.Title}"
+                        Source="{x:Bind ViewModel.LogoImage, Mode=OneWay}"
+                        Stretch="Uniform"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasLogo), Mode=OneWay}" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        FontSize="34"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource PlayerForegroundBrush}"
+                        Text="{x:Bind ViewModel.Title}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.NoLogo), Mode=OneWay}" />
+                </Grid>
                 <TextBlock
                     HorizontalAlignment="Center"
                     FontSize="13"
