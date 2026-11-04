@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Helpers;
 using Pirsa.Models;
@@ -15,6 +16,7 @@ using Pirsa.Services;
 using Pirsa.ViewModels;
 using Windows.System;
 using Windows.Storage;
+using Windows.UI.ViewManagement;
 
 namespace Pirsa.Views;
 
@@ -139,11 +141,17 @@ public sealed partial class PlayerPage : Page
     private bool _advancing;
     private int _lastVolume = 80;
 
+    private readonly UISettings _uiSettings = new();
+    private readonly AccessibilitySettings _accessibility = new();
+    private Storyboard? _loadingBreath;
+
     public PlayerViewModel ViewModel => _viewModel;
 
     public PlayerPage()
     {
         InitializeComponent();
+
+        ConfigureLoadingBreath();
 
         _chromeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _chromeTimer.Tick += (_, _) =>
@@ -190,11 +198,69 @@ public sealed partial class PlayerPage : Page
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Root_KeyDown), true);
         Root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Root_PreviewKeyDown), true);
 
-        Loaded += (_, _) => VideoSurface.Focus(FocusState.Programmatic);
+        Loaded += (_, _) =>
+        {
+            VideoSurface.Focus(FocusState.Programmatic);
+            SyncLoadingBreath();
+        };
 
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
 
         VolumeSlider.Value = 80;
+    }
+
+    /// <summary>
+    /// Breathes the title artwork on the startup overlay. The storyboard targets
+    /// are bound here rather than by TargetName because a storyboard that lives
+    /// in Page.Resources cannot see the page's namescope.
+    /// </summary>
+    private void ConfigureLoadingBreath()
+    {
+        _loadingBreath = Resources["LoadingBreathStoryboard"] as Storyboard;
+        if (_loadingBreath is null)
+        {
+            return;
+        }
+
+        foreach (var animation in _loadingBreath.Children)
+        {
+            Storyboard.SetTarget(animation, LoadingBrand);
+        }
+
+        LoadingOverlay.RegisterPropertyChangedCallback(
+            VisibilityProperty,
+            (_, _) => SyncLoadingBreath());
+    }
+
+    /// <summary>
+    /// Runs the pulse only while the overlay is actually on screen, and leaves
+    /// it off under reduce motion or a High Contrast theme where fading the
+    /// title would hurt legibility.
+    /// </summary>
+    private void SyncLoadingBreath()
+    {
+        if (_loadingBreath is null)
+        {
+            return;
+        }
+
+        var shouldRun = LoadingOverlay.IsLoaded &&
+                        LoadingOverlay.Visibility == Visibility.Visible &&
+                        _uiSettings.AnimationsEnabled &&
+                        !_accessibility.HighContrast;
+
+        if (shouldRun)
+        {
+            if (_loadingBreath.GetCurrentState() != ClockState.Active)
+            {
+                _loadingBreath.Begin();
+            }
+
+            return;
+        }
+
+        _loadingBreath.Stop();
+        LoadingBrand.Opacity = 1;
     }
 
     protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -482,7 +548,6 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        LoadingOverlay.Visibility = Visibility.Collapsed;
         SourcesButton.IsEnabled = true;
         ShowChrome();
 
@@ -493,6 +558,10 @@ public sealed partial class PlayerPage : Page
             TryStartPlayback();
             return;
         }
+
+        // Nothing to auto-play yet: drop the artwork so the picker shows the
+        // (still black) video surface it belongs over.
+        LoadingOverlay.Visibility = Visibility.Collapsed;
 
         // Default: let the user pick a source. Grouped by addon.
         OpenSources();
@@ -1107,6 +1176,12 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private async Task PlaySourceAsync(PlaybackSource source)
     {
+        // Keep the title artwork up for the whole start-up window: source
+        // discovery, cache setup, and VLC opening the stream. HandlePlaying
+        // takes it down once there are actual frames.
+        ViewModel.StatusText = "Starting stream…";
+        LoadingOverlay.Visibility = Visibility.Visible;
+
         if (_mediaPlayer is null || _libVlc is null)
         {
             _pendingSource = source;
@@ -3203,6 +3278,7 @@ public sealed partial class PlayerPage : Page
         _switching = false;
         _stallTimer.Stop();
         HideBuffer();
+        LoadingOverlay.Visibility = Visibility.Collapsed;
         ErrorText.Text = message;
         ErrorPanel.Visibility = Visibility.Visible;
         RetryButton.IsEnabled = true;

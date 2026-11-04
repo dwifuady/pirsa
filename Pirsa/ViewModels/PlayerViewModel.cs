@@ -172,6 +172,19 @@ public partial class PlayerViewModel : ObservableObject
 
     public BitmapImage? PosterImage => Request?.Meta.PosterDetailImage;
 
+    /// <summary>
+    /// Artwork behind the startup / source-discovery overlay. The poster is the
+    /// title's most recognisable art, so it leads; the backdrop is only a
+    /// fallback for titles that have no poster.
+    /// </summary>
+    public BitmapImage? LoadingArtworkImage => PosterImage ?? BackdropImage;
+
+    public BitmapImage? LogoImage => Request?.Meta.LogoImage;
+
+    public bool HasLogo => Request?.Meta.HasLogo ?? false;
+
+    public bool NoLogo => !HasLogo;
+
     public int SourceCount => Sources.Count;
 
     public bool HasSources => Sources.Count > 0;
@@ -771,6 +784,10 @@ public partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(BackdropImage));
         OnPropertyChanged(nameof(PosterImage));
+        OnPropertyChanged(nameof(LoadingArtworkImage));
+        OnPropertyChanged(nameof(LogoImage));
+        OnPropertyChanged(nameof(HasLogo));
+        OnPropertyChanged(nameof(NoLogo));
     }
 
     partial void OnSelectedSeasonChanged(PlayerSeason? value)
