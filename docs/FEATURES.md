@@ -125,10 +125,10 @@ Everything Pirsa does, in detail. For install and build steps see
   seek bar, 10-second skips, volume, speed, fullscreen, auto-hiding controls, a
   source picker, and a **CC subtitle picker**.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
-  fullscreen, **M** mute, **Esc** exits fullscreen or closes the
-  source/subtitle panels, **[** and **]** shift subtitle timing, Enter
-  activates a focused button. Arrow keys adjust volume when the volume slider
-  itself has focus.
+  fullscreen, **M** mute, **E** opens the episode list, **Esc** exits fullscreen or
+  closes the source/subtitle/episode panels, **[** and **]** shift subtitle
+  timing, Enter activates a focused button. Arrow keys adjust volume when the
+  volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
 - Sources are grouped into horizontal tabs: **All** plus one tab per addon that
@@ -136,6 +136,12 @@ Everything Pirsa does, in detail. For install and build steps see
   of one endless list, and the tab strip scrolls sideways when the names don't
   fit. With a single addon the tabs are hidden because they would just repeat
   **All**.
+- **Episodes** — for a series, the **Episodes** button (or **E**) opens a season
+  picker and episode list over the video. Rows show the thumbnail, episode tag,
+  title, local watch progress, a **Now playing** marker and a watched check.
+  Choosing another episode switches the same player in place, keeps fullscreen
+  and volume, uses that episode's remembered source or the best available one,
+  and resumes its saved position. No trip back to Details is needed.
 - **Autoplay** — Settings → Playback has a single **Start playing
   automatically** switch, off by default. When on, choose a **Preferred
   quality**: Best available, 4K, 1440p, 1080p, 720p or 480p. Quality labels come
@@ -184,6 +190,24 @@ Everything Pirsa does, in detail. For install and build steps see
 - Adding another subtitle addon in Settings automatically adds its languages to
   the same picker.
 
+## Addon links
+
+- Clicking a `stremio://` addon link opens Pirsa and asks before anything is
+  installed. The prompt reads the manifest and shows the addon's name, version,
+  host and what it provides, then explains that addons are third-party.
+- **Install** adds it; **Cancel** works even while the manifest is loading. An
+  invalid link or a manifest that cannot be loaded changes nothing.
+- A successful install opens Settings → Addons with a notice. While the player
+  is open the outcome is shown in a dialog instead, so a running video is never
+  closed silently.
+- A link for an addon that is already configured opens Settings with that
+  message instead of adding a duplicate.
+- Addon links can also be pasted into Settings → Addons, including the
+  `https://web.stremio.com/#/addons?addon=…` share form.
+- Portable builds can turn Windows link handling on or off in Settings →
+  Addons. Packaged builds register it through the app package, and the installer
+  registers it per user.
+
 ## Limitations
 
 - Auto-advance stops at the end of the last known episode and does not know
@@ -191,5 +215,7 @@ Everything Pirsa does, in detail. For install and build steps see
 - Watch history is per device; there is no sync between machines.
 - Addon order is global: per-type or per-catalog priorities are not supported
   yet.
+- A `stremio://` link opened while Pirsa is already running starts a second
+  window instead of handing the link to the running one.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only
   direct HTTP(S) sources are played.

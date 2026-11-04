@@ -33,6 +33,21 @@ public sealed partial class SettingsPage : Page
     {
         base.OnNavigatedTo(e);
         ViewModel.Attach();
+
+        // Apply a hand-off message before the addon list finishes loading, so
+        // the notice is already visible when the page renders.
+        if (e.Parameter is SettingsMessage message)
+        {
+            if (message.IsError)
+            {
+                ViewModel.ShowError(message.Text);
+            }
+            else
+            {
+                ViewModel.ShowNotice(message.Text);
+            }
+        }
+
         await ViewModel.InitializeAsync();
         QualityPanel.Visibility = ViewModel.AutoplayEnabled
             ? Visibility.Visible
@@ -210,3 +225,9 @@ public sealed partial class SettingsPage : Page
         }
     }
 }
+
+/// <summary>
+/// A notice or error to show once Settings opens, used when an addon link
+/// installs an addon, or fails to, without closing the current page first.
+/// </summary>
+public sealed record SettingsMessage(string Text, bool IsError);

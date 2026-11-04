@@ -79,5 +79,16 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Name: "{autoprograms}\Pirsa"; Filename: "{app}\Pirsa.exe"
 Name: "{autodesktop}\Pirsa"; Filename: "{app}\Pirsa.exe"; Tasks: desktopicon
 
+[Registry]
+; Per-user stremio:// handler, so addon install links open Pirsa. The app
+; writes the same keys for portable copies (Settings -> Addon links). The
+; uninstaller removes the handler command and icon but keeps the protocol key
+; itself, because a packaged build of Pirsa may share it.
+Root: HKCU; Subkey: "Software\Classes\stremio"; ValueType: string; ValueName: ""; ValueData: "URL:Stremio addon link"
+Root: HKCU; Subkey: "Software\Classes\stremio"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\stremio"; ValueType: string; ValueName: "FriendlyTypeName"; ValueData: "Stremio addon link"
+Root: HKCU; Subkey: "Software\Classes\stremio\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\Pirsa.exe"",0"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\stremio\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Pirsa.exe"" ""%1"""; Flags: uninsdeletekey
+
 [Run]
 Filename: "{app}\Pirsa.exe"; Description: "{cm:LaunchProgram,Pirsa}"; Flags: nowait postinstall skipifsilent

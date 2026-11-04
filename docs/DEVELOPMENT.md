@@ -39,6 +39,30 @@ private const string HeroType = "movie";
 private const string HeroCatalogId = "top";
 ```
 
+## Testing addon links
+
+Packaged runs get the `stremio://` handler from `Package.appxmanifest` once
+`winapp run` has registered the debug identity. With the app running:
+
+```powershell
+start stremio://v3-cinemeta.strem.io/manifest.json
+```
+
+A link for a bundled addon shows **That addon is already configured**; a new
+addon shows the confirmation with its manifest details once they arrive.
+
+An unpackaged build has no package identity, so it uses the per-user
+`HKCU\Software\Classes\stremio` keys. The installer writes them, or for a
+portable copy use Settings → Addons → **Open stremio:// links in Pirsa**.
+A direct command-line launch exercises the same path:
+
+```powershell
+.\Pirsa.exe "stremio://example.com/manifest.json"
+```
+
+There is no single-instance hand-off yet, so activating a link while Pirsa is
+running starts a second process.
+
 ## Releasing
 
 The git tag is the version. Tag a commit and push it; CI builds both
@@ -63,6 +87,8 @@ Pirsa/
   Models/PlaybackRequest.cs       movie / episode → player routing
   Services/StremioAddonClient.cs  Stremio addon HTTP client
   Services/AddonRegistry.cs       persisted addon list, manifest loading, add/remove
+  Services/StremioAddonLink.cs    stremio:// and web share links → manifest URL
+  Services/StremioProtocolRegistration.cs  per-user stremio:// handler keys
   Services/StreamDiscovery.cs     per-title stream fetch cache + details-page prefetch
   Services/StreamCacheSession.cs  localhost read-ahead cache that makes seeks local
   Services/PlayerLog.cs           per-session seek/buffering log for diagnosis
@@ -71,6 +97,7 @@ Pirsa/
   Services/SubtitleOffsetStore.cs per-title subtitle timing, in subtitle-offsets.json
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
+  Helpers/AddonLinkPrompt.cs      confirmation + install for an activated link
   ViewModels/HomeViewModel.cs     hero + rails across addons
   ViewModels/DiscoverViewModel.cs type/catalog/genre filters, search and paging
   ViewModels/DetailsViewModel.cs  meta routing, facts, seasons, episodes

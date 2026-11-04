@@ -47,6 +47,16 @@ public sealed class StremioAddonClient
 
     public string AddonName => _manifest?.Name is { Length: > 0 } name ? name : "Addon";
 
+    /// <summary>
+    /// Uses a manifest the caller already fetched, so an addon added from a
+    /// link does not download the same manifest twice.
+    /// </summary>
+    internal void UseManifest(AddonManifest manifest)
+    {
+        _manifest = manifest;
+        _baseUri = new Uri(_manifestUri, ".");
+    }
+
     public async Task<AddonManifest> GetManifestAsync(CancellationToken cancellationToken = default)
     {
         if (_manifest is not null)

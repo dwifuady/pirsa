@@ -69,7 +69,10 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private const long EndOfTitleGraceMs = 4000;
 
-    private readonly PlayerViewModel _viewModel = new(App.Addons, App.StreamDiscovery);
+    private readonly PlayerViewModel _viewModel = new(
+        App.Addons,
+        App.StreamDiscovery,
+        App.WatchProgress);
     private readonly DispatcherTimer _chromeTimer;
     private readonly DispatcherTimer _stallTimer;
     private readonly Stopwatch _seekWatch = new();
@@ -105,6 +108,7 @@ public sealed partial class PlayerPage : Page
     private bool _sourcePanelOpen;
     private bool _syncingSourceTabs;
     private bool _subtitlesFlyoutOpen;
+    private bool _episodesFlyoutOpen;
     private bool _subtitleApplied;
     private bool _suppressSubtitleSelection;
     private bool _draggingSeek;
@@ -226,6 +230,7 @@ public sealed partial class PlayerPage : Page
         HideUpNext();
         _upNextDismissed = false;
         ViewModel.NextEpisode = null;
+        ViewModel.ClearSeries();
         _ = LoadSourcesAsync(request);
         _ = LoadSubtitlesAsync(request);
         _ = LoadNextEpisodeAsync(request);
@@ -768,6 +773,7 @@ public sealed partial class PlayerPage : Page
 
         if (!IsEpisodic(request))
         {
+            ViewModel.ClearSeries();
             return;
         }
 
@@ -785,6 +791,12 @@ public sealed partial class PlayerPage : Page
             }
 
             _seriesMeta = meta;
+            await ViewModel.SetSeriesAsync(meta, request, cancellationToken);
+            if (cancellationToken.IsCancellationRequested || _disposed)
+            {
+                return;
+            }
+
             _nextEpisode = FindNextEpisode(meta, request.Season, request.Episode);
             ViewModel.NextEpisode = _nextEpisode;
             UpdateUpNextVisibility();
@@ -946,16 +958,25 @@ public sealed partial class PlayerPage : Page
     /// window, chrome and subtitles logic. The next episode's remembered
     /// source is used when available; otherwise the best source is chosen.
     /// </summary>
-    private async Task PlayNextEpisodeAsync()
+    private Task PlayNextEpisodeAsync() =>
+        _nextEpisode is { } next ? PlayEpisodeAsync(next) : Task.CompletedTask;
+
+    /// <summary>
+    /// Switches the same player to any episode of the series: saves the
+    /// current position, resets per-episode state, and starts the new episode
+    /// with its remembered source or the best available one.
+    /// </summary>
+    private async Task PlayEpisodeAsync(MetaVideo episode)
     {
-        if (_advancing || _disposed)
+        if (_advancing || _disposed || _seriesMeta is not { } series)
         {
             return;
         }
 
-        var next = _nextEpisode;
-        var series = _seriesMeta;
-        if (next is null || series is null)
+        if (ViewModel.Request is { } current &&
+            current.Season == episode.Season &&
+            current.Episode == episode.EpisodeNumber &&
+            !_errorVisible)
         {
             return;
         }
@@ -966,7 +987,7 @@ public sealed partial class PlayerPage : Page
             // Save the finished (or skipped) episode before the request changes.
             PersistProgress(_positionMs, _lengthMs);
 
-            var request = PlaybackRequest.ForEpisode(series, next);
+            var request = PlaybackRequest.ForEpisode(series, episode);
 
             _nextEpisode = null;
             _upNextDismissed = false;
@@ -976,6 +997,7 @@ public sealed partial class PlayerPage : Page
             PrepareNextEpisode();
 
             ViewModel.Request = request;
+            ViewModel.MarkCurrentEpisode(episode.Season, episode.EpisodeNumber);
             _ = LoadSubtitlesAsync(request);
             _ = LoadNextEpisodeAsync(request);
             await LoadSourcesAsync(request, autoStart: true);
@@ -992,6 +1014,7 @@ public sealed partial class PlayerPage : Page
         _cachedAttempt = null;
         _cachedWatchdog?.Stop();
         _sourceDiscovery = null;
+        _nextEpisodeCts?.Cancel();
         _switching = true;
 
         try
@@ -1038,6 +1061,11 @@ public sealed partial class PlayerPage : Page
         if (SubtitlesFlyout.IsOpen)
         {
             SubtitlesFlyout.Hide();
+        }
+
+        if (EpisodesFlyout.IsOpen)
+        {
+            EpisodesFlyout.Hide();
         }
 
         if (_sourcePanelOpen)
@@ -2060,7 +2088,8 @@ public sealed partial class PlayerPage : Page
 
     private void HideChrome()
     {
-        if (!_playing || _sourcePanelOpen || _subtitlesFlyoutOpen || _errorVisible || _ended || _draggingSeek)
+        if (!_playing || _sourcePanelOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen ||
+            _errorVisible || _ended || _draggingSeek)
         {
             return;
         }
@@ -2080,7 +2109,8 @@ public sealed partial class PlayerPage : Page
 
     private void StartChromeTimer()
     {
-        if (_chromeHidden || !_playing || _sourcePanelOpen || _subtitlesFlyoutOpen || _errorVisible)
+        if (_chromeHidden || !_playing || _sourcePanelOpen || _subtitlesFlyoutOpen ||
+            _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2092,7 +2122,7 @@ public sealed partial class PlayerPage : Page
     private void InputLayer_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         _keyboardActive = false;
-        if (_sourcePanelOpen || _errorVisible)
+        if (_sourcePanelOpen || _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2104,7 +2134,7 @@ public sealed partial class PlayerPage : Page
     private void Root_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         _keyboardActive = false;
-        if (_sourcePanelOpen || _errorVisible)
+        if (_sourcePanelOpen || _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2124,7 +2154,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void Root_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (_sourcePanelOpen || _subtitlesFlyoutOpen || _errorVisible)
+        if (_sourcePanelOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2166,7 +2196,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (_sourcePanelOpen || _subtitlesFlyoutOpen)
+        if (_sourcePanelOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
         {
             return;
         }
@@ -2358,6 +2388,83 @@ public sealed partial class PlayerPage : Page
         }
 
         PlaySource(source);
+    }
+
+    // ---------------------------------------------------------------- episodes
+
+    private void OpenEpisodes_Click(object sender, RoutedEventArgs e) =>
+        OpenEpisodes(sender as FrameworkElement);
+
+    private void CloseEpisodes_Click(object sender, RoutedEventArgs e) => EpisodesFlyout.Hide();
+
+    /// <summary>
+    /// Opens the native flyout anchored to the Episodes button. It light
+    /// dismisses, keeps focus inside the list and closes on Escape by itself;
+    /// the chrome timer is paused so the controls don't disappear underneath it.
+    /// </summary>
+    private void OpenEpisodes(FrameworkElement? anchor = null)
+    {
+        if (!ViewModel.CanBrowseEpisodes || EpisodesFlyout.IsOpen)
+        {
+            return;
+        }
+
+        _chromeTimer.Stop();
+        EpisodesFlyout.ShowAt(anchor ?? EpisodesButton);
+    }
+
+    private void EpisodesFlyout_Opened(object? sender, object e)
+    {
+        _episodesFlyoutOpen = true;
+        _chromeTimer.Stop();
+        ShowChrome();
+        EpisodeList.Focus(FocusState.Programmatic);
+    }
+
+    private void EpisodesFlyout_Closed(object? sender, object e)
+    {
+        _episodesFlyoutOpen = false;
+        ShowChrome();
+        if (_playing)
+        {
+            StartChromeTimer();
+        }
+    }
+
+    private void EpisodeList_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not PlayerEpisode episode)
+        {
+            return;
+        }
+
+        EpisodesFlyout.Hide();
+
+        if (ViewModel.Request is { } current &&
+            current.Season == episode.Season &&
+            current.Episode == episode.EpisodeNumber &&
+            !_errorVisible)
+        {
+            return;
+        }
+
+        _ = PlayEpisodeAsync(episode.Video);
+    }
+
+    private void EpisodesAccelerator_Invoked(
+        KeyboardAccelerator sender,
+        KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (!ViewModel.CanBrowseEpisodes ||
+            _sourcePanelOpen ||
+            _subtitlesFlyoutOpen ||
+            EpisodesFlyout.IsOpen)
+        {
+            return;
+        }
+
+        OpenEpisodes();
+        args.Handled = true;
     }
 
     private void SubtitlesFlyout_Opened(object? sender, object e)
@@ -3015,6 +3122,11 @@ public sealed partial class PlayerPage : Page
         else if (_subtitlesFlyoutOpen)
         {
             SubtitlesFlyout.Hide();
+            args.Handled = true;
+        }
+        else if (_episodesFlyoutOpen)
+        {
+            EpisodesFlyout.Hide();
             args.Handled = true;
         }
     }
