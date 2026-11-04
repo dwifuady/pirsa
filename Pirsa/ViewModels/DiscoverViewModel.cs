@@ -21,6 +21,7 @@ public partial class DiscoverViewModel : ObservableObject
     private const int SearchDebounceMilliseconds = 300;
 
     private readonly AddonRegistry _registry;
+    private readonly WatchProgressStore _watchProgress;
     private List<DiscoverCatalogOption> _allCatalogs = [];
     private CancellationTokenSource? _reloadCts;
     private CancellationTokenSource? _searchCts;
@@ -30,9 +31,10 @@ public partial class DiscoverViewModel : ObservableObject
     private int _searchFailures;
     private string? _lastSearchError;
 
-    public DiscoverViewModel(AddonRegistry registry)
+    public DiscoverViewModel(AddonRegistry registry, WatchProgressStore watchProgress)
     {
         _registry = registry;
+        _watchProgress = watchProgress;
         SearchText = "";
         SearchPlaceholderText = "Search across your addons";
         ResultsHeading = "Results";
@@ -56,6 +58,19 @@ public partial class DiscoverViewModel : ObservableObject
     public ObservableCollection<MetaItem> Results { get; } = [];
 
     public ObservableCollection<DiscoverResultGroup> SearchGroups { get; } = [];
+
+    /// <summary>
+    /// Restamps watched badges on cached results after returning from details
+    /// or the player, so a card never shows yesterday's state.
+    /// </summary>
+    public void RefreshWatchStates()
+    {
+        _watchProgress.ApplyWatchState(Results);
+        foreach (var group in SearchGroups)
+        {
+            _watchProgress.ApplyWatchState(group);
+        }
+    }
 
     /// <summary>Groups <see cref="SearchGroups"/> for the grouped results grid.</summary>
     public CollectionViewSource SearchSource { get; }
@@ -518,6 +533,8 @@ public partial class DiscoverViewModel : ObservableObject
                         new CatalogQuery { Search = search },
                         cancellationToken);
 
+                    _watchProgress.ApplyWatchState(metas);
+
                     foreach (var meta in metas)
                     {
                         meta.SourceAddonUrl = entry.ManifestUrl;
@@ -625,6 +642,8 @@ public partial class DiscoverViewModel : ObservableObject
             {
                 Results.Clear();
             }
+
+            _watchProgress.ApplyWatchState(metas);
 
             var added = 0;
             foreach (var meta in metas)

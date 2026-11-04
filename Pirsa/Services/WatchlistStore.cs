@@ -45,6 +45,46 @@ public sealed class WatchlistEntry : ObservableObject
     public DateTimeOffset AddedAt { get; set; }
 
     private BitmapImage? _posterImage;
+    private bool _isWatched;
+    private bool _isPartiallyWatched;
+    private string _watchBadgeText = "";
+
+    [JsonIgnore]
+    public bool IsWatched
+    {
+        get => _isWatched;
+        private set => SetProperty(ref _isWatched, value);
+    }
+
+    [JsonIgnore]
+    public bool IsPartiallyWatched
+    {
+        get => _isPartiallyWatched;
+        private set => SetProperty(ref _isPartiallyWatched, value);
+    }
+
+    [JsonIgnore]
+    public string WatchBadgeText
+    {
+        get => _watchBadgeText;
+        private set
+        {
+            if (SetProperty(ref _watchBadgeText, value))
+            {
+                OnPropertyChanged(nameof(HasWatchBadge));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasWatchBadge => !string.IsNullOrWhiteSpace(WatchBadgeText);
+
+    public void ApplyWatchState(bool isWatched, bool isPartiallyWatched, string badgeText)
+    {
+        IsWatched = isWatched;
+        IsPartiallyWatched = isPartiallyWatched;
+        WatchBadgeText = badgeText;
+    }
 
     [JsonIgnore]
     public BitmapImage? PosterImage =>

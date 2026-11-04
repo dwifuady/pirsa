@@ -32,6 +32,19 @@ and live TV. Pirsa hosts no content: it plays what the third-party
   is visible, the details page turns its Play button into **Resume S02E04** (or
   **Resume 23:41** for a movie), and episode rows show **Watched** or
   **Resume 12:34** with a thin progress bar. History never leaves the machine.
+- **Watched** — movies, single episodes, a season, a hand-picked set of
+  episodes, or a whole series can be marked watched (or unwatched) from the
+  details page. The hero menu covers the title and the selected season,
+  **Select episodes** turns the episode list into checkboxes for a bulk mark,
+  and each episode row has a right-click **Mark as watched** action. Watched
+  titles carry a check badge on Home, Discover and Watchlist posters; a series
+  shows how many episodes are done (for example **3/10 watched**) and only
+  reads **Watched** once every listed episode is finished. Playback still marks
+  a title watched automatically when it finishes, and a later rewatch keeps the
+  watched date. When a partly watched series has no unfinished episode, the next
+  unwatched episode is offered in **Continue watching** (for example after
+  marking episodes 1–8 of 10, episode 9 appears there). Watched state is stored
+  beside the resume positions on this device only.
 - **Watchlist** — every movie and series details page has an **Add to
   watchlist** button (it turns into **In watchlist**, and pressing it again
   removes the title). Saved titles appear on the **Watchlist** page as a poster

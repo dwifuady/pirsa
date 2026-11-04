@@ -10,10 +10,12 @@ namespace Pirsa.ViewModels;
 public partial class LibraryViewModel : ObservableObject
 {
     private readonly WatchlistStore _watchlist;
+    private readonly WatchProgressStore _watchProgress;
 
-    public LibraryViewModel(WatchlistStore watchlist)
+    public LibraryViewModel(WatchlistStore watchlist, WatchProgressStore watchProgress)
     {
         _watchlist = watchlist;
+        _watchProgress = watchProgress;
     }
 
     public ObservableCollection<WatchlistEntry> Items { get; } = [];
@@ -37,6 +39,7 @@ public partial class LibraryViewModel : ObservableObject
         try
         {
             await _watchlist.EnsureLoadedAsync(cancellationToken);
+            await _watchProgress.EnsureLoadedAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -51,6 +54,11 @@ public partial class LibraryViewModel : ObservableObject
         Items.Clear();
         foreach (var entry in _watchlist.Entries.OrderByDescending(entry => entry.AddedAt))
         {
+            var summary = _watchProgress.GetTitleState(entry.MetaId, entry.Type);
+            entry.ApplyWatchState(
+                summary.State == TitleWatchState.Watched,
+                summary.State is TitleWatchState.PartiallyWatched or TitleWatchState.InProgress,
+                summary.BadgeText);
             Items.Add(entry);
         }
 

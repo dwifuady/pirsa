@@ -172,7 +172,7 @@ public sealed partial class SettingsPage : Page
         {
             XamlRoot = XamlRoot,
             Title = "Clear watch history?",
-            Content = "This forgets every saved movie and episode position on this device. Your addons and settings stay as they are.",
+            Content = "This forgets every saved movie and episode position, and every watched mark, on this device. Your watchlist, addons and settings stay as they are.",
             PrimaryButtonText = "Clear history",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,

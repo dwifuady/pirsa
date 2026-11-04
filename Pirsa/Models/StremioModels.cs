@@ -554,6 +554,49 @@ public sealed class MetaItem : ObservableObject
     private BitmapImage? _posterDetail;
     private BitmapImage? _background;
     private BitmapImage? _logo;
+    private bool _isWatched;
+    private bool _isPartiallyWatched;
+    private string _watchBadgeText = "";
+
+    /// <summary>Whole title watched, from the local watch history.</summary>
+    [JsonIgnore]
+    public bool IsWatched
+    {
+        get => _isWatched;
+        private set => SetProperty(ref _isWatched, value);
+    }
+
+    /// <summary>Some episodes watched, or playback in progress.</summary>
+    [JsonIgnore]
+    public bool IsPartiallyWatched
+    {
+        get => _isPartiallyWatched;
+        private set => SetProperty(ref _isPartiallyWatched, value);
+    }
+
+    /// <summary>"Watched", "3/10 watched" or "Watching" for poster overlays.</summary>
+    [JsonIgnore]
+    public string WatchBadgeText
+    {
+        get => _watchBadgeText;
+        private set
+        {
+            if (SetProperty(ref _watchBadgeText, value))
+            {
+                OnPropertyChanged(nameof(HasWatchBadge));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public bool HasWatchBadge => !string.IsNullOrWhiteSpace(WatchBadgeText);
+
+    public void ApplyWatchState(bool isWatched, bool isPartiallyWatched, string badgeText)
+    {
+        IsWatched = isWatched;
+        IsPartiallyWatched = isPartiallyWatched;
+        WatchBadgeText = badgeText;
+    }
 
     [JsonIgnore]
     public IReadOnlyList<string> GenreList =>
@@ -684,6 +727,33 @@ public sealed class MetaVideo : ObservableObject
     private BitmapImage? _thumbnail;
     private string _watchLabel = "";
     private double _watchProgress;
+    private bool _isWatched;
+    private bool _isSelected;
+    private bool _showSelection;
+
+    /// <summary>True when this episode is marked watched.</summary>
+    [JsonIgnore]
+    public bool IsWatched
+    {
+        get => _isWatched;
+        set => SetProperty(ref _isWatched, value);
+    }
+
+    /// <summary>Checked state while the details page selects episodes in bulk.</summary>
+    [JsonIgnore]
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    /// <summary>Shows the row checkbox while episode selection mode is on.</summary>
+    [JsonIgnore]
+    public bool ShowSelection
+    {
+        get => _showSelection;
+        set => SetProperty(ref _showSelection, value);
+    }
 
     /// <summary>Local watch history marker: "Watched" or "Resume 12:34".</summary>
     [JsonIgnore]

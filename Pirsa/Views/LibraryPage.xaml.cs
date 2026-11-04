@@ -17,7 +17,7 @@ public sealed partial class LibraryPage : Page
 {
     private const string PosterAnimationKey = "PosterAnimation";
 
-    public LibraryViewModel ViewModel { get; } = new(App.Watchlist);
+    public LibraryViewModel ViewModel { get; } = new(App.Watchlist, App.WatchProgress);
 
     public LibraryPage()
     {

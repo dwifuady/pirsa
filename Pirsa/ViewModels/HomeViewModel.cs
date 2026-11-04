@@ -106,6 +106,19 @@ public partial class HomeViewModel : ObservableObject
             ContinueWatching.Add(entry);
         }
 
+        // The player and the details page can change watched marks while this
+        // cached page is off screen, so restamp every card on each visit.
+        _watchProgress.ApplyWatchState(HeroItems.Select(hero => hero.Meta));
+        foreach (var hero in HeroItems)
+        {
+            hero.RaiseWatchState();
+        }
+
+        foreach (var row in Catalogs)
+        {
+            _watchProgress.ApplyWatchState(row.Items);
+        }
+
         OnPropertyChanged(nameof(HasContinueWatching));
         OnPropertyChanged(nameof(ContinueWatchingLabel));
         OnPropertyChanged(nameof(IsEmpty));
@@ -115,7 +128,7 @@ public partial class HomeViewModel : ObservableObject
         WatchProgressEntry entry,
         CancellationToken cancellationToken = default)
     {
-        await _watchProgress.RemoveTitleAsync(entry.MetaId, cancellationToken);
+        await _watchProgress.DismissContinueWatchingAsync(entry.MetaId, cancellationToken);
         await RefreshContinueWatchingAsync(cancellationToken);
     }
 
@@ -242,6 +255,7 @@ public partial class HomeViewModel : ObservableObject
             }
 
             StampSource(heroMetas, heroRef.Entry.ManifestUrl);
+            _watchProgress.ApplyWatchState(heroMetas);
 
             var rank = 1;
             foreach (var meta in heroMetas.Take(HeroLimit))
@@ -326,6 +340,7 @@ public partial class HomeViewModel : ObservableObject
             }
 
             StampSource(metas, catalogRef.Entry.ManifestUrl);
+            _watchProgress.ApplyWatchState(metas);
 
             return new CatalogRowViewModel(
                 order,
@@ -500,6 +515,16 @@ public sealed class HeroItemViewModel(MetaItem meta, int rank, string sourceLine
     public bool HasLogo => Meta.HasLogo;
 
     public bool NoLogo => !HasLogo;
+
+    public bool HasWatchBadge => Meta.HasWatchBadge;
+
+    public string WatchBadgeText => Meta.WatchBadgeText;
+
+    public void RaiseWatchState()
+    {
+        OnPropertyChanged(nameof(HasWatchBadge));
+        OnPropertyChanged(nameof(WatchBadgeText));
+    }
 
     public override string ToString() => $"{Title}, ranked {Rank}";
 }

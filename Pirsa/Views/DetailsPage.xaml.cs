@@ -228,6 +228,14 @@ public sealed partial class DetailsPage : Page
             return;
         }
 
+        // In selection mode the row toggles its checkbox instead of playing.
+        if (ViewModel.IsSelectingEpisodes)
+        {
+            episode.IsSelected = !episode.IsSelected;
+            ViewModel.NotifySelectionChanged();
+            return;
+        }
+
         if (!await StreamSetupPrompt.EnsurePlayableAsync(XamlRoot, OpenAddonSettings))
         {
             return;
@@ -307,6 +315,57 @@ public sealed partial class DetailsPage : Page
         _warmRequest = PlaybackRequest.ForEpisode(meta, episode);
         _warmTimer.Stop();
         _warmTimer.Start();
+    }
+
+    private void EpisodeSelection_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.NotifySelectionChanged();
+
+    /// <summary>
+    /// Right-click menu on an episode row: mark this episode watched or
+    /// unwatched, or add it to a bulk selection.
+    /// </summary>
+    private void Episode_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
+    {
+        if (ViewModel.Meta is null ||
+            sender is not FrameworkElement element ||
+            element.DataContext is not MetaVideo episode)
+        {
+            return;
+        }
+
+        args.Handled = true;
+
+        var watched = ViewModel.IsEpisodeWatched(episode);
+        var toggle = new MenuFlyoutItem
+        {
+            Text = watched ? "Mark as unwatched" : "Mark as watched",
+            Icon = new FontIcon { Glyph = watched ? "" : "" },
+        };
+        toggle.Click += async (_, _) => await ViewModel.SetEpisodeWatchedAsync(episode, !watched);
+
+        var select = new MenuFlyoutItem
+        {
+            Text = episode.IsSelected ? "Remove from selection" : "Add to selection",
+            Icon = new FontIcon { Glyph = episode.IsSelected ? "" : "" },
+        };
+        select.Click += (_, _) =>
+        {
+            episode.IsSelected = !episode.IsSelected;
+            ViewModel.NotifySelectionChanged();
+        };
+
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(toggle);
+        flyout.Items.Add(select);
+
+        if (args.TryGetPosition(element, out var position))
+        {
+            flyout.ShowAt(element, position);
+        }
+        else
+        {
+            flyout.ShowAt(element);
+        }
     }
 
     private void FlushWarmRequest()

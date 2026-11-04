@@ -20,7 +20,7 @@ public sealed partial class DiscoverPage : Page
     private bool _navigated;
     private int _loadedRevision = -1;
 
-    public DiscoverViewModel ViewModel { get; } = new(App.Addons);
+    public DiscoverViewModel ViewModel { get; } = new(App.Addons, App.WatchProgress);
 
     public DiscoverPage()
     {
@@ -30,6 +30,9 @@ public sealed partial class DiscoverPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+
+        await App.WatchProgress.EnsureLoadedAsync();
+        ViewModel.RefreshWatchStates();
 
         if (_navigated && _loadedRevision == App.Addons.Revision)
         {

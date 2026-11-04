@@ -78,6 +78,62 @@ public partial class DetailsViewModel : ObservableObject
         ? "Remove from watchlist"
         : "Add to watchlist";
 
+    // ----- Watched state ------------------------------------------------
+
+    /// <summary>Aggregate state for this movie or series.</summary>
+    public TitleWatchSummary WatchSummary { get; private set; }
+
+    public bool IsSeries => Meta is { } meta && IsSeriesType(meta.Type);
+
+    public bool HasWatchState => WatchSummary.State != TitleWatchState.None;
+
+    public bool IsTitleWatched => WatchSummary.IsWatched;
+
+    public string WatchStateText => WatchSummary.BadgeText;
+
+    /// <summary>Menu button label. Series only count as watched when complete.</summary>
+    public string WatchedButtonText => WatchSummary.State switch
+    {
+        TitleWatchState.Watched => "Watched",
+        TitleWatchState.PartiallyWatched => "Partially watched",
+        TitleWatchState.InProgress => "Watching",
+        _ => "Mark as watched",
+    };
+
+    /// <summary>Checkmark once anything is watched, radar otherwise.</summary>
+    public string WatchedGlyph => HasWatchState ? "" : "";
+
+    public string WatchedAutomationName => HasWatchState
+        ? "Watched options"
+        : "Mark as watched";
+
+    public string SeasonWatchMenuText => SelectedSeason is { } season
+        ? $"Mark {season.Label} as watched"
+        : "Mark this season as watched";
+
+    public string SeasonUnwatchMenuText => SelectedSeason is { } season
+        ? $"Mark {season.Label} as unwatched"
+        : "Mark this season as unwatched";
+
+    [ObservableProperty]
+    public partial bool IsSelectingEpisodes { get; set; }
+
+    public bool CanSelectEpisodes => Meta?.Videos is { Count: > 0 };
+
+    public string SelectEpisodesButtonText => IsSelectingEpisodes ? "Done" : "Select episodes";
+
+    public int SelectedEpisodeCount =>
+        Meta?.Videos?.Count(video => video.IsSelected) ?? 0;
+
+    public bool HasSelectedEpisodes => SelectedEpisodeCount > 0;
+
+    public string SelectionSummaryText => SelectedEpisodeCount switch
+    {
+        0 => "Select episodes below, then mark them watched or unwatched.",
+        1 => "1 episode selected",
+        var count => $"{count} episodes selected",
+    };
+
     /// <summary>
     /// The newest unfinished movie or episode for this title, from the local
     /// watch history. Drives the resume label on the Play button.
@@ -326,6 +382,195 @@ public partial class DetailsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Marks the title watched or unwatched from the hero menu. For a series
+    /// this means every episode the addon listed; episodes can also be marked
+    /// one by one or as a selection below.
+    /// </summary>
+    [RelayCommand]
+    private Task MarkWatchedAsync(CancellationToken cancellationToken) =>
+        SetTitleWatchedAsync(true, cancellationToken);
+
+    [RelayCommand]
+    private Task MarkUnwatchedAsync(CancellationToken cancellationToken) =>
+        SetTitleWatchedAsync(false, cancellationToken);
+
+    [RelayCommand]
+    private Task MarkSeasonWatchedAsync(CancellationToken cancellationToken) =>
+        SetSeasonWatchedAsync(true, cancellationToken);
+
+    [RelayCommand]
+    private Task MarkSeasonUnwatchedAsync(CancellationToken cancellationToken) =>
+        SetSeasonWatchedAsync(false, cancellationToken);
+
+    [RelayCommand]
+    private Task MarkSelectedWatchedAsync(CancellationToken cancellationToken) =>
+        SetSelectedWatchedAsync(true, cancellationToken);
+
+    [RelayCommand]
+    private Task MarkSelectedUnwatchedAsync(CancellationToken cancellationToken) =>
+        SetSelectedWatchedAsync(false, cancellationToken);
+
+    [RelayCommand]
+    private void ToggleSelectEpisodes() => IsSelectingEpisodes = !IsSelectingEpisodes;
+
+    [RelayCommand]
+    private void SelectCurrentSeason()
+    {
+        foreach (var episode in SelectedSeason?.Episodes ?? [])
+        {
+            episode.IsSelected = true;
+        }
+
+        NotifySelectionChanged();
+    }
+
+    [RelayCommand]
+    private void ClearSelection()
+    {
+        foreach (var video in Meta?.Videos ?? [])
+        {
+            video.IsSelected = false;
+        }
+
+        NotifySelectionChanged();
+    }
+
+    public async Task SetTitleWatchedAsync(bool watched, CancellationToken cancellationToken = default)
+    {
+        if (Meta is not { } meta)
+        {
+            return;
+        }
+
+        try
+        {
+            if (IsSeries)
+            {
+                var episodes = meta.Videos?.Where(video => video.EpisodeNumber > 0).ToList() ?? [];
+                if (episodes.Count == 0)
+                {
+                    return;
+                }
+
+                await _watchProgress.SetEpisodesWatchedAsync(meta, episodes, watched, cancellationToken);
+            }
+            else
+            {
+                await _watchProgress.SetMovieWatchedAsync(meta, watched, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        await RefreshWatchStateAsync(meta, cancellationToken);
+    }
+
+    public async Task SetEpisodeWatchedAsync(
+        MetaVideo episode,
+        bool watched,
+        CancellationToken cancellationToken = default)
+    {
+        if (Meta is not { } meta)
+        {
+            return;
+        }
+
+        try
+        {
+            await _watchProgress.SetEpisodeWatchedAsync(meta, episode, watched, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        await RefreshWatchStateAsync(meta, cancellationToken);
+    }
+
+    public bool IsEpisodeWatched(MetaVideo episode) =>
+        Meta is { } meta && _watchProgress.IsWatched(PlaybackRequest.ForEpisode(meta, episode).VideoId);
+
+    public async Task SetSeasonWatchedAsync(bool watched, CancellationToken cancellationToken = default)
+    {
+        if (Meta is not { } meta || SelectedSeason is not { } season)
+        {
+            return;
+        }
+
+        try
+        {
+            await _watchProgress.SetEpisodesWatchedAsync(
+                meta,
+                season.Episodes,
+                watched,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        await RefreshWatchStateAsync(meta, cancellationToken);
+    }
+
+    public async Task SetSelectedWatchedAsync(bool watched, CancellationToken cancellationToken = default)
+    {
+        if (Meta is not { } meta)
+        {
+            return;
+        }
+
+        var selected = meta.Videos?.Where(video => video.IsSelected).ToList() ?? [];
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _watchProgress.SetEpisodesWatchedAsync(meta, selected, watched, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var episode in selected)
+        {
+            episode.IsSelected = false;
+        }
+
+        NotifySelectionChanged();
+        await RefreshWatchStateAsync(meta, cancellationToken);
+    }
+
+    /// <summary>Called by the checkboxes so the selection toolbar can update.</summary>
+    public void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(SelectedEpisodeCount));
+        OnPropertyChanged(nameof(HasSelectedEpisodes));
+        OnPropertyChanged(nameof(SelectionSummaryText));
+    }
+
     private async Task RefreshWatchlistStateAsync(CancellationToken cancellationToken)
     {
         try
@@ -362,6 +607,38 @@ public partial class DetailsViewModel : ObservableObject
             return;
         }
 
+        // Old history rows have no episode count; a series finished before the
+        // watched feature existed would otherwise never read as "Watched".
+        var episodeCount = meta.Videos?.Count(video => video.EpisodeNumber > 0) ?? 0;
+        if (episodeCount > 0)
+        {
+            await _watchProgress.RememberEpisodeCountAsync(meta.Id, episodeCount, cancellationToken);
+        }
+
+        ApplyWatchState(meta);
+    }
+
+    private async Task RefreshWatchStateAsync(MetaItem meta, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _watchProgress.EnsureLoadedAsync(cancellationToken);
+            await _watchProgress.ReconcileNextUpAsync(meta, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            return;
+        }
+
+        ApplyWatchState(meta);
+    }
+
+    private void ApplyWatchState(MetaItem meta)
+    {
         var entries = _watchProgress.GetEpisodeEntries(meta.Id);
         ResumeEntry = _watchProgress.FindResume(meta.Id);
 
@@ -371,20 +648,55 @@ public partial class DetailsViewModel : ObservableObject
                     WatchProgressStore.EpisodeKey(video.Season, video.EpisodeNumber),
                     out var entry))
             {
+                video.IsWatched = entry.IsWatched;
                 video.WatchProgress = entry.Completed ? 1 : entry.ProgressFraction;
                 video.WatchLabel = entry.ResumeLabel;
             }
             else
             {
+                video.IsWatched = false;
                 video.WatchProgress = 0;
                 video.WatchLabel = "";
             }
+
+            video.ShowSelection = IsSelectingEpisodes;
+        }
+
+        WatchSummary = _watchProgress.GetTitleState(meta.Id, meta.Type);
+
+        foreach (var season in Seasons)
+        {
+            season.UpdateWatchState(
+                season.Episodes.Count(video => video.IsWatched),
+                season.Episodes.Count);
         }
 
         OnPropertyChanged(nameof(ResumeEntry));
         OnPropertyChanged(nameof(HasResume));
         OnPropertyChanged(nameof(PlayButtonText));
+        RaiseWatchState();
+        NotifySelectionChanged();
     }
+
+    private void RaiseWatchState()
+    {
+        OnPropertyChanged(nameof(WatchSummary));
+        OnPropertyChanged(nameof(IsSeries));
+        OnPropertyChanged(nameof(HasWatchState));
+        OnPropertyChanged(nameof(IsTitleWatched));
+        OnPropertyChanged(nameof(WatchStateText));
+        OnPropertyChanged(nameof(WatchedButtonText));
+        OnPropertyChanged(nameof(WatchedGlyph));
+        OnPropertyChanged(nameof(WatchedAutomationName));
+        OnPropertyChanged(nameof(SeasonWatchMenuText));
+        OnPropertyChanged(nameof(SeasonUnwatchMenuText));
+        OnPropertyChanged(nameof(CanSelectEpisodes));
+    }
+
+    private static bool IsSeriesType(string? type) =>
+        type is not null &&
+        (type.Equals("series", StringComparison.OrdinalIgnoreCase) ||
+         type.Equals("tv", StringComparison.OrdinalIgnoreCase));
 
     private void BuildFacts(MetaItem meta)
     {
@@ -457,6 +769,9 @@ public partial class DetailsViewModel : ObservableObject
     partial void OnMetaChanged(MetaItem? value)
     {
         UpdateWatchlistState();
+        IsSelectingEpisodes = false;
+        WatchSummary = default;
+        RaiseWatchState();
 
         OnPropertyChanged(nameof(Title));
         OnPropertyChanged(nameof(TypeLabel));
@@ -491,6 +806,24 @@ public partial class DetailsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasEpisodes));
+        OnPropertyChanged(nameof(SeasonWatchMenuText));
+        OnPropertyChanged(nameof(SeasonUnwatchMenuText));
+    }
+
+    partial void OnIsSelectingEpisodesChanged(bool value)
+    {
+        foreach (var video in Meta?.Videos ?? [])
+        {
+            video.ShowSelection = value;
+
+            if (!value)
+            {
+                video.IsSelected = false;
+            }
+        }
+
+        OnPropertyChanged(nameof(SelectEpisodesButtonText));
+        NotifySelectionChanged();
     }
 
     partial void OnIsLoadingChanged(bool value)
@@ -535,12 +868,41 @@ public sealed class MetaFact(string label, string value) : ObservableObject
     public string Value { get; } = value;
 }
 
-/// <summary>A season entry in the season picker.</summary>
+/// <summary>A season entry in the season picker, with its watch progress.</summary>
 public sealed class SeasonOption(int number, IReadOnlyList<MetaVideo> episodes) : ObservableObject
 {
+    private int _watchedCount;
+    private int _episodeCount;
+
     public int Number { get; } = number;
 
     public string Label { get; } = number == 0 ? "Specials" : $"Season {number}";
 
     public IReadOnlyList<MetaVideo> Episodes { get; } = episodes;
+
+    public int WatchedCount => _watchedCount;
+
+    public int EpisodeCount => _episodeCount;
+
+    public bool IsWatched => _episodeCount > 0 && _watchedCount >= _episodeCount;
+
+    public string WatchStatusText => _watchedCount == 0
+        ? ""
+        : IsWatched
+            ? "Watched"
+            : $"{_watchedCount}/{_episodeCount}";
+
+    /// <summary>Season label with a checkmark once every episode is watched.</summary>
+    public string DisplayLabel => IsWatched ? $"{Label} ✓" : Label;
+
+    internal void UpdateWatchState(int watchedCount, int episodeCount)
+    {
+        _watchedCount = watchedCount;
+        _episodeCount = episodeCount;
+        OnPropertyChanged(nameof(WatchedCount));
+        OnPropertyChanged(nameof(EpisodeCount));
+        OnPropertyChanged(nameof(IsWatched));
+        OnPropertyChanged(nameof(WatchStatusText));
+        OnPropertyChanged(nameof(DisplayLabel));
+    }
 }
