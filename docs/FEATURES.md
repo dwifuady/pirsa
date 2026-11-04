@@ -131,6 +131,11 @@ Everything Pirsa does, in detail. For install and build steps see
   itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
+- Sources are grouped into horizontal tabs: **All** plus one tab per addon that
+  answered, in your addon order. A long addon list stays a short scroll instead
+  of one endless list, and the tab strip scrolls sideways when the names don't
+  fit. With a single addon the tabs are hidden because they would just repeat
+  **All**.
 - **Autoplay** — Settings → Playback has a single **Start playing
   automatically** switch, off by default. When on, choose a **Preferred
   quality**: Best available, 4K, 1440p, 1080p, 720p or 480p. Quality labels come

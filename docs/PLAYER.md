@@ -8,6 +8,10 @@ controls see [FEATURES.md](FEATURES.md).
 - Every enabled addon that declares a `stream` resource is queried in your addon
   order, but the picker fills in as answers arrive: one slow addon never delays
   the sources others already returned.
+- The picker shows **All** plus one tab per addon that returned a source; tab
+  order follows the addon order, and the selected tab is kept when the list is
+  rebuilt as late answers arrive. Duplicate URLs are dropped before grouping,
+  so a source appears under the tab of the addon that won it.
 - Duplicate URLs keep the entry from the higher-priority addon.
 - Pressing Play can start the first source that arrives without waiting for the
   rest. By default, pressing Play opens the picker as soon as something is
