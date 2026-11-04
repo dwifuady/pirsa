@@ -16,16 +16,21 @@ public partial class PlayerViewModel : ObservableObject
 {
     private readonly AddonRegistry _registry;
     private readonly StreamDiscovery _streamDiscovery;
+    private readonly WatchProgressStore _watchProgress;
     private readonly List<AddonStreamResult> _results = [];
     private readonly EventHandler _registryChangedHandler;
     private CancellationTokenSource? _loadCts;
     private Task _fillTask = Task.CompletedTask;
     private int _loadVersion;
 
-    public PlayerViewModel(AddonRegistry registry, StreamDiscovery streamDiscovery)
+    public PlayerViewModel(
+        AddonRegistry registry,
+        StreamDiscovery streamDiscovery,
+        WatchProgressStore watchProgress)
     {
         _registry = registry;
         _streamDiscovery = streamDiscovery;
+        _watchProgress = watchProgress;
         ErrorMessage = "";
         StatusText = "";
         SubtitleStatus = "";
@@ -67,6 +72,12 @@ public partial class PlayerViewModel : ObservableObject
     /// <summary>Off + one entry per available language.</summary>
     public ObservableCollection<SubtitleLanguageChoice> SubtitleMenu { get; } = [];
 
+    /// <summary>Seasons of the series currently playing, for the in-player list.</summary>
+    public ObservableCollection<PlayerSeason> Seasons { get; } = [];
+
+    /// <summary>Episodes of <see cref="SelectedSeason"/>.</summary>
+    public ObservableCollection<PlayerEpisode> Episodes { get; } = [];
+
     public SubtitleLanguageChoice OffSubtitle { get; }
 
     [ObservableProperty]
@@ -102,6 +113,14 @@ public partial class PlayerViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial MetaVideo? NextEpisode { get; set; }
+
+    /// <summary>Season shown in the in-player episode list.</summary>
+    [ObservableProperty]
+    public partial PlayerSeason? SelectedSeason { get; set; }
+
+    /// <summary>True once the series metadata exposed at least one season.</summary>
+    [ObservableProperty]
+    public partial bool CanBrowseEpisodes { get; set; }
 
     public bool HasNextEpisode => NextEpisode is not null;
 
@@ -217,6 +236,94 @@ public partial class PlayerViewModel : ObservableObject
     /// <summary>Waits until every addon has answered for the current request.</summary>
     public Task WaitForSourcesAsync(CancellationToken cancellationToken = default) =>
         _fillTask.WaitAsync(cancellationToken);
+
+    // -------------------------------------------------------------- episodes
+
+    /// <summary>
+    /// Builds the in-player season and episode list from full series metadata.
+    /// A Continue watching request carries only a stub meta, so the player
+    /// resolves the series first and hands the result here.
+    /// </summary>
+    public async Task SetSeriesAsync(
+        MetaItem series,
+        PlaybackRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _watchProgress.EnsureLoadedAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            // The list still works without local watch markers.
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        BuildEpisodes(series, request);
+    }
+
+    /// <summary>Highlights the episode currently playing in every season list.</summary>
+    public void MarkCurrentEpisode(int season, int episode)
+    {
+        foreach (var item in Seasons.SelectMany(entry => entry.Episodes))
+        {
+            item.IsCurrent = item.Season == season && item.EpisodeNumber == episode;
+        }
+    }
+
+    /// <summary>Drops the episode list when playback is not a series episode.</summary>
+    public void ClearSeries()
+    {
+        SelectedSeason = null;
+        Seasons.Clear();
+        Episodes.Clear();
+        CanBrowseEpisodes = false;
+    }
+
+    private void BuildEpisodes(MetaItem series, PlaybackRequest request)
+    {
+        var entries = _watchProgress.GetEpisodeEntries(series.Id);
+
+        var groups = series.Videos?
+            .Where(video => video.EpisodeNumber > 0)
+            .GroupBy(video => video.Season)
+            .OrderBy(group => group.Key == 0 ? int.MaxValue : group.Key)
+            .ThenBy(group => group.Key)
+            .Select(group => new PlayerSeason(
+                group.Key,
+                group.OrderBy(video => video.EpisodeNumber)
+                    .Select(video => new PlayerEpisode(
+                        video,
+                        entries.TryGetValue(
+                            WatchProgressStore.EpisodeKey(video.Season, video.EpisodeNumber),
+                            out var entry) ? entry : null))
+                    .ToList()))
+            .ToList() ?? [];
+
+        SelectedSeason = null;
+        Episodes.Clear();
+        Seasons.Clear();
+
+        foreach (var season in groups)
+        {
+            Seasons.Add(season);
+        }
+
+        CanBrowseEpisodes = Seasons.Count > 0;
+
+        SelectedSeason = Seasons.FirstOrDefault(season => season.Number == request.Season)
+            ?? Seasons.FirstOrDefault();
+
+        MarkCurrentEpisode(request.Season, request.Episode);
+    }
 
     private async Task FillAsync(
         StreamLoadSession session,
@@ -595,6 +702,19 @@ public partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(BackdropImage));
         OnPropertyChanged(nameof(PosterImage));
     }
+
+    partial void OnSelectedSeasonChanged(PlayerSeason? value)
+    {
+        Episodes.Clear();
+
+        if (value is not null)
+        {
+            foreach (var episode in value.Episodes)
+            {
+                Episodes.Add(episode);
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -717,6 +837,70 @@ public sealed class SubtitleVersionChoice : ObservableObject
             Fps = item.FpsMilli is > 0 ? item.FpsMilli.Value / 1000.0 : null,
         };
     }
+}
+
+/// <summary>A season group in the in-player episode list.</summary>
+public sealed class PlayerSeason(int number, IReadOnlyList<PlayerEpisode> episodes)
+{
+    public int Number { get; } = number;
+
+    public string Label { get; } = number == 0 ? "Specials" : $"Season {number}";
+
+    public IReadOnlyList<PlayerEpisode> Episodes { get; } = episodes;
+
+    public string DisplayLabel => Label;
+
+    public override string ToString() => Label;
+}
+
+/// <summary>
+/// One episode row in the player: the addon's episode plus the local watch
+/// state and the "now playing" marker.
+/// </summary>
+public sealed class PlayerEpisode : ObservableObject
+{
+    private bool _isCurrent;
+
+    public PlayerEpisode(MetaVideo video, WatchProgressEntry? entry)
+    {
+        Video = video;
+        IsWatched = entry?.IsWatched == true;
+        WatchProgress = entry is null
+            ? 0
+            : entry.Completed
+                ? 1
+                : entry.ProgressFraction;
+    }
+
+    public MetaVideo Video { get; }
+
+    public int Season => Video.Season;
+
+    public int EpisodeNumber => Video.EpisodeNumber;
+
+    public string EpisodeTag => Season > 0
+        ? $"S{Season:00}E{EpisodeNumber:00}"
+        : $"E{EpisodeNumber:00}";
+
+    public string Title => Video.Title;
+
+    public string DescriptionText => Video.DescriptionText;
+
+    public BitmapImage? ThumbnailImage => Video.ThumbnailImage;
+
+    public bool IsCurrent
+    {
+        get => _isCurrent;
+        set => SetProperty(ref _isCurrent, value);
+    }
+
+    public bool IsWatched { get; }
+
+    public double WatchProgress { get; }
+
+    public bool HasWatchProgress => WatchProgress is > 0 and < 1 && !IsWatched;
+
+    public override string ToString() => $"{EpisodeTag} {Title}";
 }
 
 /// <summary>A picker row: either an addon group header or one playable source.</summary>

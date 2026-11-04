@@ -86,6 +86,20 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
 It is reset when the player opens, capped at 1 MB, and never leaves the machine.
 The header names the data root in use.
 
+## Episode switching
+
+- The player resolves full series metadata once for the **Episodes** list and
+  for Up next. Details requests already carry it; a Continue watching request
+  only carries a stub, so the player fetches it in the background.
+- Choosing an episode saves the current position, drops the per-episode state
+  (source list, stream cache, audio/subtitle tracks, Up next dismissal) and
+  starts the new episode through the same path as auto-advance. A remembered
+  source for that episode is used first, otherwise the best found source.
+- The target episode's local history position is restored, so jumping into a
+  half-watched episode resumes instead of restarting it.
+- The list follows the series metadata: season 0 is shown as **Specials** and
+  ordered last, matching the details page.
+
 ## Subtitles
 
 Subtitle files are downloaded with .NET first and handed to VLC as local files.
