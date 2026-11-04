@@ -19,6 +19,7 @@
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="F" Invoked="FullscreenAccelerator_Invoked" />
         <KeyboardAccelerator Key="M" Invoked="MuteAccelerator_Invoked" />
+        <KeyboardAccelerator Key="E" Invoked="EpisodesAccelerator_Invoked" />
         <KeyboardAccelerator Key="Escape" Invoked="EscapeAccelerator_Invoked" />
     </Page.KeyboardAccelerators>
 
@@ -29,6 +30,11 @@
             <Setter Property="Margin" Value="0" />
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style x:Key="EpisodesFlyoutPresenterStyle" TargetType="FlyoutPresenter">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MaxHeight" Value="620" />
         </Style>
         <Style x:Key="SubtitleTimingButtonStyle" TargetType="RepeatButton">
             <Setter Property="Width" Value="104" />
@@ -166,6 +172,108 @@
             </Grid>
         </DataTemplate>
 
+        <DataTemplate x:Key="EpisodeRowTemplate" x:DataType="vm:PlayerEpisode">
+            <Grid Padding="2" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Width="112"
+                    Height="63"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource PlayerBadgeBackgroundBrush}"
+                    CornerRadius="6">
+                    <Grid>
+                        <FontIcon
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="18"
+                            Foreground="{ThemeResource PlayerTertiaryForegroundBrush}"
+                            Glyph="&#xE714;"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+                        <Image
+                            AutomationProperties.AccessibilityView="Raw"
+                            Source="{x:Bind ThumbnailImage}"
+                            Stretch="UniformToFill" />
+                        <Border
+                            Margin="5"
+                            Padding="5,1"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top"
+                            Background="{ThemeResource OverlayChipBackgroundBrush}"
+                            CornerRadius="4">
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource OverlayChipForegroundBrush}"
+                                Text="{x:Bind EpisodeTag}" />
+                        </Border>
+                        <ProgressBar
+                            Height="3"
+                            Margin="5,0,5,5"
+                            VerticalAlignment="Bottom"
+                            AutomationProperties.Name="Watch progress"
+                            Background="{ThemeResource OverlayChipBackgroundBrush}"
+                            Foreground="{ThemeResource BrandPrimaryBrush}"
+                            Maximum="1"
+                            Value="{x:Bind WatchProgress}"
+                            Visibility="{x:Bind helpers:XamlHelpers.Visible(HasWatchProgress)}" />
+                    </Grid>
+                </Border>
+
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Spacing="3">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            MaxLines="1"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource PlayerForegroundBrush}"
+                            Text="{x:Bind Title}"
+                            TextTrimming="CharacterEllipsis" />
+                        <StackPanel
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="6">
+                            <Border
+                                Padding="6,2"
+                                Background="{ThemeResource BrandSubtleBrush}"
+                                CornerRadius="4"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(IsCurrent)}">
+                                <TextBlock
+                                    FontSize="10"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource BrandPrimaryBrush}"
+                                    Text="Now playing" />
+                            </Border>
+                            <FontIcon
+                                FontSize="12"
+                                Foreground="{ThemeResource BrandPrimaryBrush}"
+                                Glyph="&#xE73E;"
+                                Visibility="{x:Bind helpers:XamlHelpers.Visible(IsWatched)}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock
+                        MaxLines="2"
+                        FontSize="11"
+                        Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                        Text="{x:Bind DescriptionText}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(DescriptionText)}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
         <views:SourceItemTemplateSelector
             x:Key="SourceItemTemplateSelector"
             HeaderTemplate="{StaticResource SourceGroupHeaderTemplate}"
@@ -242,18 +350,112 @@
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <Button
-                    x:Name="SourcesButton"
+                <StackPanel
                     Grid.Column="2"
-                    AutomationProperties.Name="Sources"
-                    Click="OpenSources_Click"
-                    Style="{StaticResource PlayerTextButtonStyle}"
-                    ToolTipService.ToolTip="Choose a source">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="13" Glyph="&#xE8FD;" />
-                        <TextBlock Text="{x:Bind ViewModel.SourcesLabel}" />
-                    </StackPanel>
-                </Button>
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        x:Name="EpisodesButton"
+                        AutomationProperties.Name="Episodes"
+                        Click="OpenEpisodes_Click"
+                        Style="{StaticResource PlayerTextButtonStyle}"
+                        ToolTipService.ToolTip="Choose an episode (E)"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanBrowseEpisodes)}">
+                        <Button.Flyout>
+                            <Flyout
+                                x:Name="EpisodesFlyout"
+                                Closed="EpisodesFlyout_Closed"
+                                FlyoutPresenterStyle="{StaticResource EpisodesFlyoutPresenterStyle}"
+                                Opened="EpisodesFlyout_Opened"
+                                Placement="BottomEdgeAlignedRight">
+                                <Grid
+                                    Width="452"
+                                    MaxHeight="600"
+                                    RequestedTheme="Dark">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <Grid Margin="18,14,10,8" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="2">
+                                            <TextBlock
+                                                FontSize="20"
+                                                FontWeight="SemiBold"
+                                                Foreground="{ThemeResource PlayerForegroundBrush}"
+                                                Text="Episodes" />
+                                            <TextBlock
+                                                MaxLines="1"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                                                Text="{x:Bind ViewModel.Title}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Button
+                                            Grid.Column="1"
+                                            AutomationProperties.Name="Close episodes"
+                                            Click="CloseEpisodes_Click"
+                                            Style="{StaticResource PlayerIconButtonStyle}"
+                                            ToolTipService.ToolTip="Close">
+                                            <FontIcon FontSize="14" Glyph="&#xE711;" />
+                                        </Button>
+                                    </Grid>
+
+                                    <StackPanel
+                                        Grid.Row="1"
+                                        Margin="18,0,18,10"
+                                        Orientation="Horizontal"
+                                        Spacing="10">
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                                            Text="Season" />
+                                        <ComboBox
+                                            MinWidth="160"
+                                            AutomationProperties.Name="Season"
+                                            DisplayMemberPath="DisplayLabel"
+                                            ItemsSource="{x:Bind ViewModel.Seasons}"
+                                            SelectedItem="{x:Bind ViewModel.SelectedSeason, Mode=TwoWay}" />
+                                    </StackPanel>
+
+                                    <ListView
+                                        x:Name="EpisodeList"
+                                        Grid.Row="2"
+                                        Margin="8,0,8,8"
+                                        IsItemClickEnabled="True"
+                                        ItemClick="EpisodeList_ItemClick"
+                                        ItemContainerStyle="{StaticResource PlayerSourceItemStyle}"
+                                        ItemTemplate="{StaticResource EpisodeRowTemplate}"
+                                        ItemsSource="{x:Bind ViewModel.Episodes}"
+                                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                        SelectionMode="None" />
+                                </Grid>
+                            </Flyout>
+                        </Button.Flyout>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="13" Glyph="&#xE8FD;" />
+                            <TextBlock Text="Episodes" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="SourcesButton"
+                        AutomationProperties.Name="Sources"
+                        Click="OpenSources_Click"
+                        Style="{StaticResource PlayerTextButtonStyle}"
+                        ToolTipService.ToolTip="Choose a source">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="13" Glyph="&#xE8FD;" />
+                            <TextBlock Text="{x:Bind ViewModel.SourcesLabel}" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <StackPanel
@@ -808,6 +1010,11 @@
                             x:Name="NextSourceButton"
                             Click="NextSource_Click"
                             Content="Next source" />
+                        <Button
+                            AutomationProperties.Name="Choose an episode"
+                            Click="OpenEpisodes_Click"
+                            Content="Episodes"
+                            Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanBrowseEpisodes)}" />
                         <Button Click="Back_Click" Content="Back" />
                         <Button
                             AutomationProperties.Name="Manage addons"
