@@ -187,6 +187,12 @@ Everything Pirsa does, in detail. For install and build steps see
   show a short timing toast over the picture, so the panel does not need to be
   open. Timing works for embedded and addon tracks alike and is remembered per
   title, including across source switches and the next episode.
+- **Subtitles move clear of the controls.** While the chrome is showing,
+  subtitles ride up by the height of the control bar and settle back to the
+  bottom of the picture when it hides. On a letterboxed film only the part of
+  the bar that actually covers the picture counts, so the shift is never larger
+  than it needs to be. Tracks that carry their own hard-coded positions (some
+  embedded ASS) keep their own placement.
 - **Preferred subtitle language** (Settings → Playback) turns the first matching
   track on automatically for every title and episode, including the next episode
   after auto-advance, and pins that language to the top of the picker. Picking
