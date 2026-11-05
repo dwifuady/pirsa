@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:services="using:Pirsa.Services"
     Title="Pirsa"
@@ -103,5 +104,52 @@
 
             <Frame x:Name="RootFrame" />
         </NavigationView>
+
+        <!--
+            The update notice floats above the content instead of taking a row,
+            so a download never shifts the page underneath it. It is hidden
+            while the player is open.
+        -->
+        <InfoBar
+            x:Name="UpdateBar"
+            Grid.Row="1"
+            Margin="24"
+            MaxWidth="540"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            AutomationProperties.AutomationId="UpdateInfoBar"
+            AutomationProperties.Name="Pirsa update"
+            IsClosable="True"
+            IsOpen="{x:Bind Update.IsOpen, Mode=TwoWay}"
+            Message="{x:Bind Update.Message, Mode=OneWay}"
+            Severity="{x:Bind Update.Severity, Mode=OneWay}"
+            Title="{x:Bind Update.Title, Mode=OneWay}">
+            <InfoBar.ActionButton>
+                <Button
+                    AutomationProperties.AutomationId="UpdateActionButton"
+                    AutomationProperties.Name="Download or install the update"
+                    Click="UpdateAction_Click"
+                    Content="{x:Bind Update.ActionText, Mode=OneWay}"
+                    IsEnabled="{x:Bind Update.CanAct, Mode=OneWay}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(Update.IsActionVisible), Mode=OneWay}" />
+            </InfoBar.ActionButton>
+            <InfoBar.Content>
+                <StackPanel
+                    Spacing="6"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(Update.IsProgressVisible), Mode=OneWay}">
+                    <ProgressBar
+                        AutomationProperties.Name="Update download progress"
+                        IsIndeterminate="{x:Bind Update.IsProgressIndeterminate, Mode=OneWay}"
+                        Maximum="100"
+                        Value="{x:Bind Update.ProgressValue, Mode=OneWay}" />
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind Update.ProgressText, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </InfoBar.Content>
+        </InfoBar>
     </Grid>
 </Window>

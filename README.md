@@ -32,6 +32,10 @@ Indonesian *memirsa* ("to watch") and *pemirsa* ("viewer, audience").
   Cinemeta and OpenSubtitles v3 are included; no stream addon ships by default.
 - **Addon links** — a `stremio://` addon link opens Pirsa with a confirmation
   before installing, and links can be pasted into Settings too.
+- **Automatic updates** — every launch checks GitHub Releases. Download the
+  new build from the notice, click **Install**, and Pirsa closes, updates, and
+  reopens. Installed copies use the per-user installer; portable copies update
+  in place.
 
 ## Download
 
@@ -45,6 +49,10 @@ Published for `win-x64` and `win-arm64` from
 
 Neither build is code-signed, so Windows SmartScreen may warn on the first run:
 **More info → Run anyway**.
+
+Both builds check for a newer release on every launch and can download and
+install it from inside the app. Portable copies update in place; installed
+copies use the per-user installer and reopen when it finishes.
 
 ## Run it
 

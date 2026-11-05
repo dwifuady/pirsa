@@ -27,6 +27,9 @@ public sealed partial class MainWindow : Window
     private bool _initialNavigation = true;
     private DiscoverViewModel? _discoverViewModel;
 
+    /// <summary>The launch update check and its download/install state.</summary>
+    public UpdateViewModel Update { get; } = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -63,6 +66,10 @@ public sealed partial class MainWindow : Window
     private async void RootFrame_Loaded(object sender, RoutedEventArgs e)
     {
         RootFrame.Loaded -= RootFrame_Loaded;
+
+        // Background work: the check must never delay the first frame, and a
+        // failure is silent so an offline launch is unchanged.
+        _ = Update.CheckAsync();
 
         if (App.TakePendingAddonLink() is { } link)
         {
@@ -118,6 +125,11 @@ public sealed partial class MainWindow : Window
 
         NavView.IsPaneVisible = pageType != typeof(PlayerPage);
         AppTitleBar.IsPaneToggleButtonVisible = pageType != typeof(PlayerPage);
+
+        // The notice is useful in the shell, but not over a video.
+        UpdateBar.Visibility = pageType == typeof(PlayerPage)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
         if (pageType == typeof(PlayerPage))
         {
@@ -332,6 +344,11 @@ public sealed partial class MainWindow : Window
     private void AppTitleBar_PaneToggleRequested(TitleBar sender, object args)
     {
         NavView.IsPaneOpen = !NavView.IsPaneOpen;
+    }
+
+    private async void UpdateAction_Click(object sender, RoutedEventArgs e)
+    {
+        await Update.ActAsync();
     }
 
     /// <summary>
