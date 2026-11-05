@@ -211,6 +211,11 @@ public sealed class AddonRegistry
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+
+        // An untailored Home feed is written as nothing at all. An empty array
+        // would come back as "the user pinned no catalogs", which leaves Home
+        // with nothing to show instead of the default rule.
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     private readonly object _gate = new();
@@ -774,6 +779,18 @@ public sealed class AddonRegistry
 
         var home = ParseHomeKeys(document.RootElement, defaultUrls);
 
+        // Up to version 3 an untailored Home was saved as an empty array, which
+        // reads back as "nothing pinned" and hides every catalog. Those files
+        // meant "no opinion yet", so they keep the default rule.
+        if (home is { Count: 0 } &&
+            (!TryGetProperty(document.RootElement, "version", out var version) ||
+             version.ValueKind != JsonValueKind.Number ||
+             !version.TryGetInt32(out var storedVersion) ||
+             storedVersion < 4))
+        {
+            home = null;
+        }
+
         if (!TryGetProperty(document.RootElement, "addons", out var addons) ||
             addons.ValueKind != JsonValueKind.Array)
         {
@@ -954,7 +971,7 @@ public sealed class AddonRegistry
                     .ToList(),
                 Home = HomeConfigured
                     ? [.. HomeList]
-                    : [],
+                    : null,
             };
 
             await File.WriteAllTextAsync(
@@ -1009,12 +1026,15 @@ public sealed class AddonRegistry
 
     private sealed class AddonStore
     {
-        public int Version { get; set; } = 3;
+        public int Version { get; set; } = 4;
 
         public List<AddonRecord> Addons { get; set; } = [];
 
-        /// <summary>The flat pinned Home feed in display order. Written only once tailored.</summary>
-        public List<HomeRef> Home { get; set; } = [];
+        /// <summary>
+        /// The flat pinned Home feed in display order. Null when the user has not
+        /// tailored Home, which keeps the default rule on the next launch.
+        /// </summary>
+        public List<HomeRef>? Home { get; set; }
     }
 
     private sealed class AddonRecord

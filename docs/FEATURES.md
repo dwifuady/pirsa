@@ -123,19 +123,27 @@ Everything Pirsa does, in detail. For install and build steps see
 
 - LibVLCSharp + libvlc in a WinUI SwapChainPanel, with Windows 11-style chrome:
   seek bar, 10-second skips, volume, speed, fullscreen, auto-hiding controls, a
-  source picker, and a **CC subtitle picker**.
+  **source** picker next to the **CC** and **audio track** buttons.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
   fullscreen, **M** mute, **E** opens the episode list, **Esc** exits fullscreen or
-  closes the source/subtitle/episode panels, **[** and **]** shift subtitle
+  closes the source/subtitle/episode menus, **[** and **]** shift subtitle
   timing, Enter activates a focused button. Arrow keys adjust volume when the
   volume slider itself has focus.
 - The source picker switches sources while keeping the current playback
   position.
-- Sources are grouped into horizontal tabs: **All** plus one tab per addon that
-  answered, in your addon order. A long addon list stays a short scroll instead
-  of one endless list, and the tab strip scrolls sideways when the names don't
-  fit. With a single addon the tabs are hidden because they would just repeat
-  **All**.
+- The source picker is a menu in the transport bar, next to **CC**, audio and
+  speed. The button reads the quality that is playing (**1080p**), or
+  **Sources** before anything is chosen, and opens a flyout: resolution badge,
+  release, size, format and addon per row, best source first, with a check on
+  the one playing. The flyout light-dismisses, the video keeps playing behind
+  it, and late addon answers fill it in while it is open. When autoplay is off,
+  the picker opens over the title artwork so the title is still recognisable
+  while you choose.
+- Many addons means many streams, so the flyout filters by addon: **All** plus
+  one tab per addon that answered, in your addon order, and the subheading
+  switches to "24 of 120 streams" while a tab is selected. The tab strip scrolls
+  sideways when the names don't fit, and hides with a single addon because
+  **All** would just repeat it.
 - **Episodes** — for a series, the **Episodes** button (or **E**) opens a season
   picker and episode list over the video. Rows show the thumbnail, episode tag,
   title, local watch progress, a **Now playing** marker and a watched check.
