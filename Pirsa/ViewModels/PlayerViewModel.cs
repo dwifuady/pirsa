@@ -98,6 +98,11 @@ public partial class PlayerViewModel : ObservableObject
     [ObservableProperty]
     public partial PlaybackRequest? Request { get; set; }
 
+    /// <summary>
+    /// The source the user is on, or null before anything has been played. Also
+    /// the one held across <see cref="RebuildSources"/> when late addon answers
+    /// arrive under the picker.
+    /// </summary>
     [ObservableProperty]
     public partial PlaybackSource? SelectedSource { get; set; }
 
@@ -197,12 +202,48 @@ public partial class PlayerViewModel : ObservableObject
     };
 
     /// <summary>
-    /// The picker subheading: the total on "All", otherwise how much of the
-    /// total the selected addon contributed.
+    /// The transport-bar source button: the quality actually playing, like a
+    /// resolution picker in a web player, and a plain label before that.
     /// </summary>
-    public string SourceTabDetail => SelectedSourceTab is { Key: not null } tab
-        ? $"{tab.Count} of {SourceCount} sources"
-        : SourcesLabel;
+    public string SourceButtonLabel => SelectedSource is { QualityLabel: var quality }
+        && !string.Equals(quality, "Unknown", StringComparison.Ordinal)
+            ? quality
+            : "Sources";
+
+    /// <summary>The picker heading: a choice to make, or the list to switch from.</summary>
+    public string SourceFlyoutTitle => SelectedSource is null ? "Choose a source" : "Source";
+
+    /// <summary>The picker subheading: how many streams, and from how many addons.</summary>
+    public string SourceFlyoutDetail
+    {
+        get
+        {
+            if (SourceCount == 0)
+            {
+                return IsDiscovering ? "Finding sources…" : "No sources";
+            }
+
+            // A tab narrows the list, so say how much of the total it is.
+            if (SelectedSourceTab is { Key: not null } tab)
+            {
+                return $"{tab.Count} of {SourceCount} streams";
+            }
+
+            var streams = SourceCount == 1 ? "1 stream" : $"{SourceCount} streams";
+            var addons = Sources
+                .Select(source => source.AddonName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
+            return addons > 1 ? $"{streams} · {addons} addons" : streams;
+        }
+    }
+
+    partial void OnSelectedSourceChanged(PlaybackSource? value)
+    {
+        OnPropertyChanged(nameof(SourceButtonLabel));
+        OnPropertyChanged(nameof(SourceFlyoutTitle));
+    }
 
     /// <summary>
     /// True while addons are still answering for the current request.
@@ -510,9 +551,11 @@ public partial class PlayerViewModel : ObservableObject
                 Sources.Add(source);
             }
 
+            // Nothing is playing yet on a fresh list; the picker stays on
+            // "Choose a source" until the user (or autoplay) picks one.
             SelectedSource = selected is not null && ordered.Contains(selected)
                 ? selected
-                : ordered.FirstOrDefault();
+                : null;
 
             RebuildSourceTabs(ordered);
         }
@@ -572,7 +615,7 @@ public partial class PlayerViewModel : ObservableObject
             }
         }
 
-        OnPropertyChanged(nameof(SourceTabDetail));
+        OnPropertyChanged(nameof(SourceFlyoutDetail));
     }
 
     /// <summary>Long addon names would make the tab bar scroll for no reason.</summary>
@@ -795,6 +838,7 @@ public partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(SourceCount));
         OnPropertyChanged(nameof(HasSources));
         OnPropertyChanged(nameof(SourcesLabel));
+        OnPropertyChanged(nameof(SourceFlyoutDetail));
     }
 
     partial void OnRequestChanged(PlaybackRequest? value)
@@ -1093,6 +1137,12 @@ public sealed class PlaybackSource : ObservableObject
     }
 
     public bool HasDetails => !string.IsNullOrWhiteSpace(DetailsLine);
+
+    /// <summary>
+    /// Picker row headline. The quality has its own badge, so the headline is
+    /// the release/provider the addon reported, or just the addon name.
+    /// </summary>
+    public string PrimaryLine => string.IsNullOrWhiteSpace(ProviderLine) ? AddonName : ProviderLine;
 
     public static PlaybackSource? From(string addonName, string? addonUrl, StreamItem stream)
     {

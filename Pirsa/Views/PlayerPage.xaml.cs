@@ -107,7 +107,8 @@ public sealed partial class PlayerPage : Page
     private bool _ended;
     private bool _switching;
     private bool _errorVisible;
-    private bool _sourcePanelOpen;
+    private bool _sourcesFlyoutOpen;
+    private bool _sourcesFlyoutPending;
     private bool _syncingSourceTabs;
     private bool _subtitlesFlyoutOpen;
     private bool _episodesFlyoutOpen;
@@ -202,6 +203,14 @@ public sealed partial class PlayerPage : Page
         {
             VideoSurface.Focus(FocusState.Programmatic);
             SyncLoadingBreath();
+
+            // Discovery is fast when the details page prefetched it, which can
+            // beat the page's own load; the picker waits for its anchor.
+            if (_sourcesFlyoutPending)
+            {
+                _sourcesFlyoutPending = false;
+                OpenSources();
+            }
         };
 
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -271,7 +280,7 @@ public sealed partial class PlayerPage : Page
         {
             _ = DispatcherQueue.TryEnqueue(() =>
             {
-                LoadingOverlay.Visibility = Visibility.Collapsed;
+                HideLoadingOverlay();
                 ShowPlaybackError("This title is missing playback information.", canSwitch: false);
             });
             return;
@@ -556,7 +565,7 @@ public sealed partial class PlayerPage : Page
 
         if (!loaded)
         {
-            LoadingOverlay.Visibility = Visibility.Collapsed;
+            HideLoadingOverlay();
             SourcesButton.IsEnabled = false;
             ShowPlaybackError(ViewModel.ErrorMessage, canSwitch: false);
             return;
@@ -573,11 +582,9 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        // Nothing to auto-play yet: drop the artwork so the picker shows the
-        // (still black) video surface it belongs over.
-        LoadingOverlay.Visibility = Visibility.Collapsed;
-
-        // Default: let the user pick a source. Grouped by addon.
+        // Nothing to auto-play yet: keep the artwork up so the picker sits on
+        // the poster instead of the bare video surface, and let the user choose.
+        ShowPickerBackdrop();
         OpenSources();
     }
 
@@ -689,8 +696,7 @@ public sealed partial class PlayerPage : Page
 
         _errorVisible = false;
         ErrorPanel.Visibility = Visibility.Collapsed;
-        LoadingOverlay.Visibility = Visibility.Visible;
-        ViewModel.StatusText = "That saved source didn't work. Finding another…";
+        ShowLoadingOverlay("That saved source didn't work. Finding another…");
 
         var discovery = _sourceDiscovery;
         if (discovery is null)
@@ -720,7 +726,6 @@ public sealed partial class PlayerPage : Page
         }
 
         _sourceDiscovery = null;
-        LoadingOverlay.Visibility = Visibility.Collapsed;
         SourcesButton.IsEnabled = loaded;
 
         if (!loaded)
@@ -756,6 +761,7 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
+        ShowPickerBackdrop();
         OpenSources();
     }
 
@@ -1137,7 +1143,7 @@ public sealed partial class PlayerPage : Page
         _selectedEmbeddedCode = null;
         ViewModel.SetEmbeddedSubtitles([]);
         UpdateSubtitleTimingUi();
-        SubtitleActiveDot.Visibility = Visibility.Collapsed;
+        UpdateSubtitleIndicator();
         ViewModel.SelectSubtitle(null);
         ViewModel.SubtitleStatus = "";
 
@@ -1151,7 +1157,7 @@ public sealed partial class PlayerPage : Page
             EpisodesFlyout.Hide();
         }
 
-        if (_sourcePanelOpen)
+        if (_sourcesFlyoutOpen)
         {
             CloseSources();
         }
@@ -1162,7 +1168,7 @@ public sealed partial class PlayerPage : Page
         ErrorPanel.Visibility = Visibility.Collapsed;
         HideBuffer();
         HideUpNext();
-        LoadingOverlay.Visibility = Visibility.Visible;
+        ShowLoadingOverlay();
         UpdatePlayPauseUi();
         ShowChrome();
     }
@@ -1193,8 +1199,7 @@ public sealed partial class PlayerPage : Page
         // Keep the title artwork up for the whole start-up window: source
         // discovery, cache setup, and VLC opening the stream. HandlePlaying
         // takes it down once there are actual frames.
-        ViewModel.StatusText = "Starting stream…";
-        LoadingOverlay.Visibility = Visibility.Visible;
+        ShowLoadingOverlay("Starting stream…");
 
         if (_mediaPlayer is null || _libVlc is null)
         {
@@ -1587,10 +1592,23 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private void UpdateAudioIndicator()
-    {
-        AudioMultiDot.Visibility = _audioTracks.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
-    }
+    /// <summary>
+    /// Subtitles have no chrome of their own, so the CC button carries the
+    /// state: the icon turns brand-coloured while a track is showing.
+    /// </summary>
+    private void UpdateSubtitleIndicator() =>
+        SubtitlesIcon.Style = HasActiveSubtitle
+            ? Resources["PlayerIconActiveStyle"] as Style
+            : null;
+
+    /// <summary>
+    /// A second audio track is a choice worth advertising; the glyph itself
+    /// carries the state instead of a dot in the button's corner.
+    /// </summary>
+    private void UpdateAudioIndicator() =>
+        AudioIcon.Style = _audioTracks.Count > 1
+            ? Resources["PlayerIconActiveStyle"] as Style
+            : null;
 
     private sealed record TrackDescriptionTile(int Id, string Name);
 
@@ -1663,7 +1681,7 @@ public sealed partial class PlayerPage : Page
         ResetStallClock(_mediaPlayer?.Time ?? 0);
         _stallTimer.Start();
 
-        LoadingOverlay.Visibility = Visibility.Collapsed;
+        HideLoadingOverlay();
         ErrorPanel.Visibility = Visibility.Collapsed;
         EndedText.Visibility = Visibility.Collapsed;
         HideBuffer();
@@ -1954,7 +1972,7 @@ public sealed partial class PlayerPage : Page
     {
         VideoSurface.Focus(FocusState.Pointer);
 
-        if (_sourcePanelOpen)
+        if (_sourcesFlyoutOpen)
         {
             CloseSources();
             return;
@@ -1973,6 +1991,15 @@ public sealed partial class PlayerPage : Page
     {
         if (_mediaPlayer is null)
         {
+            return;
+        }
+
+        // Nothing chosen and nothing starting: the play button is the way into
+        // the picker, which is otherwise only reachable from the transport bar.
+        if (_currentSource is null && _pendingSource is null && !_errorVisible &&
+            ViewModel.Sources.Count > 0)
+        {
+            OpenSources();
             return;
         }
 
@@ -2162,6 +2189,41 @@ public sealed partial class PlayerPage : Page
 
     // --------------------------------------------------------------- chrome state
 
+    /// <summary>
+    /// The full start-up overlay: artwork, logo, spinner and status. Every path
+    /// that starts work on a stream goes through here, because the picker leaves
+    /// the same overlay up without its spinner.
+    /// </summary>
+    private void ShowLoadingOverlay(string? status = null)
+    {
+        if (status is not null)
+        {
+            ViewModel.StatusText = status;
+        }
+
+        LoadingRing.Visibility = Visibility.Visible;
+        LoadingOverlay.Visibility = Visibility.Visible;
+        PickerBackdrop.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Takes the start-up artwork down once frames are on screen.</summary>
+    private void HideLoadingOverlay()
+    {
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        PickerBackdrop.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Artwork without the spinner, for the moment before a source is chosen:
+    /// the picker then hangs over the poster rather than over a black surface,
+    /// and nothing on screen claims that work is in flight.
+    /// </summary>
+    private void ShowPickerBackdrop()
+    {
+        LoadingOverlay.Visibility = Visibility.Collapsed;
+        PickerBackdrop.Visibility = Visibility.Visible;
+    }
+
     private void ShowChrome()
     {
         if (_disposed)
@@ -2177,7 +2239,7 @@ public sealed partial class PlayerPage : Page
 
     private void HideChrome()
     {
-        if (!_playing || _sourcePanelOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen ||
+        if (!_playing || _sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen ||
             _errorVisible || _ended || _draggingSeek)
         {
             return;
@@ -2198,7 +2260,7 @@ public sealed partial class PlayerPage : Page
 
     private void StartChromeTimer()
     {
-        if (_chromeHidden || !_playing || _sourcePanelOpen || _subtitlesFlyoutOpen ||
+        if (_chromeHidden || !_playing || _sourcesFlyoutOpen || _subtitlesFlyoutOpen ||
             _episodesFlyoutOpen || _errorVisible)
         {
             return;
@@ -2211,7 +2273,7 @@ public sealed partial class PlayerPage : Page
     private void InputLayer_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         _keyboardActive = false;
-        if (_sourcePanelOpen || _episodesFlyoutOpen || _errorVisible)
+        if (_sourcesFlyoutOpen || _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2223,7 +2285,7 @@ public sealed partial class PlayerPage : Page
     private void Root_PointerMoved(object sender, PointerRoutedEventArgs e)
     {
         _keyboardActive = false;
-        if (_sourcePanelOpen || _episodesFlyoutOpen || _errorVisible)
+        if (_sourcesFlyoutOpen || _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2243,7 +2305,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void Root_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (_sourcePanelOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen || _errorVisible)
+        if (_sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen || _errorVisible)
         {
             return;
         }
@@ -2285,7 +2347,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (_sourcePanelOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
+        if (_sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
         {
             return;
         }
@@ -2377,7 +2439,7 @@ public sealed partial class PlayerPage : Page
     /// <summary>
     /// SelectorBar has no ItemsSource, so its items follow the view model by
     /// hand. Rebuilding the bar on every notification also survives addon
-    /// answers that arrive one by one while the panel is open.
+    /// answers that arrive one by one while the flyout is open.
     /// </summary>
     private void SyncSourceTabs()
     {
@@ -2422,8 +2484,11 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private void OpenSources_Click(object sender, RoutedEventArgs e) => OpenSources();
-
+    /// <summary>
+    /// Opens the native flyout anchored to the transport-bar source button. It
+    /// light dismisses, closes on Escape and moves focus into the list by itself,
+    /// and the video keeps playing behind it while the user compares streams.
+    /// </summary>
     private void OpenSources()
     {
         if (ViewModel.Sources.Count == 0)
@@ -2431,33 +2496,52 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        _sourcePanelOpen = true;
-        SyncSourceTabs();
-        SourceScrim.Visibility = Visibility.Visible;
-        SourcePanel.Visibility = Visibility.Visible;
-        _chromeTimer.Stop();
-        ShowChrome();
-        SourceList.Focus(FocusState.Programmatic);
-    }
-
-    private void CloseSources_Click(object sender, RoutedEventArgs e) => CloseSources();
-
-    private void SourceScrim_Tapped(object sender, TappedRoutedEventArgs e) => CloseSources();
-
-    private void CloseSources()
-    {
-        if (!_sourcePanelOpen)
+        if (SourcesFlyout.IsOpen)
         {
             return;
         }
 
-        _sourcePanelOpen = false;
-        SourceScrim.Visibility = Visibility.Collapsed;
-        SourcePanel.Visibility = Visibility.Collapsed;
+        if (!IsLoaded)
+        {
+            _sourcesFlyoutPending = true;
+            return;
+        }
+
+        // The flyout is anchored to the button, so the chrome must not fade out
+        // from under its anchor while the picker is up.
+        _chromeTimer.Stop();
+        ShowChrome();
+        SourcesFlyout.ShowAt(SourcesButton);
+    }
+
+    private void SourcesFlyout_Opened(object? sender, object e)
+    {
+        _sourcesFlyoutOpen = true;
+        _chromeTimer.Stop();
+        ShowChrome();
+
+        // The tab bar is rebuilt by hand, and the previous session may have left
+        // a scroll offset behind. Do both before the list is focused.
+        SyncSourceTabs();
+        VisualTreeHelpers.FindDescendant<ScrollViewer>(SourceList)?.ChangeView(null, 0, null, true);
+    }
+
+    private void SourcesFlyout_Closed(object? sender, object e)
+    {
+        _sourcesFlyoutOpen = false;
         ShowChrome();
         if (_playing)
         {
             StartChromeTimer();
+        }
+    }
+
+    /// <summary>Closes the picker if the flyout didn't get the message itself.</summary>
+    private void CloseSources()
+    {
+        if (SourcesFlyout.IsOpen)
+        {
+            SourcesFlyout.Hide();
         }
     }
 
@@ -2468,7 +2552,7 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        CloseSources();
+        SourcesFlyout.Hide();
 
         if (_currentSource?.Url.Equals(source.Url, StringComparison.OrdinalIgnoreCase) == true &&
             !_errorVisible)
@@ -2545,7 +2629,7 @@ public sealed partial class PlayerPage : Page
         KeyboardAcceleratorInvokedEventArgs args)
     {
         if (!ViewModel.CanBrowseEpisodes ||
-            _sourcePanelOpen ||
+            _sourcesFlyoutOpen ||
             _subtitlesFlyoutOpen ||
             EpisodesFlyout.IsOpen)
         {
@@ -2825,7 +2909,7 @@ public sealed partial class PlayerPage : Page
         ViewModel.SubtitleStatus = "";
 
         ViewModel.SelectSubtitle(null);
-        SubtitleActiveDot.Visibility = Visibility.Visible;
+        UpdateSubtitleIndicator();
         ApplySubtitleDelay();
         UpdateSubtitleCurrent();
         UpdateSubtitleTimingUi();
@@ -2929,7 +3013,7 @@ public sealed partial class PlayerPage : Page
     {
         _selectedSubtitle = version;
         ViewModel.SelectSubtitle(version);
-        SubtitleActiveDot.Visibility = HasActiveSubtitle ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSubtitleIndicator();
         UpdateSubtitleCurrent();
         UpdateSubtitleTimingUi();
         RefreshSubtitleFlyout();
@@ -2948,8 +3032,8 @@ public sealed partial class PlayerPage : Page
         bool remember = true)
     {
         _selectedSubtitle = version;
-        SubtitleActiveDot.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
         ViewModel.SelectSubtitle(version);
+        UpdateSubtitleIndicator();
 
         if (version is null)
         {
@@ -3180,7 +3264,7 @@ public sealed partial class PlayerPage : Page
         {
             ErrorPanel.Visibility = Visibility.Collapsed;
             _errorVisible = false;
-            LoadingOverlay.Visibility = Visibility.Visible;
+            ShowLoadingOverlay("Finding sources…");
             _ = LoadSourcesAsync(request);
         }
     }
@@ -3225,7 +3309,7 @@ public sealed partial class PlayerPage : Page
             SetFullscreen(false);
             args.Handled = true;
         }
-        else if (_sourcePanelOpen)
+        else if (_sourcesFlyoutOpen)
         {
             CloseSources();
             args.Handled = true;
@@ -3271,7 +3355,7 @@ public sealed partial class PlayerPage : Page
         AutomationProperties.SetName(PlayPauseButton, name);
         AutomationProperties.SetName(CenterPlayButton, name);
 
-        CenterPlayButton.Visibility = _playing || _errorVisible || _sourcePanelOpen || _disposed
+        CenterPlayButton.Visibility = _playing || _errorVisible || _sourcesFlyoutOpen || _disposed
             ? Visibility.Collapsed
             : Visibility.Visible;
     }
@@ -3314,7 +3398,7 @@ public sealed partial class PlayerPage : Page
         _switching = false;
         _stallTimer.Stop();
         HideBuffer();
-        LoadingOverlay.Visibility = Visibility.Collapsed;
+        HideLoadingOverlay();
         ErrorText.Text = message;
         ErrorPanel.Visibility = Visibility.Visible;
         RetryButton.IsEnabled = true;

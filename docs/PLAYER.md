@@ -8,14 +8,19 @@ controls see [FEATURES.md](FEATURES.md).
 - Every enabled addon that declares a `stream` resource is queried in your addon
   order, but the picker fills in as answers arrive: one slow addon never delays
   the sources others already returned.
-- The picker shows **All** plus one tab per addon that returned a source; tab
-  order follows the addon order, and the selected tab is kept when the list is
-  rebuilt as late answers arrive. Duplicate URLs are dropped before grouping,
-  so a source appears under the tab of the addon that won it.
+- The picker is the source button in the transport bar: it shows the quality
+  that is playing (**1080p**) and opens a light-dismiss flyout. Rows are ranked
+  by addon order, then resolution; each row shows the resolution badge, the
+  release/provider, size, format and addon. Duplicate URLs are dropped before
+  ranking, so a source appears under the tab of the addon that won it.
+- The tabs are **All** plus one per addon that returned a source, in addon
+  order; the selected tab survives a rebuild as late answers arrive, and the
+  list scrolls back to the top when you switch.
 - Duplicate URLs keep the entry from the higher-priority addon.
 - Pressing Play can start the first source that arrives without waiting for the
   rest. By default, pressing Play opens the picker as soon as something is
-  available; choose a source to start.
+  available; choose a source to start. The flyout opens over the title artwork,
+  not a blank video surface, so the title stays recognisable while you choose.
 - Sources are deduplicated by URL and ranked 1080p HLS first.
 - Headers from `behaviorHints.proxyHeaders` are forwarded to VLC as media
   options when needed.
