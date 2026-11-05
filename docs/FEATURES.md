@@ -231,8 +231,6 @@ Everything Pirsa does, in detail. For install and build steps see
 - Auto-advance stops at the end of the last known episode and does not know
   about unaired episodes.
 - Watch history is per device; there is no sync between machines.
-- Addon order is global: per-type or per-catalog priorities are not supported
-  yet.
 - A `stremio://` link opened while Pirsa is already running starts a second
   window instead of handing the link to the running one.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only

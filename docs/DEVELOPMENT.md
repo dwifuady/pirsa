@@ -89,6 +89,23 @@ private repository returns 404, and the check is silently skipped. Make the
 repository (and its releases) public before shipping the updater, or change
 `UpdateService.Repository` to a public repository with the same asset layout.
 
+## Design principles
+
+Keep the app simple to use. A feature may add behavior, but a setting is a
+decision handed back to the user, so add one only when it answers a question
+the app cannot.
+
+- **Connect, don't tune.** Accounts, server URLs, API keys and install
+  locations qualify — the app cannot know them. Ranking matrices, quality
+  weights and timing knobs do not: choose a good default instead.
+- **Never make the user arbitrate between addons.** Order is priority; every
+  other choice is inferred. If a preference truly cannot be inferred, remember
+  what the user picked last and apply it quietly.
+- **Count the promises.** A setting must be tested, documented, migrated and
+  kept working. An on/off account connection usually costs less than a
+  five-value matrix, so judge a new surface that way, not by how many panels it
+  adds.
+
 ## Project map
 
 ```
