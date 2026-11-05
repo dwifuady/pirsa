@@ -16,7 +16,7 @@
     <Nullable>enable</Nullable>
 
     <!--  Version is overridden from the git tag by the release workflow.  -->
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Product>Pirsa</Product>
     <Company>Pirsa</Company>
   </PropertyGroup>
