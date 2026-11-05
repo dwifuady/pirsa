@@ -441,6 +441,7 @@ public partial class SettingsViewModel : ObservableObject
         {
             await _watchProgress.ClearAsync(cancellationToken);
             await App.SubtitleOffsets.ClearAsync(cancellationToken);
+            await App.SubtitleChoices.ClearAsync(cancellationToken);
             RaiseWatchHistoryInfo();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -503,6 +504,10 @@ public partial class SettingsViewModel : ObservableObject
         {
             _settings.PreferredSubtitleLanguage = value?.Code ?? "";
             _ = _settings.SaveAsync();
+
+            // Changing the default resets per-title picks, so a title can never
+            // keep a language the viewer no longer expects.
+            _ = App.SubtitleChoices.ClearAsync();
         }
     }
 

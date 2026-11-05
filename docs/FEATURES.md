@@ -160,10 +160,12 @@ Everything Pirsa does, in detail. For install and build steps see
 ## Subtitles
 
 - The **CC** button in the player opens a two-step picker:
-  1. **Off**, the tracks **embedded in this video**, then one row per addon
-     language. Languages are grouped across all subtitle addons and sorted by
-     how many tracks are available. Embedded tracks apply instantly and need
-     no download.
+  1. **Off**, the preferred language (pinned and labelled **Preferred**), the
+     tracks **embedded in this video**, then one row per addon language in
+     alphabetical order. Languages are grouped across all subtitle addons. No
+     language is hidden: the picker is where one title gets overridden, not
+     where the preference is set. Embedded tracks apply instantly and need no
+     download.
   2. For a language with multiple tracks, a version list opens. Every row shows
      the release group, file name, addon, frame rate and encoding, so you can
      pick the version that matches your release. The active version is shown
@@ -179,9 +181,12 @@ Everything Pirsa does, in detail. For install and build steps see
   title, including across source switches and the next episode.
 - **Preferred subtitle language** (Settings → Playback) turns the first matching
   track on automatically for every title and episode, including the next episode
-  after auto-advance. Picking a language in the player remembers it as the
-  preference, while choosing **Off** there only applies to the title you are
-  watching. Two- and three-letter codes (en / eng) count as the same language.
+  after auto-advance, and pins that language to the top of the picker. Picking
+  another language in the player applies to that title only — a series keeps it
+  for its other episodes — so one foreign film never changes the default. Picking
+  the preferred language again clears that per-title choice, changing the
+  preference clears all of them, and choosing **Off** is not remembered. Two-
+  and three-letter codes (en / eng) count as the same language.
 - The current subtitle and its timing stay selected across source switches; an
   embedded language is re-selected when the new source has a matching track.
 - Subtitle files are downloaded with .NET first and handed to VLC as local

@@ -124,6 +124,7 @@ Pirsa/
   Services/LocalPaths.cs          the one data root: packaged, unpackaged, and Debug runs
   Services/WatchProgressStore.cs  local watch history (movie/episode position, resume)
   Services/SubtitleOffsetStore.cs per-title subtitle timing, in subtitle-offsets.json
+  Services/SubtitleChoiceStore.cs per-title subtitle language, in subtitle-choices.json
   Services/UpdateService.cs        update check, download, checksum, install hand-off
   Services/VideoEngine.cs         background libvlc warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker

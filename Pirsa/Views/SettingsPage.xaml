@@ -641,7 +641,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Pirsa turns on the first matching track automatically for every title and episode. Picking a language in the player updates this preference, while choosing Off there only applies to the title you are watching. Pick Off here to keep subtitles off everywhere."
+                                Text="Pirsa turns on the first matching track automatically for every title and episode, and pins it to the top of the player's subtitle picker. Picking another language in the player applies to that title only, while choosing Off there only affects the title you are watching. Pick Off here to keep subtitles off everywhere."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>

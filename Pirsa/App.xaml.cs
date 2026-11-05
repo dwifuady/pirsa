@@ -49,6 +49,9 @@ public partial class App : Application
     /// <summary>Per-title subtitle timing, persisted in subtitle-offsets.json.</summary>
     public static SubtitleOffsetStore SubtitleOffsets { get; } = new();
 
+    /// <summary>Per-title subtitle language, persisted in subtitle-choices.json.</summary>
+    public static SubtitleChoiceStore SubtitleChoices { get; } = new();
+
     /// <summary>
     /// The native window handle (HWND). Use for file pickers,
     /// <c>DataTransferManager</c>, and any WinRT interop that requires
@@ -96,6 +99,7 @@ public partial class App : Application
         _ = Watchlist.EnsureLoadedAsync();
         _ = SearchHistory.EnsureLoadedAsync();
         _ = SubtitleOffsets.EnsureLoadedAsync();
+        _ = SubtitleChoices.EnsureLoadedAsync();
         _ = VideoEngine.WarmUpAsync();
     }
 

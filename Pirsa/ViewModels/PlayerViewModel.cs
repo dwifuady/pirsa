@@ -612,10 +612,14 @@ public partial class PlayerViewModel : ObservableObject
     /// Queries every configured addon for subtitle tracks and groups them by
     /// language while keeping every version. The picker shows languages first,
     /// then the individual release/file versions for the chosen language.
+    /// The preferred language is pinned above the rest; every other language
+    /// stays available alphabetically, because the picker is where a title
+    /// gets overridden, not where the preference is set.
     /// </summary>
     public async Task LoadSubtitlesAsync(
         PlaybackRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? preferredLanguage = null)
     {
         IsLoadingSubtitles = true;
         SubtitleStatus = "Loading subtitles…";
@@ -651,6 +655,7 @@ public partial class PlayerViewModel : ObservableObject
                 }
             }
 
+            var preferredCode = SubtitleLanguages.CanonicalCode(preferredLanguage);
             var languages = found
                 .GroupBy(item => NormalizeLanguage(item.Item.Lang))
                 .Select(group =>
@@ -669,23 +674,34 @@ public partial class PlayerViewModel : ObservableObject
                         ? $"1 version · {versions[0].AddonName}"
                         : $"{versions.Count} versions · {versions[0].AddonName}";
 
+                    var isPreferred = preferredCode.Length > 0 &&
+                                      SubtitleLanguages.SameLanguage(group.Key, preferredCode);
+
                     return new SubtitleLanguageChoice(
                         name,
                         group.Key,
                         isOff: false,
                         versions,
-                        detail);
+                        isPreferred ? $"Preferred · {detail}" : detail,
+                        isPreferred: isPreferred);
                 })
-                .OrderByDescending(language => language.Count)
+                .OrderByDescending(language => language.IsPreferred)
                 .ThenBy(language => language.LanguageName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
             // Embedded tracks belong to the stream, not to the addon query, so
             // they survive the language list being rebuilt.
             var embedded = SubtitleMenu.Where(language => language.IsEmbedded).ToList();
+            var pinned = languages.FirstOrDefault(language => language.IsPreferred);
 
             SubtitleMenu.Clear();
             SubtitleMenu.Add(OffSubtitle);
+
+            if (pinned is not null)
+            {
+                SubtitleMenu.Add(pinned);
+            }
+
             foreach (var language in embedded)
             {
                 SubtitleMenu.Add(language);
@@ -693,7 +709,10 @@ public partial class PlayerViewModel : ObservableObject
 
             foreach (var language in languages)
             {
-                SubtitleMenu.Add(language);
+                if (!ReferenceEquals(language, pinned))
+                {
+                    SubtitleMenu.Add(language);
+                }
             }
 
             SelectedSubtitle = null;
@@ -720,9 +739,9 @@ public partial class PlayerViewModel : ObservableObject
 
     /// <summary>
     /// Replaces the subtitle tracks embedded in the current stream with the
-    /// ones libvlc just parsed. They sit directly under Off, before the addon
-    /// languages, because they need no download and are usually the best match
-    /// for the picture.
+    /// ones libvlc just parsed. They sit under Off and under the preferred
+    /// language, before the rest of the addon languages, because they need no
+    /// download and are usually the best match for the picture.
     /// </summary>
     public void SetEmbeddedSubtitles(IReadOnlyList<SubtitleLanguageChoice> tracks)
     {
@@ -734,7 +753,7 @@ public partial class PlayerViewModel : ObservableObject
             }
         }
 
-        var index = 1;
+        var index = SubtitleMenu.Count > 1 && SubtitleMenu[1].IsPreferred ? 2 : 1;
         foreach (var track in tracks)
         {
             SubtitleMenu.Insert(index++, track);
@@ -816,7 +835,8 @@ public sealed class SubtitleLanguageChoice : ObservableObject
         bool isOff,
         IReadOnlyList<SubtitleVersionChoice> versions,
         string detail,
-        int embeddedTrackId = -1)
+        int embeddedTrackId = -1,
+        bool isPreferred = false)
     {
         LanguageName = languageName;
         LanguageCode = languageCode;
@@ -824,6 +844,7 @@ public sealed class SubtitleLanguageChoice : ObservableObject
         Versions = versions;
         Detail = detail;
         EmbeddedTrackId = embeddedTrackId;
+        IsPreferred = isPreferred;
     }
 
     public string LanguageName { get; }
@@ -831,6 +852,12 @@ public sealed class SubtitleLanguageChoice : ObservableObject
     public string LanguageCode { get; }
 
     public bool IsOff { get; }
+
+    /// <summary>
+    /// The language configured in Settings → Playback. It is pinned at the top
+    /// of the picker and labelled in <see cref="Detail"/>.
+    /// </summary>
+    public bool IsPreferred { get; }
 
     /// <summary>libvlc track id when this row is embedded in the video itself.</summary>
     public int EmbeddedTrackId { get; }

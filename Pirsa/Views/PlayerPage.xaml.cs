@@ -420,17 +420,31 @@ public sealed partial class PlayerPage : Page
         {
             var token = _subtitleCts.Token;
             await App.Settings.EnsureLoadedAsync(token);
-            await ViewModel.LoadSubtitlesAsync(request, token);
 
-            // Subtitles for the configured language turn on without opening
-            // the picker, unless something was already selected for this title.
+            // A language picked for this title wins over the app preference, so
+            // watching one film with French subtitles does not change the
+            // default for every other title.
+            var titleKey = SubtitleOffsetKey(request);
+            var remembered = await App.SubtitleChoices.GetLanguageAsync(titleKey, token);
+
+            await ViewModel.LoadSubtitlesAsync(
+                request,
+                token,
+                App.Settings.PreferredSubtitleLanguage);
+
+            var automaticLanguage = string.IsNullOrWhiteSpace(remembered)
+                ? App.Settings.PreferredSubtitleLanguage
+                : remembered;
+
+            // Subtitles for the chosen language turn on without opening the
+            // picker, unless something was already selected for this title.
             if (!_disposed &&
                 !token.IsCancellationRequested &&
                 !HasActiveSubtitle &&
-                ViewModel.FindSubtitleForLanguage(App.Settings.PreferredSubtitleLanguage) is { } preferred)
+                ViewModel.FindSubtitleForLanguage(automaticLanguage) is { } preferred)
             {
                 // Playback may not have started yet; the track is attached when it does.
-                if (!await ApplySelectedSubtitleAsync(preferred, applyNow: false))
+                if (!await ApplySelectedSubtitleAsync(preferred, applyNow: false, remember: false))
                 {
                     // Fall back to Off rather than showing a track that never loaded.
                     RestoreSubtitleSelection(null);
@@ -2925,11 +2939,13 @@ public sealed partial class PlayerPage : Page
     /// Downloads and attaches a subtitle track. Auto-selection passes
     /// <paramref name="applyNow"/> false so a track chosen before playback
     /// starts is attached by the Playing handler instead of failing against an
-    /// empty player.
+    /// empty player, and <paramref name="remember"/> false so starting up does
+    /// not rewrite the choice that was just read.
     /// </summary>
     private async Task<bool> ApplySelectedSubtitleAsync(
         SubtitleVersionChoice? version,
-        bool applyNow = true)
+        bool applyNow = true,
+        bool remember = true)
     {
         _selectedSubtitle = version;
         SubtitleActiveDot.Visibility = version is null ? Visibility.Collapsed : Visibility.Visible;
@@ -2979,7 +2995,11 @@ public sealed partial class PlayerPage : Page
         ViewModel.SubtitleStatus = "";
         UpdateSubtitleCurrent();
         UpdateSubtitleTimingUi();
-        RememberSubtitleLanguage(version);
+
+        if (remember)
+        {
+            RememberSubtitleLanguage(version);
+        }
 
         if (!applyNow && _currentSource is null)
         {
@@ -2991,20 +3011,36 @@ public sealed partial class PlayerPage : Page
     }
 
     /// <summary>
-    /// Keeps the language the user actually watches in as the default for the
-    /// next title or episode. Choosing Off is deliberately not remembered.
+    /// Keeps the language the viewer picked for this movie or series, without
+    /// touching the app-wide preferred language. A series shares its id with
+    /// every episode, so the next episode keeps the same language. Picking the
+    /// preference again clears the override, and choosing Off is deliberately
+    /// not remembered.
     /// </summary>
-    private static void RememberSubtitleLanguage(SubtitleVersionChoice version)
+    private void RememberSubtitleLanguage(SubtitleVersionChoice version)
     {
-        var code = SubtitleLanguages.CanonicalCode(version.LanguageCode);
-        if (string.IsNullOrWhiteSpace(code) ||
-            code.Equals(App.Settings.PreferredSubtitleLanguage, StringComparison.OrdinalIgnoreCase))
+        if (ViewModel.Request is not { } request)
         {
             return;
         }
 
-        App.Settings.PreferredSubtitleLanguage = code;
-        _ = App.Settings.SaveAsync();
+        var code = SubtitleLanguages.CanonicalCode(version.LanguageCode);
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return;
+        }
+
+        var titleId = SubtitleOffsetKey(request);
+        var preferred = SubtitleLanguages.CanonicalCode(App.Settings.PreferredSubtitleLanguage);
+
+        if (code.Equals(preferred, StringComparison.OrdinalIgnoreCase))
+        {
+            _ = App.SubtitleChoices.ClearLanguageAsync(titleId);
+        }
+        else
+        {
+            _ = App.SubtitleChoices.SetLanguageAsync(titleId, code);
+        }
     }
 
     private string EnsureSubtitleDirectory()
