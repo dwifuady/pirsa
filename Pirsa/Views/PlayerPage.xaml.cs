@@ -14,6 +14,7 @@ using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.Services;
 using Pirsa.ViewModels;
+using Windows.Foundation;
 using Windows.System;
 using Windows.Storage;
 using Windows.UI.ViewManagement;
@@ -39,6 +40,9 @@ public sealed partial class PlayerPage : Page
 
     /// <summary>Beyond a minute the subtitle file belongs to a different release.</summary>
     private const long SubtitleDelayMaxMs = 60_000;
+
+    /// <summary>Room kept between lifted subtitles and the control bar.</summary>
+    private const double SubtitleLiftGapDip = 12;
 
     /// <summary>
     /// LibVLC's demuxer cache for on-demand video. It is a jitter buffer, not a
@@ -121,6 +125,7 @@ public sealed partial class PlayerPage : Page
     private int _selectedAudioTrackId = -1;
     private bool _audioListDirty = true;
     private bool _chromeHidden = true;
+    private int _appliedSubtitleLift = -1;
     private bool _keyboardActive;
     private bool _isFullScreen;
     private long _resumeMs;
@@ -198,6 +203,7 @@ public sealed partial class PlayerPage : Page
         Root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler(Root_PointerWheelChanged), true);
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Root_KeyDown), true);
         Root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(Root_PreviewKeyDown), true);
+        Root.SizeChanged += Root_SizeChanged;
 
         Loaded += (_, _) =>
         {
@@ -1723,6 +1729,10 @@ public sealed partial class PlayerPage : Page
         // Tracks that parsed while the new source was starting can be picked
         // up here; later ones arrive through the ES events.
         RefreshEmbeddedSubtitles();
+
+        // A new picture means a new vout, and a new vout starts with no lift.
+        _appliedSubtitleLift = -1;
+        RefreshSubtitleLift();
     }
 
     private void HandlePaused()
@@ -2231,10 +2241,16 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
+        var wasHidden = _chromeHidden;
         _chromeHidden = false;
         Chrome.Visibility = Visibility.Visible;
         Chrome.Opacity = 1;
         Chrome.IsHitTestVisible = true;
+
+        if (wasHidden)
+        {
+            RefreshSubtitleLift();
+        }
     }
 
     private void HideChrome()
@@ -2256,6 +2272,91 @@ public sealed partial class PlayerPage : Page
         _chromeHidden = true;
         Chrome.Opacity = 0;
         Chrome.IsHitTestVisible = false;
+        RefreshSubtitleLift();
+    }
+
+    /// <summary>
+    /// VLC draws subtitles itself, at the bottom of the picture. While the chrome
+    /// is showing they move up by whatever the control bar covers, measured from
+    /// the bottom of the video rather than the window, so a letterboxed film is
+    /// not lifted twice.
+    /// </summary>
+    private void RefreshSubtitleLift()
+    {
+        if (_disposed || _mediaPlayer is null)
+        {
+            return;
+        }
+
+        var margin = _chromeHidden ? 0 : SubtitleLiftPixels();
+        if (margin == _appliedSubtitleLift)
+        {
+            return;
+        }
+
+        _appliedSubtitleLift = margin;
+        SubtitleLift.Set(_mediaPlayer, margin);
+    }
+
+    private int SubtitleLiftPixels()
+    {
+        var scale = XamlRoot?.RasterizationScale ?? 1.0;
+        var panelHeight = Root.ActualHeight;
+        if (panelHeight <= 0)
+        {
+            return 0;
+        }
+
+        var covered = Math.Max(0, panelHeight - ControlBarTop()) * scale;
+        var intrusion = covered - LetterboxHeight(panelHeight, scale);
+        return intrusion <= 0
+            ? 0
+            : (int)Math.Round(intrusion + (SubtitleLiftGapDip * scale));
+    }
+
+    /// <summary>Top of the transport bar in the page's coordinate space.</summary>
+    private double ControlBarTop()
+    {
+        try
+        {
+            return SeekSlider.TransformToVisual(Root).TransformPoint(new Point(0, 0)).Y;
+        }
+        catch
+        {
+            // The bar is not in the visual tree yet.
+            return Root.ActualHeight;
+        }
+    }
+
+    /// <summary>
+    /// The dead space between the bottom of the window and the bottom of the
+    /// picture. VLC fits the video inside the surface, so a wide film already
+    /// leaves its subtitles above the bar; that gap needs no lift of its own.
+    /// </summary>
+    private double LetterboxHeight(double panelHeightDip, double scale)
+    {
+        uint videoWidth = 0;
+        uint videoHeight = 0;
+        if (_mediaPlayer is null ||
+            !_mediaPlayer.Size(0, ref videoWidth, ref videoHeight) ||
+            videoWidth == 0 ||
+            videoHeight == 0)
+        {
+            return 0;
+        }
+
+        var panelWidth = Root.ActualWidth * scale;
+        var panelHeight = panelHeightDip * scale;
+        var fit = Math.Min(panelWidth / videoWidth, panelHeight / videoHeight);
+        return Math.Max(0, (panelHeight - (videoHeight * fit)) / 2);
+    }
+
+    private void Root_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_chromeHidden)
+        {
+            RefreshSubtitleLift();
+        }
     }
 
     private void StartChromeTimer()

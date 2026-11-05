@@ -115,3 +115,13 @@ Subtitle files are downloaded with .NET first and handed to VLC as local files.
 This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote subtitle
 downloads overlap with stream TLS sessions. Picker behavior is described in
 [FEATURES.md](FEATURES.md#subtitles).
+
+The lift is VLC's `sub-margin` vout variable, set to the control bar's footprint
+in swap-chain pixels: bar height minus letterbox, plus a 12 DIP gap. libvlc 3
+exposes no public setter for it, so `Services/SubtitleLift.cs` reaches the vout
+through exported entry points (`libvlc_get_input_thread`,
+`input_Control(INPUT_GET_VOUTS)`, `var_SetChecked`); the variable's own callback
+repositions the current subtitles without restarting the stream. It is
+recomputed whenever the chrome toggles, a source starts, or the surface resizes,
+and it disables itself and logs once if a future libvlc stops exporting those
+functions — re-check it when bumping `VideoLAN.LibVLC.Windows` off 3.0.24.
