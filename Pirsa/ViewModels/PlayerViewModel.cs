@@ -221,8 +221,6 @@ public partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(HasInfoEpisodeLine));
         OnPropertyChanged(nameof(InfoPlot));
         OnPropertyChanged(nameof(HasInfoPlot));
-        OnPropertyChanged(nameof(InfoLogoImage));
-        OnPropertyChanged(nameof(HasInfoLogo));
     }
 
     /// <summary>
@@ -240,10 +238,6 @@ public partial class PlayerViewModel : ObservableObject
     public string InfoRatingText => DisplayMeta?.RatingText ?? "";
 
     public bool HasInfoRating => DisplayMeta?.HasRating == true;
-
-    public BitmapImage? InfoLogoImage => DisplayMeta?.LogoImage;
-
-    public bool HasInfoLogo => DisplayMeta?.HasLogo == true;
 
     /// <summary>"S01E02 · Episode title" for an episode, empty for a movie.</summary>
     public string InfoEpisodeLine =>

@@ -175,8 +175,8 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _resumeHintTimer.Tick += (_, _) => HideResumeHint();
 
-        // A pause should last before the card covers the picture: a quick
-        // pause to read a subtitle or check the time shouldn't make it flash.
+        // A pause should last before the details cover the picture: a quick
+        // pause to read a subtitle or check the time shouldn't make them flash.
         _infoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(550) };
         _infoTimer.Tick += (_, _) =>
         {
@@ -297,7 +297,7 @@ public sealed partial class PlayerPage : Page
     }
 
     /// <summary>
-    /// Fade-and-rise for the pause card. Built here rather than in
+    /// Fade-and-rise for the pause details. Built here rather than in
     /// Page.Resources because the storyboard targets the panel's own
     /// CompositeTransform, which a resource dictionary cannot resolve.
     /// </summary>
@@ -969,7 +969,7 @@ public sealed partial class PlayerPage : Page
     /// <summary>
     /// A movie or live channel opened from Continue watching or a catalog
     /// carries only the stub meta (name, poster, type). Resolve the plot,
-    /// genres and year in the background so the pause card has something to
+    /// genres and year in the background so the pause details have something to
     /// say; the details page path already comes in complete.
     /// </summary>
     private async Task EnrichDisplayMetaAsync(
@@ -1057,7 +1057,7 @@ public sealed partial class PlayerPage : Page
         }
         catch
         {
-            // Without metadata the card simply falls back to the stub.
+            // Without metadata the details simply fall back to the stub.
         }
 
         return null;
@@ -2337,7 +2337,7 @@ public sealed partial class PlayerPage : Page
         PickerBackdrop.Visibility = Visibility.Visible;
     }
 
-    // ---------------------------------------------------------------- pause card
+    // ------------------------------------------------------------- pause details
 
     private void ScheduleInfoCard()
     {
@@ -2435,7 +2435,7 @@ public sealed partial class PlayerPage : Page
 
         if (_playing && InfoPanel.Visibility == Visibility.Visible)
         {
-            // Auto-hide would take the card down with the chrome.
+            // Auto-hide would take the details down with the chrome.
             _infoPinned = true;
             ShowChrome();
             _chromeTimer.Stop();
