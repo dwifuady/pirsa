@@ -40,6 +40,10 @@ controls see [FEATURES.md](FEATURES.md).
 - Playback goes through `IPlaybackEngine`; libVLC is the only registered
   backend today. Another engine implements that interface and registers a
   factory, without touching source discovery, resume or the chrome.
+- Settings → Playback → **Video engine** selects **Automatic** or a registered
+  backend. The choice is stored in `settings.json`, warmed up at launch, and
+  resolved when the player opens; an unknown or unavailable id falls back to
+  the default backend and is logged in `player.log`.
 - The video surface is a WinUI `SwapChainPanel`, so the transport chrome is
   regular XAML (it stays native, themeable, and keyboard accessible).
 - The native libvlc binaries add roughly 150–200 MB to the packaged app and are

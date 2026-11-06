@@ -169,6 +169,10 @@ Everything Pirsa does, in detail. For install and build steps see
   source for the next episode starts instantly, otherwise the best found source
   is used even when the source picker is normally shown. Turning this off keeps
   the Up next card, so episodes can still be skipped by hand.
+- **Video engine** — Settings → Playback → **Video engine** selects
+  **Automatic** or a registered backend. The choice is saved locally and
+  applied the next time the player opens. An engine this build does not ship
+  falls back to the default.
 - Playback engine details, source discovery, caching and diagnostics are in
   [PLAYER.md](PLAYER.md).
 

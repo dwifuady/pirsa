@@ -170,7 +170,9 @@ public sealed partial class PlayerPage : Page
     {
         InitializeComponent();
 
-        _engine = PlaybackEngines.Create();
+        // Settings are loaded at launch; if this page opens before that read
+        // finishes, the default backend starts and the choice applies next time.
+        _engine = PlaybackEngines.Create(App.Settings.PlaybackEngine);
         VideoHost.Children.Add(_engine.Surface);
         HookEngineEvents();
 

@@ -624,6 +624,30 @@
                         BorderThickness="1"
                         CornerRadius="12">
                         <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Video engine" />
+                            <ComboBox
+                                MinWidth="240"
+                                AutomationProperties.AutomationId="PlaybackEngineBox"
+                                AutomationProperties.Name="Video engine"
+                                DisplayMemberPath="Name"
+                                Header="Video engine"
+                                ItemsSource="{x:Bind ViewModel.PlaybackEngineOptions}"
+                                SelectedItem="{x:Bind ViewModel.SelectedPlaybackEngine, Mode=TwoWay}" />
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Automatic uses the default backend. Additional engines appear here when the app ships more than one."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <StackPanel Spacing="8">
                             <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Subtitles" />
                             <ComboBox
                                 MinWidth="240"
@@ -760,7 +784,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="Video engine: libVLC 3.0.24 (LGPL-2.1). Defaults: Cinemeta + OpenSubtitles v3."
+                                Text="Video engine: selectable above; libVLC 3.0.24 (LGPL-2.1) ships by default. Defaults: Cinemeta + OpenSubtitles v3."
                                 TextWrapping="Wrap" />
                             <TextBlock
                                 FontSize="12"

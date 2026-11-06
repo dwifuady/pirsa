@@ -1,11 +1,12 @@
 using Pirsa.Playback.LibVlc;
+using Pirsa.Services;
 
 namespace Pirsa.Playback;
 
 /// <summary>
 /// The backends this build ships. Only libVLC is registered for now; adding
-/// mpv means adding its factory here and, later, reading the user's choice from
-/// settings.
+/// mpv means adding its factory here. Settings stores an id, and an unknown or
+/// unavailable id falls back to the default backend.
 /// </summary>
 public static class PlaybackEngines
 {
@@ -24,9 +25,30 @@ public static class PlaybackEngines
             : Factories.FirstOrDefault(factory =>
                 factory.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
-    public static IPlaybackEngine Create(string? id = null) =>
-        (Find(id) ?? Default).Create();
+    /// <summary>
+    /// The requested backend when it is available, otherwise the default. An
+    /// explicit but unavailable choice is logged so a stale settings file is
+    /// visible in the player log.
+    /// </summary>
+    public static IPlaybackEngineFactory Resolve(string? id)
+    {
+        var requested = Find(id);
+        if (requested is { IsAvailable: true })
+        {
+            return requested;
+        }
 
-    public static Task WarmUpAsync(string? id = null) =>
-        (Find(id) ?? Default).WarmUpAsync();
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            PlayerLog.Write(requested is null
+                ? $"playback engine '{id}' is not installed; using {Default.Id}"
+                : $"playback engine '{id}' is unavailable; using {Default.Id}");
+        }
+
+        return Default;
+    }
+
+    public static IPlaybackEngine Create(string? id = null) => Resolve(id).Create();
+
+    public static Task WarmUpAsync(string? id = null) => Resolve(id).WarmUpAsync();
 }
