@@ -1,13 +1,13 @@
 using LibVLCSharp.Shared;
 
-namespace Pirsa.Services;
+namespace Pirsa.Playback.LibVlc;
 
 /// <summary>
 /// Warms the native VLC engine while the user is still browsing. The first
 /// LibVLC instance scans plugins and can take a while on a cold install; doing
 /// that on a background thread keeps the player page responsive.
 /// </summary>
-public static class VideoEngine
+public static class LibVlcRuntime
 {
     private static readonly object Gate = new();
     private static Task? _warmUp;

@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Pirsa.Playback;
 using Pirsa.Services;
 
 namespace Pirsa;
@@ -100,7 +101,7 @@ public partial class App : Application
         _ = SearchHistory.EnsureLoadedAsync();
         _ = SubtitleOffsets.EnsureLoadedAsync();
         _ = SubtitleChoices.EnsureLoadedAsync();
-        _ = VideoEngine.WarmUpAsync();
+        _ = PlaybackEngines.WarmUpAsync();
     }
 
     private static void AppInstance_Activated(object? sender, AppActivationArguments args)

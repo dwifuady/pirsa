@@ -6,7 +6,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:helpers="using:Pirsa.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:vlc="using:LibVLCSharp.Platforms.Windows"
     xmlns:vm="using:Pirsa.ViewModels"
     x:DefaultBindMode="OneWay"
     Background="{ThemeResource PlayerSurfaceBrush}"
@@ -319,13 +318,11 @@
     </Page.Resources>
 
     <Grid x:Name="Root" Background="{ThemeResource PlayerSurfaceBrush}">
-        <vlc:VideoView
-            x:Name="VideoSurface"
-            AutomationProperties.Name="Video"
-            IsTabStop="True"
+        <!--  The selected playback engine adds its own surface here.  -->
+        <Grid
+            x:Name="VideoHost"
             HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch"
-            Initialized="VideoSurface_Initialized" />
+            VerticalAlignment="Stretch" />
 
         <!--  Click surface for play/pause and waking the chrome  -->
         <Grid
@@ -593,7 +590,6 @@
                                 AutomationProperties.Name="Volume"
                                 Maximum="100"
                                 Minimum="0"
-                                Value="80"
                                 ValueChanged="VolumeSlider_ValueChanged" />
                         </StackPanel>
 

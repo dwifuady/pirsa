@@ -126,7 +126,8 @@ Pirsa/
   Services/SubtitleOffsetStore.cs per-title subtitle timing, in subtitle-offsets.json
   Services/SubtitleChoiceStore.cs per-title subtitle language, in subtitle-choices.json
   Services/UpdateService.cs        update check, download, checksum, install hand-off
-  Services/VideoEngine.cs         background libvlc warm-up
+  Playback/IPlaybackEngine.cs     player backend seam: surface, transport, tracks
+  Playback/LibVlc/                libVLC backend and background warm-up
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   Helpers/AddonLinkPrompt.cs      confirmation + install for an activated link
   ViewModels/HomeViewModel.cs     hero + rails across addons

@@ -782,9 +782,9 @@ public partial class PlayerViewModel : ObservableObject
 
     /// <summary>
     /// Replaces the subtitle tracks embedded in the current stream with the
-    /// ones libvlc just parsed. They sit under Off and under the preferred
-    /// language, before the rest of the addon languages, because they need no
-    /// download and are usually the best match for the picture.
+    /// ones the playback engine just parsed. They sit under Off and under the
+    /// preferred language, before the rest of the addon languages, because they
+    /// need no download and are usually the best match for the picture.
     /// </summary>
     public void SetEmbeddedSubtitles(IReadOnlyList<SubtitleLanguageChoice> tracks)
     {
@@ -879,7 +879,7 @@ public sealed class SubtitleLanguageChoice : ObservableObject
         bool isOff,
         IReadOnlyList<SubtitleVersionChoice> versions,
         string detail,
-        int embeddedTrackId = -1,
+        long embeddedTrackId = -1,
         bool isPreferred = false)
     {
         LanguageName = languageName;
@@ -903,8 +903,8 @@ public sealed class SubtitleLanguageChoice : ObservableObject
     /// </summary>
     public bool IsPreferred { get; }
 
-    /// <summary>libvlc track id when this row is embedded in the video itself.</summary>
-    public int EmbeddedTrackId { get; }
+    /// <summary>Playback engine track id when this row is embedded in the video itself.</summary>
+    public long EmbeddedTrackId { get; }
 
     public bool IsEmbedded => EmbeddedTrackId >= 0;
 

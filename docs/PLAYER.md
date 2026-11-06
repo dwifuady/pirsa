@@ -37,6 +37,9 @@ controls see [FEATURES.md](FEATURES.md).
 - **LibVLCSharp.WinUI** with native **libvlc 3.0.24**. VLC is used because these
   addon sources are commonly 4K HEVC/HDR MKV, HLS, or DASH; MediaPlayerElement
   would fail on HEVC without extra codec packages.
+- Playback goes through `IPlaybackEngine`; libVLC is the only registered
+  backend today. Another engine implements that interface and registers a
+  factory, without touching source discovery, resume or the chrome.
 - The video surface is a WinUI `SwapChainPanel`, so the transport chrome is
   regular XAML (it stays native, themeable, and keyboard accessible).
 - The native libvlc binaries add roughly 150–200 MB to the packaged app and are
@@ -115,3 +118,16 @@ Subtitle files are downloaded with .NET first and handed to VLC as local files.
 This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote subtitle
 downloads overlap with stream TLS sessions. Picker behavior is described in
 [FEATURES.md](FEATURES.md#subtitles).
+
+The lift is VLC's `sub-margin` vout variable, set to the control bar's footprint
+in swap-chain pixels: bar height minus letterbox, plus a 12 DIP gap. The page
+computes that geometry and hands the device-pixel margin to the backend through
+`IPlaybackEngine.SetSubtitleLift`; the libVLC adapter applies it in
+`Playback/LibVlc/SubtitleLift.cs`. libvlc 3 exposes no public setter for it, so
+the adapter reaches the vout through exported entry points
+(`libvlc_get_input_thread`, `input_Control(INPUT_GET_VOUTS)`, `var_SetChecked`);
+the variable's own callback repositions the current subtitles without restarting
+the stream. It is recomputed whenever the chrome toggles, a source starts, or the
+surface resizes, and it disables itself and logs once if a future libvlc stops
+exporting those functions — re-check it when bumping
+`VideoLAN.LibVLC.Windows` off 3.0.24.
