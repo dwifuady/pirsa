@@ -77,6 +77,11 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
   the Simkl detail endpoint; an existing local duration wins because it was
   measured against the file that actually plays. A watched title is left
   watched — a remote pause never clears the mark.
+- **Removing a resume is real.** Dismissing a title from Continue watching, or
+  marking it watched, deletes the matching Simkl playback with
+  `DELETE /sync/playback/{id}`. The id comes from the last pull or from the
+  pause response, so the delete works even in the same session that created it.
+  A 404 means it was already gone.
 - **Playback retention is per plan:** Simkl keeps paused sessions for 7 days on
   Free, 30 on PRO and 90 on VIP. An old pause simply stops being returned.
 - **Push uses scrobble, not history.** The player reports four moments:

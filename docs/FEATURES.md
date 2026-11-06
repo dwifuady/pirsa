@@ -250,8 +250,9 @@ Everything Pirsa does, in detail. For install and build steps see
 - **Continue watching travels both ways with Simkl** — a pause saved by Plex, a
   media-server plugin or another Simkl client appears in Pirsa's Continue
   watching with its progress, and a pause played in Pirsa is reported back so
-  another client can resume it. Simkl keeps paused sessions for 7 days on Free,
-  30 on PRO and 90 on VIP.
+  another client can resume it. Dismissing a card, or marking the title watched,
+  removes the paused playback on Simkl too. Simkl keeps paused sessions for
+  7 days on Free, 30 on PRO and 90 on VIP.
 - **Scrobbling** — play, pause, leaving the player and finishing are reported to
   Simkl. A stop at or above 80% marks the title watched there; below it saves the
   resume point. Reporting is silent on failure and never delays playback.

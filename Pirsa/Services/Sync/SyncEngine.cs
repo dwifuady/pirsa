@@ -70,6 +70,7 @@ public sealed class SyncEngine
         _watchProgress.Changed += Store_Changed;
         _watchlist.Changed += Store_Changed;
         _watchProgress.Unwatched += WatchProgress_Unwatched;
+        _watchProgress.ResumeRemoved += WatchProgress_ResumeRemoved;
         _watchlist.Removed += Watchlist_Removed;
 
         Changed?.Invoke(this, EventArgs.Empty);
@@ -250,6 +251,70 @@ public sealed class SyncEngine
         {
             _scrobbleGate.Release();
         }
+
+        // A pause response carries the playback id used for later deletion.
+        await SaveCursorAsync(providerId);
+    }
+
+    private async Task RemoveRemotePlaybackAsync(WatchProgressEntry entry)
+    {
+        var imdbId = entry.ImdbId ?? SyncKey.ImdbFrom(entry.MetaId);
+        if (string.IsNullOrWhiteSpace(imdbId))
+        {
+            return;
+        }
+
+        var kind = entry.IsSeries ? SyncMediaKind.Series : SyncMediaKind.Movie;
+        var key = SyncKey.For(
+            imdbId,
+            kind,
+            entry.IsSeries ? entry.Season : null,
+            entry.IsSeries ? entry.Episode : null);
+
+        await _gate.WaitAsync();
+        try
+        {
+            foreach (var connection in Connections.ToList())
+            {
+                var provider = SyncProviders.Find(connection.ProviderId);
+                if (provider is null ||
+                    !provider.Descriptor.Capabilities.HasFlag(SyncCapabilities.Resume) ||
+                    !_sessions.TryGetValue(connection.ProviderId, out var session))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await session.RemovePlaybackAsync(key, CancellationToken.None);
+                    connection.Cursor = session.Cursor;
+                }
+                catch
+                {
+                    // A later sync and the next dismissal can try again.
+                }
+            }
+
+            await SaveQuietlyAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task SaveCursorAsync(string providerId)
+    {
+        if (!_sessions.TryGetValue(providerId, out var session) ||
+            FindConnection(providerId) is not { } connection)
+        {
+            return;
+        }
+
+        connection.Cursor = session.Cursor;
+        await SaveQuietlyAsync(CancellationToken.None);
     }
 
     public async Task<SyncResult> SyncNowAsync(CancellationToken cancellationToken = default)
@@ -595,6 +660,16 @@ public sealed class SyncEngine
 
         _ = _stateStore.SaveAsync();
         ScheduleSync();
+    }
+
+    private void WatchProgress_ResumeRemoved(object? sender, WatchProgressEntry entry)
+    {
+        if (_applyingRemote)
+        {
+            return;
+        }
+
+        _ = RemoveRemotePlaybackAsync(entry);
     }
 
     private void Watchlist_Removed(object? sender, WatchlistEntry entry)

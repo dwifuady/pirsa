@@ -313,6 +313,13 @@ public sealed class WatchProgressStore
     /// </summary>
     public event EventHandler<WatchProgressEntry>? Unwatched;
 
+    /// <summary>
+    /// Raised when a resume row is removed, dismissed or replaced by a watched
+    /// mark. Sync uses it to delete the provider's paused playback; local
+    /// cleanup (clear history, trim) deliberately does not raise it.
+    /// </summary>
+    public event EventHandler<WatchProgressEntry>? ResumeRemoved;
+
     public Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
         Task load;
@@ -818,6 +825,11 @@ public sealed class WatchProgressStore
 
             var existing = Find(request.VideoId);
 
+            if (watched && existing is { IsWatched: false, PositionMs: > 0 })
+            {
+                ResumeRemoved?.Invoke(this, existing);
+            }
+
             if (!watched)
             {
                 // Only remove a real watched mark. A row that is merely in
@@ -1134,6 +1146,11 @@ public sealed class WatchProgressStore
             else
             {
                 Entries.RemoveAt(i);
+
+                if (entry.PositionMs > 0)
+                {
+                    ResumeRemoved?.Invoke(this, entry);
+                }
             }
 
             changed = true;
@@ -1163,7 +1180,14 @@ public sealed class WatchProgressStore
         {
             if (Entries[i].MetaId.Equals(metaId, StringComparison.OrdinalIgnoreCase))
             {
+                var entry = Entries[i];
                 Entries.RemoveAt(i);
+
+                if (!entry.IsWatched && entry.PositionMs > 0)
+                {
+                    ResumeRemoved?.Invoke(this, entry);
+                }
+
                 removed = true;
             }
         }

@@ -285,6 +285,7 @@ internal sealed class SimklSyncSession : ISyncSession
     private string? _pendingPlayback;
     private SimklCursor? _cursor;
     private readonly Dictionary<long, MediaDetail> _details = [];
+    private Dictionary<string, long> _playbackIds = new(StringComparer.OrdinalIgnoreCase);
     private SyncCredentials? _updatedCredentials;
 
     public SimklSyncSession(
@@ -316,9 +317,16 @@ internal sealed class SimklSyncSession : ISyncSession
         get => _cursor is null
             ? null
             : JsonSerializer.Serialize(_cursor, SimklSyncProvider.JsonOptions);
-        set => _cursor = string.IsNullOrWhiteSpace(value)
-            ? null
-            : JsonSerializer.Deserialize<SimklCursor>(value, SimklSyncProvider.JsonOptions);
+        set
+        {
+            _cursor = string.IsNullOrWhiteSpace(value)
+                ? null
+                : JsonSerializer.Deserialize<SimklCursor>(value, SimklSyncProvider.JsonOptions);
+
+            _playbackIds = _cursor?.PlaybackIds is { Count: > 0 } ids
+                ? new Dictionary<string, long>(ids, StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        }
     }
 
     public SyncCredentials? UpdatedCredentials => _updatedCredentials;
@@ -386,6 +394,14 @@ internal sealed class SimklSyncSession : ISyncSession
         var resume = playbackChanged
             ? await PullPlaybackAsync(dateFrom, cancellationToken)
             : [];
+
+        foreach (var item in resume)
+        {
+            if (item.Id is long id)
+            {
+                _playbackIds[item.Key] = id;
+            }
+        }
 
         _pendingActivities = activities.All;
         _pendingPlayback = activities.Playback;
@@ -485,6 +501,7 @@ internal sealed class SimklSyncSession : ISyncSession
         {
             Activities = _pendingActivities ?? _cursor?.Activities,
             Playback = _pendingPlayback ?? _cursor?.Playback,
+            PlaybackIds = _playbackIds.Count > 0 ? new(_playbackIds) : null,
             PushedThrough = pushedThrough == DateTimeOffset.MinValue
                 ? _cursor?.PushedThrough
                 : pushedThrough,
@@ -546,12 +563,14 @@ internal sealed class SimklSyncSession : ISyncSession
 
             if (SimklSyncProvider.IsSuccess(status))
             {
+                RememberPlayback(signal, snapshot, responseBody);
                 return;
             }
 
             // Already finalized in the last hour; the watch is recorded.
             if (status == HttpStatusCode.Conflict && action == "stop")
             {
+                RememberPlayback(signal, snapshot, responseBody);
                 return;
             }
 
@@ -567,6 +586,97 @@ internal sealed class SimklSyncSession : ISyncSession
 
             throw new StremioException(
                 DescribeFailure(status, responseBody, $"report a playback {action}"));
+        }
+    }
+
+    /// <summary>
+    /// Deletes a paused playback by the id learned from a pull or a pause
+    /// response. A 404 means it is already gone, which is the goal.
+    /// </summary>
+    public async Task RemovePlaybackAsync(
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_playbackIds.TryGetValue(key, out var id))
+        {
+            return;
+        }
+
+        var (status, _) = await SendAsync(
+            HttpMethod.Delete,
+            $"/sync/playback/{id}",
+            content: null,
+            authorize: true,
+            cancellationToken);
+
+        if (SimklSyncProvider.IsSuccess(status) || status == HttpStatusCode.NotFound)
+        {
+            _playbackIds.Remove(key);
+
+            if (_cursor is not null)
+            {
+                _cursor.PlaybackIds = _playbackIds.Count > 0 ? new(_playbackIds) : null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Keeps the playback id from a scrobble response so dismissing a resume
+    /// row can delete it even when no pull has happened yet. A start or a
+    /// completed stop clears the session, so the id goes away.
+    /// </summary>
+    private void RememberPlayback(
+        PlaybackSignal signal,
+        PlaybackSnapshot snapshot,
+        string responseBody)
+    {
+        var key = SyncKey.For(snapshot.ImdbId, snapshot.Kind, snapshot.Season, snapshot.Episode);
+        var action = ReadRootString(responseBody, "action");
+        var id = ReadRootLong(responseBody, "id");
+
+        if (signal == PlaybackSignal.Started ||
+            string.Equals(action, "scrobble", StringComparison.OrdinalIgnoreCase))
+        {
+            _playbackIds.Remove(key);
+        }
+        else if (id > 0)
+        {
+            _playbackIds[key] = id;
+        }
+
+        if (_cursor is not null)
+        {
+            _cursor.PlaybackIds = _playbackIds.Count > 0 ? new(_playbackIds) : null;
+        }
+    }
+
+    private static string? ReadRootString(string json, string property)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                ? ReadString(document.RootElement, property)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static long ReadRootLong(string json, string property)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                ? ReadLong(document.RootElement, property)
+                : 0;
+        }
+        catch (JsonException)
+        {
+            return 0;
         }
     }
 
@@ -749,7 +859,8 @@ internal sealed class SimklSyncSession : ISyncSession
             ReadString(media, "title"),
             detail.Poster ?? BuildPoster(ReadString(media, "poster")),
             isMovie ? "movie" : "series",
-            episodeTitle);
+            episodeTitle,
+            ReadLong(item, "id") is var id and > 0 ? id : null);
     }
 
     private async Task<MediaDetail> GetDetailAsync(
@@ -1618,6 +1729,8 @@ internal sealed class SimklSyncSession : ISyncSession
         public string? Activities { get; set; }
 
         public string? Playback { get; set; }
+
+        public Dictionary<string, long>? PlaybackIds { get; set; }
 
         public DateTimeOffset? PushedThrough { get; set; }
     }

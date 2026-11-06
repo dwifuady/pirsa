@@ -82,6 +82,12 @@ public interface ISyncSession : IAsyncDisposable
         PlaybackSignal signal,
         PlaybackSnapshot snapshot,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes a paused playback whose local resume row went away. Providers
+    /// without server-side playbacks ignore it.
+    /// </summary>
+    Task RemovePlaybackAsync(string key, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The providers this build knows about. Order is the Settings order.</summary>

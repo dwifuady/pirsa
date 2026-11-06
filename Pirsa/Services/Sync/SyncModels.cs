@@ -105,7 +105,8 @@ public sealed record RemoteResume(
     string? Name = null,
     string? Poster = null,
     string? Type = null,
-    string? EpisodeTitle = null)
+    string? EpisodeTitle = null,
+    long? Id = null)
 {
     [JsonIgnore]
     public string Key => SyncKey.For(ImdbId, Kind, Season, Episode);
