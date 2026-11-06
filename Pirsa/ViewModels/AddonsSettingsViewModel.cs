@@ -2,71 +2,35 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Pirsa.Helpers;
-using Pirsa.Playback;
 using Pirsa.Services;
 
 namespace Pirsa.ViewModels;
 
 /// <summary>
-/// Settings → Addons. Adds, removes, enables, and orders persisted Stremio
-/// manifest URLs. The list order is the addon priority order used by metadata
+/// Settings → Add-ons. Adds, removes, enables and orders persisted Stremio
+/// manifest URLs. The list order is the add-on priority order used by metadata
 /// and stream discovery.
 /// </summary>
-public partial class SettingsViewModel : ObservableObject
+public partial class AddonsSettingsViewModel : ObservableObject
 {
-    /// <summary>Above this many addons, searching and filtering appear.</summary>
+    /// <summary>Above this many add-ons, searching and filtering appear.</summary>
     private const int SearchThreshold = 5;
 
     private readonly AddonRegistry _registry;
-    private readonly AppSettings _settings;
-    private readonly WatchProgressStore _watchProgress;
-    private readonly SearchHistoryStore _searchHistory;
-    private readonly SyncEngine _sync;
     private readonly HashSet<AddonEntry> _observed = [];
     private readonly EventHandler _registryChangedHandler;
     private readonly NotifyCollectionChangedEventHandler _entriesChangedHandler;
-    private bool _loadingSettings;
     private bool _loadingLinkRegistration;
     private bool _rebuilding;
 
-    public SettingsViewModel(
-        AddonRegistry registry,
-        AppSettings settings,
-        WatchProgressStore watchProgress,
-        SearchHistoryStore searchHistory,
-        SyncEngine sync)
+    public AddonsSettingsViewModel(AddonRegistry registry)
     {
         _registry = registry;
-        _settings = settings;
-        _watchProgress = watchProgress;
-        _searchHistory = searchHistory;
-        _sync = sync;
-
-        // Off first, then every language the subtitle picker understands.
-        SubtitleLanguageOptions.Add(new SubtitleLanguageOption("", "Off"));
-        foreach (var option in SubtitleLanguages.PreferenceOptions)
-        {
-            SubtitleLanguageOptions.Add(option);
-        }
-
-        // Automatic first, then every backend this build can actually start.
-        PlaybackEngineOptions.Add(new PlaybackEngineOption("", "Automatic"));
-        foreach (var factory in PlaybackEngines.All.Where(factory => factory.IsAvailable))
-        {
-            PlaybackEngineOptions.Add(new PlaybackEngineOption(factory.Id, factory.DisplayName));
-        }
 
         NewManifestUrl = "";
         SearchText = "";
         ErrorMessage = "";
         NoticeMessage = "";
-        _loadingSettings = true;
-        AutoplayEnabled = false;
-        QualityIndex = 0;
-        SelectedPlaybackEngine = PlaybackEngineOptions[0];
-        SelectedSubtitleLanguage = SubtitleLanguageOptions[0];
-        _loadingSettings = false;
 
         _registryChangedHandler = (_, _) =>
         {
@@ -80,24 +44,20 @@ public partial class SettingsViewModel : ObservableObject
         Attach();
     }
 
-    /// <summary>Subscribes to the shared addon list (also after a cached navigation).</summary>
+    /// <summary>Subscribes to the shared add-on list (also after a cached navigation).</summary>
     public void Attach()
     {
         _registry.Changed -= _registryChangedHandler;
         _registry.Entries.CollectionChanged -= _entriesChangedHandler;
         _registry.Changed += _registryChangedHandler;
         _registry.Entries.CollectionChanged += _entriesChangedHandler;
-
-        _sync.Changed -= Sync_Changed;
-        _sync.Changed += Sync_Changed;
     }
 
-    /// <summary>Stops listening to the shared addon list when the page goes away.</summary>
+    /// <summary>Stops listening to the shared add-on list when the page goes away.</summary>
     public void Detach()
     {
         _registry.Changed -= _registryChangedHandler;
         _registry.Entries.CollectionChanged -= _entriesChangedHandler;
-        _sync.Changed -= Sync_Changed;
 
         foreach (var entry in _observed)
         {
@@ -107,28 +67,10 @@ public partial class SettingsViewModel : ObservableObject
         _observed.Clear();
     }
 
-    private void Sync_Changed(object? sender, EventArgs e)
-    {
-        if (App.DispatcherQueue.HasThreadAccess)
-        {
-            OnPropertyChanged(nameof(SyncSummary));
-        }
-        else
-        {
-            App.DispatcherQueue.TryEnqueue(() => OnPropertyChanged(nameof(SyncSummary)));
-        }
-    }
-
     public ObservableCollection<AddonEntry> Addons => _registry.Entries;
 
     /// <summary>The rows shown after applying the search text and filter.</summary>
     public ObservableCollection<AddonEntry> VisibleAddons { get; } = [];
-
-    /// <summary>Short pinned-catalogs summary for the Home settings card.</summary>
-    public string HomeSummary => _registry.HomeSummary;
-
-    /// <summary>Short connection summary for the Sync settings card.</summary>
-    public string SyncSummary => _sync.SummaryText;
 
     [ObservableProperty]
     public partial string NewManifestUrl { get; set; }
@@ -154,29 +96,6 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string NoticeMessage { get; set; }
-
-    [ObservableProperty]
-    public partial bool AutoplayEnabled { get; set; }
-
-    /// <summary>When true, the next episode starts when the current one ends.</summary>
-    [ObservableProperty]
-    public partial bool AutoAdvanceEnabled { get; set; }
-
-    /// <summary>0 = best, 1 = 4K, 2 = 1440p, 3 = 1080p, 4 = 720p, 5 = 480p.</summary>
-    [ObservableProperty]
-    public partial int QualityIndex { get; set; }
-
-    /// <summary>Automatic plus every available playback backend.</summary>
-    public ObservableCollection<PlaybackEngineOption> PlaybackEngineOptions { get; } = [];
-
-    [ObservableProperty]
-    public partial PlaybackEngineOption? SelectedPlaybackEngine { get; set; }
-
-    /// <summary>Off plus every language subtitles can turn on automatically.</summary>
-    public ObservableCollection<SubtitleLanguageOption> SubtitleLanguageOptions { get; } = [];
-
-    [ObservableProperty]
-    public partial SubtitleLanguageOption? SelectedSubtitleLanguage { get; set; }
 
     /// <summary>True for the Store/winapp build, which registers links in its manifest.</summary>
     public bool IsPackagedBuild => StremioProtocolRegistration.IsPackaged;
@@ -221,27 +140,7 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    public static readonly string[] QualityCodes = ["", "4K", "1440p", "1080p", "720p", "480p"];
-
     public bool IsEmpty => Addons.Count == 0;
-
-    public bool HasWatchHistory => _watchProgress.Entries.Count > 0;
-
-    public string WatchHistoryText => _watchProgress.Entries.Count switch
-    {
-        0 => "No saved playback positions on this device.",
-        1 => "1 saved playback position on this device.",
-        var count => $"{count} saved playback positions on this device.",
-    };
-
-    public bool HasSearchHistory => _searchHistory.Entries.Count > 0;
-
-    public string SearchHistoryText => _searchHistory.Entries.Count switch
-    {
-        0 => "No saved searches on this device.",
-        1 => "1 saved search on this device.",
-        var count => $"{count} saved searches on this device.",
-    };
 
     public bool HasAddons => Addons.Count > 0;
 
@@ -265,7 +164,7 @@ public partial class SettingsViewModel : ObservableObject
             }
 
             var disabled = Addons.Count(entry => !entry.IsEnabled);
-            var total = Addons.Count == 1 ? "1 addon" : $"{Addons.Count} addons";
+            var total = Addons.Count == 1 ? "1 add-on" : $"{Addons.Count} add-ons";
             return disabled == 0 ? total : $"{total} · {disabled} disabled";
         }
     }
@@ -283,27 +182,12 @@ public partial class SettingsViewModel : ObservableObject
             RaiseAddonInfo();
             RebuildVisible();
 
-            await _settings.EnsureLoadedAsync(cancellationToken);
-            await _watchProgress.EnsureLoadedAsync(cancellationToken);
-            RaiseWatchHistoryInfo();
-            await _searchHistory.EnsureLoadedAsync(cancellationToken);
-            RaiseSearchHistoryInfo();
-
             _loadingLinkRegistration = true;
             HandlesStremioLinks = CanManageLinkRegistration && StremioProtocolRegistration.IsRegistered;
             _loadingLinkRegistration = false;
 
-            _loadingSettings = true;
-            AutoplayEnabled = _settings.Autoplay;
-            AutoAdvanceEnabled = _settings.AutoAdvance;
-            SelectedPlaybackEngine = ResolvePlaybackEngine(_settings.PlaybackEngine);
-            SelectedSubtitleLanguage = ResolveSubtitleLanguage(_settings.PreferredSubtitleLanguage);
-            var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
-            QualityIndex = qualityIndex < 0 ? 0 : qualityIndex;
-            _loadingSettings = false;
-
             await _registry.LoadManifestsAsync(cancellationToken, includeDisabled: true);
-            OnPropertyChanged(nameof(HomeSummary));
+            RaiseAddonInfo();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -392,6 +276,27 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>Moves an addon to a dropped position. Disabled while filtered.</summary>
+    public async Task MoveToAsync(
+        AddonEntry entry,
+        int targetIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanReorder)
+        {
+            return;
+        }
+
+        try
+        {
+            await _registry.MoveToAsync(entry, targetIndex, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            SetError($"Couldn't change the addon order. {exception.Message}");
+        }
+    }
+
     /// <summary>
     /// Enables or disables one addon. Disabling the preferred metadata addon
     /// announces which addon takes over, since that changes the details page.
@@ -456,7 +361,6 @@ public partial class SettingsViewModel : ObservableObject
         await entry.LoadManifestAsync(cancellationToken);
         RaiseAddonInfo();
         RebuildVisible();
-        OnPropertyChanged(nameof(HomeSummary));
     }
 
     public void ClearFilters()
@@ -467,141 +371,17 @@ public partial class SettingsViewModel : ObservableObject
 
     public void DismissNotice() => HasNotice = false;
 
-    /// <summary>Shows the same informational bar the addon page uses.</summary>
+    /// <summary>Shows the same informational bar the add-on page uses.</summary>
     public void ShowNotice(string message) => SetNotice(message);
 
-    /// <summary>Shows the same error bar the addon page uses.</summary>
+    /// <summary>Shows the same error bar the add-on page uses.</summary>
     public void ShowError(string message) => SetError(message);
-
-    public async Task ClearWatchHistoryAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _watchProgress.ClearAsync(cancellationToken);
-            await App.SubtitleOffsets.ClearAsync(cancellationToken);
-            await App.SubtitleChoices.ClearAsync(cancellationToken);
-            RaiseWatchHistoryInfo();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            SetError($"Couldn't clear the watch history. {exception.Message}");
-        }
-    }
-
-    public async Task ClearSearchHistoryAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _searchHistory.ClearAsync(cancellationToken);
-            RaiseSearchHistoryInfo();
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-        catch (Exception exception)
-        {
-            SetError($"Couldn't clear the search history. {exception.Message}");
-        }
-    }
-
-    partial void OnAutoplayEnabledChanged(bool value)
-    {
-        if (!_loadingSettings)
-        {
-            _settings.Autoplay = value;
-            _ = _settings.SaveAsync();
-        }
-    }
-
-    partial void OnAutoAdvanceEnabledChanged(bool value)
-    {
-        if (!_loadingSettings)
-        {
-            _settings.AutoAdvance = value;
-            _ = _settings.SaveAsync();
-        }
-    }
-
-    partial void OnQualityIndexChanged(int value)
-    {
-        if (!_loadingSettings)
-        {
-            _settings.PreferredQuality = value >= 0 && value < QualityCodes.Length
-                ? QualityCodes[value]
-                : "";
-            _ = _settings.SaveAsync();
-        }
-    }
-
-    partial void OnSelectedPlaybackEngineChanged(PlaybackEngineOption? value)
-    {
-        if (!_loadingSettings)
-        {
-            _settings.PlaybackEngine = value?.Id ?? "";
-            _ = _settings.SaveAsync();
-        }
-    }
-
-    partial void OnSelectedSubtitleLanguageChanged(SubtitleLanguageOption? value)
-    {
-        if (!_loadingSettings)
-        {
-            _settings.PreferredSubtitleLanguage = value?.Code ?? "";
-            _ = _settings.SaveAsync();
-
-            // Changing the default resets per-title picks, so a title can never
-            // keep a language the viewer no longer expects.
-            _ = App.SubtitleChoices.ClearAsync();
-        }
-    }
 
     partial void OnSearchTextChanged(string value) => RebuildVisible();
 
     partial void OnFilterIndexChanged(int value) => RebuildVisible();
 
-    /// <summary>
-    /// Finds the picker row for a stored code (eng and en are the same row). A
-    /// code no title offered yet is added so the choice is never silently lost.
-    /// </summary>
-    private SubtitleLanguageOption ResolveSubtitleLanguage(string? code)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            return SubtitleLanguageOptions[0];
-        }
-
-        if (SubtitleLanguageOptions.FirstOrDefault(option =>
-                !option.IsOff && SubtitleLanguages.SameLanguage(option.Code, code)) is { } match)
-        {
-            return match;
-        }
-
-        var extra = new SubtitleLanguageOption(
-            SubtitleLanguages.CanonicalCode(code),
-            SubtitleLanguages.DisplayName(code));
-        SubtitleLanguageOptions.Add(extra);
-        return extra;
-    }
-
-    /// <summary>
-    /// Finds the picker row for a stored backend id. A choice this build no
-    /// longer ships falls back to Automatic rather than failing to start.
-    /// </summary>
-    private PlaybackEngineOption ResolvePlaybackEngine(string? id)
-    {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return PlaybackEngineOptions[0];
-        }
-
-        return PlaybackEngineOptions.FirstOrDefault(option =>
-                   option.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-               ?? PlaybackEngineOptions[0];
-    }
-
+    /// <summary>Applies the search text and capability filter to the row list.</summary>
     private void RebuildVisible()
     {
         if (_rebuilding)
@@ -706,14 +486,18 @@ public partial class SettingsViewModel : ObservableObject
 
     private void SetError(string message)
     {
-        HasError = true;
         ErrorMessage = message;
+        HasError = true;
+        HasNotice = false;
+        NoticeMessage = "";
     }
 
     private void SetNotice(string message)
     {
         NoticeMessage = message;
         HasNotice = true;
+        HasError = false;
+        ErrorMessage = "";
     }
 
     private void RaiseAddonInfo()
@@ -725,20 +509,4 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasNoMatches));
         OnPropertyChanged(nameof(VisibleCountText));
     }
-
-    private void RaiseWatchHistoryInfo()
-    {
-        OnPropertyChanged(nameof(HasWatchHistory));
-        OnPropertyChanged(nameof(WatchHistoryText));
-    }
-
-    private void RaiseSearchHistoryInfo()
-    {
-        OnPropertyChanged(nameof(HasSearchHistory));
-        OnPropertyChanged(nameof(SearchHistoryText));
-    }
 }
-
-/// <summary>One row in the video engine picker. An empty id means Automatic.</summary>
-public sealed record PlaybackEngineOption(string Id, string Name);
-

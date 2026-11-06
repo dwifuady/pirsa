@@ -41,7 +41,22 @@ public sealed partial class SyncSettingsPage : Page
 
     private async void Disconnect_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is SyncProviderRowViewModel row)
+        if ((sender as FrameworkElement)?.DataContext is not SyncProviderRowViewModel row)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"Disconnect {row.Name}?",
+            Content = "This deletes the saved credentials on this device. Your local history and the remote account stay as they are.",
+            PrimaryButtonText = "Disconnect",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             await ViewModel.DisconnectAsync(row);
         }

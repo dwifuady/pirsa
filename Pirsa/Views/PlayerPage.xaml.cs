@@ -136,6 +136,7 @@ public sealed partial class PlayerPage : Page
     private IReadOnlyList<PlaybackTrack> _audioTracks = [];
     private long _selectedAudioTrackId = -1;
     private bool _audioListDirty = true;
+    private bool _audioPreferenceApplied;
     private bool _chromeHidden = true;
     private bool _infoPinned;
     private bool _infoSuppressed;
@@ -150,6 +151,8 @@ public sealed partial class PlayerPage : Page
     private long _lengthMs;
     private DateTime _lastProgressSaveUtc;
     private DispatcherTimer? _resumeHintTimer;
+    private DispatcherTimer? _autoAdvanceTimer;
+    private int _autoAdvanceSecondsLeft;
     private DispatcherTimer? _cachedWatchdog;
     private PlaybackSource? _cachedAttempt;
     private StreamCacheSession? _streamCache;
@@ -192,6 +195,9 @@ public sealed partial class PlayerPage : Page
 
         _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _resumeHintTimer.Tick += (_, _) => HideResumeHint();
+
+        _autoAdvanceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _autoAdvanceTimer.Tick += (_, _) => TickAutoAdvanceCountdown();
 
         // A pause should last before the details cover the picture: a quick
         // pause to read a subtitle or check the time shouldn't make them flash.
@@ -408,6 +414,7 @@ public sealed partial class PlayerPage : Page
         UpdateSubtitleTimingUi();
         ResumePanel.Visibility = Visibility.Collapsed;
         HideUpNext();
+        StopAutoAdvanceCountdown();
         ResetInfoCard();
         _upNextDismissed = false;
         ViewModel.NextEpisode = null;
@@ -593,6 +600,7 @@ public sealed partial class PlayerPage : Page
         }
 
         await App.Settings.EnsureLoadedAsync();
+        _engine.SetSubtitleStyle(CurrentSubtitleStyle());
         await RestoreProgressAsync(request);
         await RestoreSubtitleDelayAsync(request);
 
@@ -822,6 +830,11 @@ public sealed partial class PlayerPage : Page
         try
         {
             await App.WatchProgress.EnsureLoadedAsync();
+            if (!App.Settings.ResumePlayback)
+            {
+                return;
+            }
+
             var saved = App.WatchProgress.Find(request.VideoId);
 
             if (saved is { Completed: false, PositionMs: > 0 })
@@ -842,6 +855,15 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer?.Stop();
         ResumePanel.Visibility = Visibility.Collapsed;
     }
+
+    private static SubtitleStyle CurrentSubtitleStyle() => new(
+        Math.Clamp(App.Settings.SubtitleTextScale, 0.5, 2.0),
+        App.Settings.SubtitleBackground switch
+        {
+            "None" => SubtitleBackground.None,
+            "Solid" => SubtitleBackground.Solid,
+            _ => SubtitleBackground.Dim,
+        });
 
     private void StartOver_Click(object sender, RoutedEventArgs e)
     {
@@ -1121,13 +1143,75 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private void PlayNext_Click(object sender, RoutedEventArgs e) => _ = PlayNextEpisodeAsync();
+    private void PlayNext_Click(object sender, RoutedEventArgs e)
+    {
+        StopAutoAdvanceCountdown();
+        _ = PlayNextEpisodeAsync();
+    }
 
     private void DismissUpNext_Click(object sender, RoutedEventArgs e)
     {
         // Also cancels the automatic switch for this episode.
+        StopAutoAdvanceCountdown();
         _upNextDismissed = true;
         HideUpNext();
+        if (_ended)
+        {
+            EndedText.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>
+    /// Starts the delay configured in Settings. Zero keeps the original
+    /// behavior and switches episodes immediately.
+    /// </summary>
+    private void StartAutoAdvanceCountdown()
+    {
+        StopAutoAdvanceCountdown();
+
+        var seconds = Math.Max(0, App.Settings.AutoAdvanceDelaySeconds);
+        if (seconds == 0)
+        {
+            _ = PlayNextEpisodeAsync();
+            return;
+        }
+
+        _autoAdvanceSecondsLeft = seconds;
+        UpdateAutoAdvanceCountdownText();
+        UpNextCountdownText.Visibility = Visibility.Visible;
+        _autoAdvanceTimer?.Start();
+    }
+
+    private void TickAutoAdvanceCountdown()
+    {
+        if (_disposed || _autoAdvanceTimer is null)
+        {
+            return;
+        }
+
+        _autoAdvanceSecondsLeft--;
+        if (_autoAdvanceSecondsLeft <= 0)
+        {
+            StopAutoAdvanceCountdown();
+            _ = PlayNextEpisodeAsync();
+            return;
+        }
+
+        UpdateAutoAdvanceCountdownText();
+    }
+
+    private void UpdateAutoAdvanceCountdownText()
+    {
+        UpNextCountdownText.Text = _autoAdvanceSecondsLeft == 1
+            ? "Playing next in 1 second"
+            : $"Playing next in {_autoAdvanceSecondsLeft} seconds";
+    }
+
+    private void StopAutoAdvanceCountdown()
+    {
+        _autoAdvanceTimer?.Stop();
+        UpNextCountdownText.Visibility = Visibility.Collapsed;
+        UpNextCountdownText.Text = "";
     }
 
     /// <summary>
@@ -1170,6 +1254,7 @@ public sealed partial class PlayerPage : Page
             _upNextDismissed = false;
             ViewModel.NextEpisode = null;
             HideUpNext();
+            StopAutoAdvanceCountdown();
 
             PrepareNextEpisode();
 
@@ -1395,6 +1480,7 @@ public sealed partial class PlayerPage : Page
             _audioTracks = [];
             _selectedAudioTrackId = -1;
             _audioListDirty = true;
+            _audioPreferenceApplied = false;
             UpdateAudioIndicator();
 
             // Embedded subtitle ids belong to the previous stream. The chosen
@@ -1529,7 +1615,54 @@ public sealed partial class PlayerPage : Page
         }
 
         _audioListDirty = false;
+        ApplyPreferredAudioTrack();
         UpdateAudioIndicator();
+    }
+
+    /// <summary>
+    /// Applies the preferred audio language once per source, after the stream
+    /// has exposed its tracks. A manual pick in the player wins for that source.
+    /// </summary>
+    private void ApplyPreferredAudioTrack()
+    {
+        if (_audioPreferenceApplied)
+        {
+            return;
+        }
+
+        var preferred = App.Settings.PreferredAudioLanguage;
+        if (string.IsNullOrWhiteSpace(preferred))
+        {
+            _audioPreferenceApplied = true;
+            return;
+        }
+
+        var match = _audioTracks.FirstOrDefault(track =>
+            track.Id >= 0 &&
+            !string.IsNullOrWhiteSpace(track.LanguageCode) &&
+            SubtitleLanguages.SameLanguage(track.LanguageCode, preferred));
+
+        if (match is null)
+        {
+            // Tracks can still be arriving; the next TracksChanged retries.
+            return;
+        }
+
+        _audioPreferenceApplied = true;
+        PlayerLog.Write(
+            $"preferred audio {preferred} matched '{match.DisplayName}' " +
+            $"({match.LanguageCode ?? "?"}) id={match.Id}");
+
+        if (match.Id == _engine.CurrentAudioTrackId)
+        {
+            _selectedAudioTrackId = match.Id;
+            return;
+        }
+
+        if (_engine.SelectAudioTrack(match.Id))
+        {
+            _selectedAudioTrackId = match.Id;
+        }
     }
 
     private void AudioMenu_Opened(object? sender, object e)
@@ -1578,6 +1711,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _selectedAudioTrackId = id;
+        _audioPreferenceApplied = true;
         foreach (var item in AudioMenu.Items.OfType<ToggleMenuFlyoutItem>())
         {
             item.IsChecked = item.Tag is long other && other == id;
@@ -1648,6 +1782,8 @@ public sealed partial class PlayerPage : Page
         ErrorPanel.Visibility = Visibility.Collapsed;
         EndedText.Visibility = Visibility.Collapsed;
         HideBuffer();
+        _engine.SetSubtitleStyle(CurrentSubtitleStyle());
+        RefreshAudioTracks();
         UpdatePlayPauseUi();
         SeekSlider.IsEnabled = _engine.IsSeekable;
         ShowChrome();
@@ -1767,20 +1903,27 @@ public sealed partial class PlayerPage : Page
         ReportScrobble(PlaybackSignal.Completed);
         _stopReported = true;
 
-        if (_nextEpisode is not null && !_upNextDismissed && App.Settings.AutoAdvance)
-        {
-            _ = PlayNextEpisodeAsync();
-            return;
-        }
+        var autoAdvance =
+            _nextEpisode is not null &&
+            !_upNextDismissed &&
+            App.Settings.AutoAdvance;
 
         UpdateUpNextVisibility();
         HideResumeHint();
         HideBuffer();
         HideInfoCard();
-        EndedText.Visibility = Visibility.Visible;
         UpdatePlayPauseUi();
         ShowChrome();
         _chromeTimer.Stop();
+
+        if (autoAdvance)
+        {
+            ShowUpNext();
+            StartAutoAdvanceCountdown();
+            return;
+        }
+
+        EndedText.Visibility = Visibility.Visible;
     }
 
     private void HandleTimeChanged(long time)
@@ -3909,6 +4052,7 @@ public sealed partial class PlayerPage : Page
         _infoTimer.Stop();
         _pauseMuteClearTimer?.Stop();
         _resumeHintTimer?.Stop();
+        _autoAdvanceTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();
         ClearPlayingIntent();

@@ -126,6 +126,12 @@ public interface IPlaybackEngine : IDisposable
     void SetSubtitleLift(int devicePixels);
 
     /// <summary>
+    /// Applies the user's subtitle size and background preference to the next
+    /// media. Backends that render embedded ASS may keep the release's styling.
+    /// </summary>
+    void SetSubtitleStyle(SubtitleStyle style);
+
+    /// <summary>
     /// Current video size in pixels, when the engine knows it. Used to exclude
     /// letterbox space from the subtitle lift.
     /// </summary>

@@ -40,3 +40,17 @@ public sealed record PlaybackTrack(
     string? LanguageCode = null,
     string? Title = null,
     bool IsExternal = false);
+
+/// <summary>Box behind rendered subtitles. Embedded ASS may carry its own.</summary>
+public enum SubtitleBackground
+{
+    None,
+    Dim,
+    Solid,
+}
+
+/// <summary>
+/// Engine-neutral subtitle appearance. TextScale 1.0 is the backend default;
+/// background is a best-effort hint for embedded subtitle renderers.
+/// </summary>
+public sealed record SubtitleStyle(double TextScale, SubtitleBackground Background);

@@ -68,13 +68,63 @@ public sealed partial class MainWindow : Window
     {
         RootFrame.Loaded -= RootFrame_Loaded;
 
+        // Theme and start page are stored in settings.json. Loading before the
+        // first navigation would block the window, so the default Home page is
+        // already up and this only moves to a different start page when asked.
+        await App.Settings.EnsureLoadedAsync();
+        ApplyTheme();
+        NavigateToStartPage();
+
         // Background work: the check must never delay the first frame, and a
         // failure is silent so an offline launch is unchanged.
-        _ = Update.CheckAsync();
+        if (App.Settings.CheckForUpdates)
+        {
+            _ = Update.CheckAsync();
+        }
 
         if (App.TakePendingAddonLink() is { } link)
         {
             await HandleAddonLinkAsync(link);
+        }
+    }
+
+    /// <summary>
+    /// Applies the stored theme to the whole window content. System leaves the
+    /// element theme unset so Windows controls it, including Mica.
+    /// </summary>
+    public void ApplyTheme()
+    {
+        if (Content is not FrameworkElement root)
+        {
+            return;
+        }
+
+        root.RequestedTheme = App.Settings.Theme switch
+        {
+            "Light" => ElementTheme.Light,
+            "Dark" => ElementTheme.Dark,
+            _ => ElementTheme.Default,
+        };
+    }
+
+    /// <summary>Moves to the user's chosen start page after settings load.</summary>
+    private void NavigateToStartPage()
+    {
+        if (RootFrame.CurrentSourcePageType != typeof(HomePage))
+        {
+            return;
+        }
+
+        var pageType = App.Settings.StartPage switch
+        {
+            "Discover" => typeof(DiscoverPage),
+            "Watchlist" => typeof(LibraryPage),
+            _ => null,
+        };
+
+        if (pageType is not null)
+        {
+            NavigateSection(pageType);
         }
     }
 
@@ -90,7 +140,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>Opens Settings → Addons, optionally showing a message on arrival.</summary>
+    /// <summary>Opens Settings → Add-ons, optionally showing a message on arrival.</summary>
     public void OpenAddonSettings(SettingsMessage? message = null)
     {
         if (RootFrame.CurrentSourcePageType == typeof(SettingsPage) &&
@@ -98,14 +148,7 @@ public sealed partial class MainWindow : Window
         {
             if (message is not null)
             {
-                if (message.IsError)
-                {
-                    settings.ViewModel.ShowError(message.Text);
-                }
-                else
-                {
-                    settings.ViewModel.ShowNotice(message.Text);
-                }
+                settings.ShowAddonMessage(message);
             }
 
             NavView.IsPaneOpen = false;
@@ -166,7 +209,13 @@ public sealed partial class MainWindow : Window
             NavView.SelectedItem = WatchlistNavItem;
         }
 
-        AppTitleBar.IsBackButtonVisible = RootFrame.CanGoBack;
+        // Top-level sections never show a back arrow: the pane is the
+        // navigation. Settings has its own arrow inside the category pane.
+        var isTopLevel = pageType == typeof(HomePage)
+            || pageType == typeof(DiscoverPage)
+            || pageType == typeof(LibraryPage)
+            || pageType == typeof(SettingsPage);
+        AppTitleBar.IsBackButtonVisible = !isTopLevel && RootFrame.CanGoBack;
 
         AttachDiscoverSearch();
         SyncTitleBarSearch();
@@ -211,7 +260,10 @@ public sealed partial class MainWindow : Window
 
     private void SyncTitleBarSearch()
     {
-        AppSearchBox.Visibility = RootFrame.CurrentSourcePageType == typeof(PlayerPage)
+        // Settings has its own search box in the category pane, so the global
+        // content search stays out of the way (and cannot jump to Discover).
+        var pageType = RootFrame.CurrentSourcePageType;
+        AppSearchBox.Visibility = pageType == typeof(PlayerPage) || pageType == typeof(SettingsPage)
             ? Visibility.Collapsed
             : Visibility.Visible;
 

@@ -32,7 +32,31 @@ internal static class SubtitleLift
     /// Sets the margin, in device pixels, between the bottom of the picture and
     /// the bottom of the subtitles. Zero restores VLC's default position.
     /// </summary>
-    public static void Set(MediaPlayer? player, int devicePixels)
+    public static void Set(MediaPlayer? player, int devicePixels) =>
+        ApplyToVouts(
+            player,
+            vout => SetInteger(vout, "sub-margin", Math.Max(0, devicePixels)));
+
+    /// <summary>
+    /// Updates the live text renderer. The freetype filter inherits these
+    /// variables from the vout, so they apply without restarting playback.
+    /// </summary>
+    public static void SetStyle(
+        MediaPlayer? player,
+        int textScalePercent,
+        int backgroundOpacity)
+    {
+        ApplyToVouts(
+            player,
+            vout =>
+            {
+                SetInteger(vout, "sub-text-scale", Math.Clamp(textScalePercent, 50, 200));
+                SetInteger(vout, "freetype-background-opacity", Math.Clamp(backgroundOpacity, 0, 255));
+                SetInteger(vout, "freetype-background-color", 0x000000);
+            });
+    }
+
+    private static void ApplyToVouts(MediaPlayer? player, Action<IntPtr> apply)
     {
         if (player is null)
         {
@@ -48,24 +72,24 @@ internal static class SubtitleLift
 
             try
             {
-                Apply(player.NativeReference, Math.Max(0, devicePixels));
+                ApplyCore(player.NativeReference, apply);
             }
             catch (Exception exception)
                 when (exception is DllNotFoundException or EntryPointNotFoundException)
             {
-                // Subtitle placement is a nicety; a libvlc that no longer
+                // Subtitle styling is a nicety; a libvlc that no longer
                 // exports these entry points must not break playback.
                 _broken = true;
-                PlayerLog.Write($"subtitle lift unavailable: {exception.Message}");
+                PlayerLog.Write($"subtitle styling unavailable: {exception.Message}");
             }
             catch (Exception exception)
             {
-                PlayerLog.Write($"subtitle lift failed: {exception.Message}");
+                PlayerLog.Write($"subtitle styling failed: {exception.Message}");
             }
         }
     }
 
-    private static void Apply(IntPtr mediaPlayer, int margin)
+    private static void ApplyCore(IntPtr mediaPlayer, Action<IntPtr> apply)
     {
         var input = GetInputThread(mediaPlayer);
         if (input == IntPtr.Zero)
@@ -100,9 +124,7 @@ internal static class SubtitleLift
 
                 try
                 {
-                    // var_SetInteger is a header inline for var_SetChecked; the
-                    // value is a union whose integer member is the margin.
-                    VarSetChecked(vout, "sub-margin", VarInteger, new VlcValue { Integer = margin });
+                    apply(vout);
                 }
                 finally
                 {
@@ -123,6 +145,9 @@ internal static class SubtitleLift
             ObjectRelease(input);
         }
     }
+
+    private static void SetInteger(IntPtr target, string name, int value) =>
+        VarSetChecked(target, name, VarInteger, new VlcValue { Integer = value });
 
     /// <summary>
     /// libvlccore allocates the vout list with its own C runtime, so it must be

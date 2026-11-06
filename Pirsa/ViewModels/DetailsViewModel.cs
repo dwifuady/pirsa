@@ -596,6 +596,7 @@ public partial class DetailsViewModel : ObservableObject
     {
         try
         {
+            await App.Settings.EnsureLoadedAsync(cancellationToken);
             await _watchProgress.EnsureLoadedAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -622,6 +623,7 @@ public partial class DetailsViewModel : ObservableObject
     {
         try
         {
+            await App.Settings.EnsureLoadedAsync(cancellationToken);
             await _watchProgress.EnsureLoadedAsync(cancellationToken);
             await _watchProgress.ReconcileNextUpAsync(meta, cancellationToken);
         }
@@ -640,7 +642,8 @@ public partial class DetailsViewModel : ObservableObject
     private void ApplyWatchState(MetaItem meta)
     {
         var entries = _watchProgress.GetEpisodeEntries(meta.Id);
-        ResumeEntry = _watchProgress.FindResume(meta.Id);
+        var resumeEnabled = App.Settings.ResumePlayback;
+        ResumeEntry = resumeEnabled ? _watchProgress.FindResume(meta.Id) : null;
 
         foreach (var video in meta.Videos ?? [])
         {
@@ -650,7 +653,9 @@ public partial class DetailsViewModel : ObservableObject
             {
                 video.IsWatched = entry.IsWatched;
                 video.WatchProgress = entry.Completed ? 1 : entry.ProgressFraction;
-                video.WatchLabel = entry.ResumeLabel;
+                video.WatchLabel = entry.Completed
+                    ? "Watched"
+                    : resumeEnabled ? entry.ResumeLabel : "";
             }
             else
             {

@@ -36,6 +36,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private int _state = (int)PlaybackState.Idle;
     private int _subtitleLiftDevicePixels;
     private int _appliedSubtitleMargin = -1;
+    private SubtitleStyle _subtitleStyle = new(1.0, SubtitleBackground.Dim);
 
     public MpvPlaybackEngine()
     {
@@ -207,6 +208,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                 : "none");
 
         SetPropertyString("http-header-fields", BuildHeaderFields(media.Headers));
+        ApplySubtitleStyle();
 
         var cacheSeconds = media.IsLive ? "2.5" : "3";
         SetPropertyString("cache-secs", cacheSeconds);
@@ -293,6 +295,46 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     {
         _subtitleLiftDevicePixels = Math.Max(0, devicePixels);
         ApplySubtitleLift(force: false);
+    }
+
+    public void SetSubtitleStyle(SubtitleStyle style)
+    {
+        _subtitleStyle = style;
+        if (IsReady)
+        {
+            ApplySubtitleStyle();
+        }
+    }
+
+    /// <summary>
+    /// mpv applies sub-scale to text and pattern subtitles. sub-back-color alone
+    /// only colours the shadow under the default outline-and-shadow style, so a
+    /// real box needs sub-border-style=background-box. Embedded ASS may keep
+    /// its own styling unless sub-ass-override is raised.
+    /// </summary>
+    private void ApplySubtitleStyle()
+    {
+        SetPropertyString(
+            "sub-scale",
+            _subtitleStyle.TextScale.ToString("0.##", CultureInfo.InvariantCulture));
+        SetPropertyString(
+            "sub-border-style",
+            _subtitleStyle.Background == SubtitleBackground.None
+                ? "outline-and-shadow"
+                : "background-box");
+        SetPropertyString(
+            "sub-back-color",
+            _subtitleStyle.Background switch
+            {
+                SubtitleBackground.None => "#00000000",
+                SubtitleBackground.Solid => "#FF000000",
+                _ => "#80000000",
+            });
+
+        PlayerLog.Write(
+            $"mpv subtitle style scale={_subtitleStyle.TextScale:0.##} " +
+            $"background={_subtitleStyle.Background} " +
+            $"border={(_subtitleStyle.Background == SubtitleBackground.None ? "outline-and-shadow" : "background-box")}");
     }
 
     /// <summary>
