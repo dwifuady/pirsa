@@ -181,9 +181,9 @@ public sealed class WatchProgressEntry : ObservableObject
     [JsonIgnore]
     public bool HasPoster => PosterImage is not null;
 
-    public PlaybackRequest ToPlaybackRequest()
+    public PlaybackRequest ToPlaybackRequest(MetaItem? meta = null)
     {
-        var meta = new MetaItem
+        var stub = new MetaItem
         {
             Id = MetaId,
             Type = Type,
@@ -203,7 +203,7 @@ public sealed class WatchProgressEntry : ObservableObject
             VideoId,
             Name,
             subtitle,
-            meta,
+            meta ?? stub,
             EpisodeTitle,
             Season,
             Episode);

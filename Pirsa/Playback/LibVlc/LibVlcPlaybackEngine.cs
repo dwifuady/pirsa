@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using LibVLCSharp.Platforms.Windows;
 using LibVLCSharp.Shared;
 using Microsoft.UI.Xaml;
@@ -295,27 +296,15 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
         return _mediaPlayer.Play(vlcMedia);
     }
 
-    public void Pause()
+    public void SetPaused(bool paused)
     {
         try
         {
-            _mediaPlayer?.Pause();
+            _mediaPlayer?.SetPause(paused);
         }
         catch
         {
-            // Pausing a stopped player is harmless.
-        }
-    }
-
-    public void Resume()
-    {
-        try
-        {
-            _mediaPlayer?.Play();
-        }
-        catch
-        {
-            // Resuming a stopped player is harmless.
+            // Pausing or resuming a stopped player is harmless.
         }
     }
 
@@ -451,6 +440,80 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
     public void FocusSurface(FocusState state = FocusState.Programmatic) =>
         _surface.Focus(state);
 
+    /// <summary>
+    /// Detaches the surface now and tears the native engine down on a worker
+    /// thread, so leaving the player does not freeze on VLC's stop.
+    /// </summary>
+    public async Task ShutdownAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _surface.Initialized -= Surface_Initialized;
+        UnhookMediaPlayer();
+
+        try
+        {
+            _surface.MediaPlayer = null;
+        }
+        catch
+        {
+            // The swap chain may already be gone during shutdown.
+        }
+
+        var player = _mediaPlayer;
+        var media = _media;
+        var vlc = _libVlc;
+        _mediaPlayer = null;
+        _media = null;
+        _libVlc = null;
+        _ready = false;
+
+        await Task.Run(() =>
+        {
+            var elapsed = Stopwatch.StartNew();
+
+            try
+            {
+                player?.Stop();
+            }
+            catch
+            {
+            }
+
+            var stopMs = elapsed.ElapsedMilliseconds;
+
+            try
+            {
+                player?.Dispose();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                media?.Dispose();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                vlc?.Dispose();
+            }
+            catch
+            {
+            }
+
+            PlayerLog.Write($"video engine released in {elapsed.ElapsedMilliseconds} ms (stop {stopMs} ms)");
+        });
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -515,6 +578,7 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
             {
                 "--no-video-title-show",
                 "--no-osd",
+                "--aout=mmdevice,directsound",
                 "--verbose=2",
             };
 

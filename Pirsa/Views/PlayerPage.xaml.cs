@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Helpers;
@@ -43,6 +44,12 @@ public sealed partial class PlayerPage : Page
     private const double SubtitleLiftGapDip = 12;
 
     /// <summary>
+    /// How long the transport waits for libvlc to confirm a play/pause press
+    /// before it stops showing the requested state on faith.
+    /// </summary>
+    private static readonly TimeSpan PlayPauseConfirmTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>
     /// How long the playhead may stand still before the buffering overlay shows.
     /// Engines only emit time updates a few times a second, and a healthy seek
     /// pauses decoding for a fraction of that, so this clears normal seeks.
@@ -62,7 +69,9 @@ public sealed partial class PlayerPage : Page
         App.WatchProgress);
     private readonly DispatcherTimer _chromeTimer;
     private readonly DispatcherTimer _stallTimer;
+    private readonly DispatcherTimer _infoTimer;
     private readonly Stopwatch _seekWatch = new();
+    private readonly Stopwatch _playPauseWatch = new();
     private bool _bufferingLogged;
     private bool _stallOverlayVisible;
     private long _advancePositionMs = -1;
@@ -85,7 +94,30 @@ public sealed partial class PlayerPage : Page
     private DispatcherTimer? _subtitleHudTimer;
 
     private bool _disposed;
+    private Task? _leaveTask;
+    private Task? _videoStopped;
+    private bool _navigatingBack;
+
+    /// <summary>libvlc's own answer, which trails every state command.</summary>
     private bool _playing;
+
+    /// <summary>
+    /// The play state the user last asked for, shown until libvlc reports one
+    /// or the confirmation timeout gives up. Null means "follow libvlc".
+    /// </summary>
+    private bool? _playingIntent;
+
+    private DispatcherTimer? _playingIntentTimer;
+
+    /// <summary>
+    /// Set while the session is muted on the app's behalf to cut the audio that
+    /// libvlc has already handed the device when the user pauses. Never set
+    /// when the user muted the player themselves.
+    /// </summary>
+    private bool _pauseMuted;
+
+    /// <summary>True when that mute had to go through libvlc instead of the session.</summary>
+    private bool _pauseMuteViaVlc;
     private bool _ended;
     private bool _switching;
     private bool _errorVisible;
@@ -103,6 +135,8 @@ public sealed partial class PlayerPage : Page
     private long _selectedAudioTrackId = -1;
     private bool _audioListDirty = true;
     private bool _chromeHidden = true;
+    private bool _infoPinned;
+    private bool _infoSuppressed;
     private int _appliedSubtitleLift = -1;
     private bool _keyboardActive;
     private bool _isFullScreen;
@@ -128,6 +162,7 @@ public sealed partial class PlayerPage : Page
     private readonly UISettings _uiSettings = new();
     private readonly AccessibilitySettings _accessibility = new();
     private Storyboard? _loadingBreath;
+    private Storyboard? _infoIn;
 
     public PlayerViewModel ViewModel => _viewModel;
 
@@ -140,6 +175,7 @@ public sealed partial class PlayerPage : Page
         HookEngineEvents();
 
         ConfigureLoadingBreath();
+        ConfigureInfoAnimation();
 
         _chromeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _chromeTimer.Tick += (_, _) =>
@@ -151,11 +187,47 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _resumeHintTimer.Tick += (_, _) => HideResumeHint();
 
+        // A pause should last before the details cover the picture: a quick
+        // pause to read a subtitle or check the time shouldn't make them flash.
+        _infoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(550) };
+        _infoTimer.Tick += (_, _) =>
+        {
+            _infoTimer.Stop();
+            if (!_playing && !_switching && !_errorVisible)
+            {
+                ShowInfoCard();
+            }
+        };
+
         _subtitleHudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.4) };
         _subtitleHudTimer.Tick += (_, _) =>
         {
             _subtitleHudTimer?.Stop();
             SubtitleHudPanel.Visibility = Visibility.Collapsed;
+        };
+
+        // A press libvlc never answers would otherwise leave the button showing
+        // the wrong glyph forever. Drop the request back to libvlc's state, and
+        // leave the fact that it went unanswered in the log.
+        _playingIntentTimer = new DispatcherTimer { Interval = PlayPauseConfirmTimeout };
+        _playingIntentTimer.Tick += (_, _) =>
+        {
+            _playingIntentTimer?.Stop();
+            if (_playingIntent is not bool intent)
+            {
+                return;
+            }
+
+            PlayerLog.Write(
+                $"no {(intent ? "playing" : "paused")} event " +
+                $"{PlayPauseConfirmTimeout.TotalSeconds:0}s after the request, back to VLC state");
+
+            // A pause that never landed must not leave the session muted, and a
+            // play that never landed must not keep the mute lift waiting.
+            RestorePausedOutput();
+            _playingIntent = null;
+            _playPauseWatch.Reset();
+            UpdatePlayPauseUi();
         };
 
         // A remembered source that never reaches "playing" is treated as dead.
@@ -260,6 +332,45 @@ public sealed partial class PlayerPage : Page
         LoadingBrand.Opacity = 1;
     }
 
+    /// <summary>
+    /// Fade-and-rise for the pause details. Built here rather than in
+    /// Page.Resources because the storyboard targets the panel's own
+    /// CompositeTransform, which a resource dictionary cannot resolve.
+    /// </summary>
+    private void ConfigureInfoAnimation()
+    {
+        if (InfoPanel.RenderTransform is not CompositeTransform transform)
+        {
+            return;
+        }
+
+        var storyboard = new Storyboard();
+
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(fade, InfoPanel);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        storyboard.Children.Add(fade);
+
+        var rise = new DoubleAnimation
+        {
+            From = 12,
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(260)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(rise, transform);
+        Storyboard.SetTargetProperty(rise, "TranslateY");
+        storyboard.Children.Add(rise);
+
+        _infoIn = storyboard;
+    }
+
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -291,6 +402,7 @@ public sealed partial class PlayerPage : Page
         UpdateSubtitleTimingUi();
         ResumePanel.Visibility = Visibility.Collapsed;
         HideUpNext();
+        ResetInfoCard();
         _upNextDismissed = false;
         ViewModel.NextEpisode = null;
         ViewModel.ClearSeries();
@@ -609,6 +721,7 @@ public sealed partial class PlayerPage : Page
         _switching = true;
         _engine.Stop();
         _currentSource = null;
+        ClearPlayingIntent();
         _playing = false;
 
         var request = ViewModel.Request;
@@ -791,6 +904,7 @@ public sealed partial class PlayerPage : Page
         if (!IsEpisodic(request))
         {
             ViewModel.ClearSeries();
+            _ = EnrichDisplayMetaAsync(request, cancellationToken);
             return;
         }
 
@@ -799,7 +913,7 @@ public sealed partial class PlayerPage : Page
             var meta = request.Meta;
             if (meta.Videos is not { Count: > 1 })
             {
-                meta = await FetchSeriesMetaAsync(meta, cancellationToken) ?? meta;
+                meta = await FetchMetaAsync(request.Type, meta, needsEpisodes: true, cancellationToken) ?? meta;
             }
 
             if (cancellationToken.IsCancellationRequested || _disposed)
@@ -808,6 +922,7 @@ public sealed partial class PlayerPage : Page
             }
 
             _seriesMeta = meta;
+            ViewModel.SetDisplayMeta(meta);
             await ViewModel.SetSeriesAsync(meta, request, cancellationToken);
             if (cancellationToken.IsCancellationRequested || _disposed)
             {
@@ -828,12 +943,42 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private async Task<MetaItem?> FetchSeriesMetaAsync(
-        MetaItem meta,
+    /// <summary>
+    /// A movie or live channel opened from Continue watching or a catalog
+    /// carries only the stub meta (name, poster, type). Resolve the plot,
+    /// genres and year in the background so the pause details have something to
+    /// say; the details page path already comes in complete.
+    /// </summary>
+    private async Task EnrichDisplayMetaAsync(
+        PlaybackRequest request,
         CancellationToken cancellationToken)
     {
-        var seriesId = meta.Id;
-        if (string.IsNullOrWhiteSpace(seriesId))
+        if (!string.IsNullOrWhiteSpace(request.Meta.Description))
+        {
+            return;
+        }
+
+        var full = await FetchMetaAsync(
+            request.Type,
+            request.Meta,
+            needsEpisodes: false,
+            cancellationToken);
+        if (full is null || _disposed || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        ViewModel.SetDisplayMeta(full);
+    }
+
+    private async Task<MetaItem?> FetchMetaAsync(
+        string type,
+        MetaItem meta,
+        bool needsEpisodes,
+        CancellationToken cancellationToken)
+    {
+        var id = meta.Id;
+        if (string.IsNullOrWhiteSpace(id))
         {
             return null;
         }
@@ -846,7 +991,7 @@ public sealed partial class PlayerPage : Page
             // Same priority order as the details page. The source addon is
             // part of the list; custom ids only match the addon that declared
             // their prefix.
-            var clients = App.Addons.MetaCandidates("series", seriesId, meta.SourceAddonUrl)
+            var clients = App.Addons.MetaCandidates(type, id, meta.SourceAddonUrl)
                 .Select(entry => entry.Client)
                 .ToList();
 
@@ -855,15 +1000,24 @@ public sealed partial class PlayerPage : Page
                 clients.Add(preferred);
             }
 
+            var needsVideos = needsEpisodes;
+
             foreach (var client in clients)
             {
                 try
                 {
-                    var full = await client.GetMetaAsync("series", seriesId, cancellationToken);
-                    if (full.Videos is { Count: > 0 })
+                    var full = await client.GetMetaAsync(type, id, cancellationToken);
+                    if (needsVideos && full.Videos is not { Count: > 0 })
                     {
-                        return full;
+                        continue;
                     }
+
+                    if (string.IsNullOrWhiteSpace(full.SourceAddonUrl))
+                    {
+                        full.SourceAddonUrl = meta.SourceAddonUrl;
+                    }
+
+                    return full;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -880,7 +1034,7 @@ public sealed partial class PlayerPage : Page
         }
         catch
         {
-            // Without metadata there is simply no Up next card.
+            // Without metadata the details simply fall back to the stub.
         }
 
         return null;
@@ -1043,6 +1197,7 @@ public sealed partial class PlayerPage : Page
             _ = staleCache.DisposeAsync().AsTask();
         }
 
+        ClearPlayingIntent();
         _playing = false;
         _ended = false;
         _errorVisible = false;
@@ -1468,10 +1623,14 @@ public sealed partial class PlayerPage : Page
     {
         PlayerLog.Write(
             $"playing at {_engine.PositionMs}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start");
+        LogPlayPauseReached("playing");
+        _playingIntent = null;
+        RestorePausedOutput();
         _switching = false;
         _playing = true;
         _ended = false;
         _errorVisible = false;
+        ResetInfoCard();
         ResetStallClock(_engine.PositionMs);
         _stallTimer.Start();
 
@@ -1525,6 +1684,8 @@ public sealed partial class PlayerPage : Page
 
     private void HandlePaused()
     {
+        LogPlayPauseReached("paused");
+        _playingIntent = null;
         _playing = false;
         _stallTimer.Stop();
         HideBuffer();
@@ -1532,6 +1693,7 @@ public sealed partial class PlayerPage : Page
         UpdatePlayPauseUi();
         ShowChrome();
         _chromeTimer.Stop();
+        ScheduleInfoCard();
     }
 
     private void HandleStopped()
@@ -1553,9 +1715,11 @@ public sealed partial class PlayerPage : Page
         }
 
         PersistProgress(_positionMs, _lengthMs);
+        ClearPlayingIntent();
         _playing = false;
         _stallTimer.Stop();
         HideBuffer();
+        HideInfoCard();
         UpdatePlayPauseUi();
         ShowChrome();
     }
@@ -1576,6 +1740,7 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
+        ClearPlayingIntent();
         _playing = false;
         _ended = true;
         _stallTimer.Stop();
@@ -1591,6 +1756,7 @@ public sealed partial class PlayerPage : Page
         UpdateUpNextVisibility();
         HideResumeHint();
         HideBuffer();
+        HideInfoCard();
         EndedText.Visibility = Visibility.Visible;
         UpdatePlayPauseUi();
         ShowChrome();
@@ -1811,17 +1977,97 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        if (_engine.IsPlaying)
+        // Pause is an explicit request, not a toggle: the engine's IsPlaying
+        // answer only catches up after the command has travelled to the input
+        // thread, so choosing between Pause and Play from that answer can flip
+        // the wrong way. The transport shows what was asked for until the
+        // engine confirms it.
+        var requestPause = ShownPlaying;
+
+        _playingIntentTimer?.Stop();
+        _playPauseWatch.Restart();
+
+        if (requestPause)
         {
-            _engine.Pause();
+            // The pause command goes first: it is the one the user is waiting to
+            // see, and the mute only has to beat the queue draining, which takes
+            // hundreds of milliseconds.
+            _engine.SetPaused(true);
+            SilencePausedOutput();
         }
         else
         {
-            _engine.Resume();
+            // Resume first, then flush: libvlc turns the audio it had queued when
+            // the pause started into a debt and repays it as 0.2-0.8 s of silence
+            // on resume, and the only public flush in libvlc 3 is a seek. The
+            // seek has to come after Play — seeking while paused makes VLC's
+            // input layer read while paused, which it reports as
+            // "prefetch: reading while paused (buggy demux?)" and which froze
+            // the playhead for 8 s in the log.
+            var frozen = _engine.PositionMs;
+            _engine.SetPaused(false);
+            ResyncAfterResume(frozen);
         }
 
+        _playingIntent = !requestPause;
+        _playingIntentTimer?.Start();
+        PlayerLog.Write(
+            $"{(requestPause ? "pause" : "play")} requested at {_positionMs}ms " +
+            $"(state {_engine.State}, isPlaying {_engine.IsPlaying}, muted {_pauseMuted})");
+
+        UpdatePlayPauseUi();
         ShowChrome();
         StartChromeTimer();
+    }
+
+    /// <summary>
+    /// Flushes the audio right after a resume so the sound comes back with the
+    /// picture instead of a second later.
+    ///
+    /// libvlc keeps the audio it had queued when the pause started as a debt: on
+    /// resume the next block is scheduled that far in the future and
+    /// <c>aout_DecSynchronize()</c> fills the hole with silence. The log measures
+    /// the hole at 0.2-0.8 s, and it matches the queued depth exactly
+    /// (`playback way too early (-NNNNNN): playing silence`). The only flush
+    /// libvlc 3 exposes is a seek, and it has to run while playing: a seek issued
+    /// while paused leaves the demuxer reading during the pause, which VLC calls
+    /// "reading while paused (buggy demux?)" and which stalled the playhead for
+    /// 8 s.
+    ///
+    /// Worth it only where the bytes are already on disk: the local read-ahead
+    /// cache answers a seek in hundreds of milliseconds, while a direct HTTP or
+    /// HLS source would fetch and stall for longer than the silence it saves. The
+    /// seek is to the position captured before Play, so the picture picks up from
+    /// the frozen frame.
+    /// </summary>
+    private void ResyncAfterResume(long frozen)
+    {
+        if (!_engine.IsSeekable || _streamCache is null)
+        {
+            return;
+        }
+
+        if (frozen <= 0)
+        {
+            return;
+        }
+
+        // A pending first-play resume seek flushes the output on its own, and two
+        // seeks racing for the same playhead is how a stutter starts.
+        if (_resumeMs > 0)
+        {
+            return;
+        }
+
+        // The last seconds of a title never advance the playhead by design; a
+        // seek there lands in the drain rather than at a clean position.
+        if (_lengthMs > 0 && frozen >= _lengthMs - EndOfTitleGraceMs)
+        {
+            return;
+        }
+
+        LogSeek(frozen, frozen, "resume");
+        _engine.PositionMs = frozen;
     }
 
     private void Back10_Click(object sender, RoutedEventArgs e) => SeekRelative(-10_000);
@@ -1913,7 +2159,10 @@ public sealed partial class PlayerPage : Page
         if (volume > 0)
         {
             _lastVolume = volume;
-            if (_engine.IsMuted)
+
+            // A drag while paused must not undo the mute that is cutting the
+            // audio libvlc already queued; the resume lifts it.
+            if (_engine.IsMuted && !_pauseMuted)
             {
                 _engine.SetMuted(false);
             }
@@ -1930,6 +2179,11 @@ public sealed partial class PlayerPage : Page
         {
             return;
         }
+
+        // The user owns the mute state from here on. Anything this page muted
+        // for a pause is lifted first, so the toggle acts on the state the user
+        // can see.
+        RestorePausedOutput();
 
         if (_engine.IsMuted || _engine.Volume == 0)
         {
@@ -1969,21 +2223,38 @@ public sealed partial class PlayerPage : Page
 
     private void FullScreen_Click(object sender, RoutedEventArgs e) => ToggleFullscreen();
 
-    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
+    private void Back_Click(object sender, RoutedEventArgs e) => _ = LeavePlayerAsync();
 
     /// <summary>
     /// The player can be reached without the details page (resume, up next,
     /// deep link), so a missing or broken addon still has a way forward.
     /// </summary>
-    private void ManageAddons_Click(object sender, RoutedEventArgs e) =>
+    private async void ManageAddons_Click(object sender, RoutedEventArgs e)
+    {
+        await LeaveAsync();
         Frame.Navigate(typeof(SettingsPage));
+    }
+
+    private async Task LeavePlayerAsync()
+    {
+        if (!Frame.CanGoBack)
+        {
+            return;
+        }
+
+        await LeaveAsync();
+        GoBack();
+    }
 
     private void GoBack()
     {
-        if (Frame.CanGoBack)
+        if (_navigatingBack || !Frame.CanGoBack)
         {
-            Frame.GoBack();
+            return;
         }
+
+        _navigatingBack = true;
+        Frame.GoBack();
     }
 
     // --------------------------------------------------------------- chrome state
@@ -2023,6 +2294,126 @@ public sealed partial class PlayerPage : Page
         PickerBackdrop.Visibility = Visibility.Visible;
     }
 
+    // ------------------------------------------------------------- pause details
+
+    private void ScheduleInfoCard()
+    {
+        _infoTimer.Stop();
+
+        if (_infoSuppressed || InfoPanel.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        _infoTimer.Start();
+    }
+
+    private void ShowInfoCard()
+    {
+        if (_disposed ||
+            InfoPanel.Visibility == Visibility.Visible ||
+            ViewModel.Request is null ||
+            _errorVisible ||
+            _ended ||
+            LoadingOverlay.Visibility == Visibility.Visible ||
+            PickerBackdrop.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        NowPlayingTitle.Visibility = Visibility.Collapsed;
+        InfoPanel.Visibility = Visibility.Visible;
+
+        if (_infoIn is null || !_uiSettings.AnimationsEnabled)
+        {
+            _infoIn?.Stop();
+            InfoPanel.Opacity = 1;
+
+            if (InfoPanel.RenderTransform is CompositeTransform still)
+            {
+                still.TranslateY = 0;
+            }
+
+            return;
+        }
+
+        _infoIn.Begin();
+    }
+
+    private void HideInfoCard()
+    {
+        _infoTimer.Stop();
+        NowPlayingTitle.Visibility = Visibility.Visible;
+
+        if (InfoPanel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        _infoIn?.Stop();
+        InfoPanel.Visibility = Visibility.Collapsed;
+        InfoPanel.Opacity = 0;
+
+        if (InfoPanel.RenderTransform is CompositeTransform transform)
+        {
+            transform.TranslateY = 12;
+        }
+    }
+
+    private void ResetInfoCard()
+    {
+        _infoPinned = false;
+        _infoSuppressed = false;
+        HideInfoCard();
+    }
+
+    /// <summary>
+    /// "I" toggles the details card independently of pausing, like a media
+    /// info key. Dismissing it while paused keeps it down until the next pause.
+    /// </summary>
+    private void ToggleInfoCard()
+    {
+        if (InfoPanel.Visibility == Visibility.Visible)
+        {
+            _infoSuppressed = true;
+            _infoPinned = false;
+            HideInfoCard();
+
+            if (_playing)
+            {
+                StartChromeTimer();
+            }
+
+            return;
+        }
+
+        _infoSuppressed = false;
+        ShowInfoCard();
+
+        if (_playing && InfoPanel.Visibility == Visibility.Visible)
+        {
+            // Auto-hide would take the details down with the chrome.
+            _infoPinned = true;
+            ShowChrome();
+            _chromeTimer.Stop();
+        }
+    }
+
+    private void InfoAccelerator_Invoked(
+        KeyboardAccelerator sender,
+        KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (_sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
+        {
+            return;
+        }
+
+        ToggleInfoCard();
+        args.Handled = true;
+    }
+
+    private void Info_Click(object sender, RoutedEventArgs e) => ToggleInfoCard();
+
     private void ShowChrome()
     {
         if (_disposed)
@@ -2045,7 +2436,7 @@ public sealed partial class PlayerPage : Page
     private void HideChrome()
     {
         if (!_playing || _sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen ||
-            _errorVisible || _ended || _draggingSeek)
+            _errorVisible || _ended || _draggingSeek || _infoPinned)
         {
             return;
         }
@@ -2148,7 +2539,7 @@ public sealed partial class PlayerPage : Page
     private void StartChromeTimer()
     {
         if (_chromeHidden || !_playing || _sourcesFlyoutOpen || _subtitlesFlyoutOpen ||
-            _episodesFlyoutOpen || _errorVisible)
+            _episodesFlyoutOpen || _errorVisible || _infoPinned)
         {
             return;
         }
@@ -3178,18 +3569,128 @@ public sealed partial class PlayerPage : Page
         BufferPanel.Visibility = Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// What the transport should show: the state the user asked for while
+    /// libvlc is still catching up, otherwise libvlc's own answer.
+    /// </summary>
+    private bool ShownPlaying => _playingIntent ?? _playing;
+
+    /// <summary>
+    /// Closes the press-to-event measurement. Two numbers answer "why did that
+    /// pause feel late": whether libvlc ever reported the change, and how long
+    /// it took; a press that never lands shows up as the timeout line instead.
+    /// </summary>
+    private void LogPlayPauseReached(string what)
+    {
+        _playingIntentTimer?.Stop();
+        if (!_playPauseWatch.IsRunning)
+        {
+            return;
+        }
+
+        PlayerLog.Write($"{what} {_playPauseWatch.ElapsedMilliseconds}ms after the play/pause request");
+        _playPauseWatch.Reset();
+    }
+
+    /// <summary>
+    /// Drops a pending play/pause request so the transport follows libvlc again
+    /// after a stop, an error or a source change.
+    /// </summary>
+    private void ClearPlayingIntent()
+    {
+        _playingIntentTimer?.Stop();
+        _playingIntent = null;
+        _playPauseWatch.Reset();
+        RestorePausedOutput();
+    }
+
+    /// <summary>
+    /// Mutes the audio session when the user pauses.
+    ///
+    /// A pause stops the picture at once, but not the sound: libvlc hands the
+    /// device a buffer of decoded audio ahead of the clock (the log measures
+    /// 0.2-0.8 s from the pause to the WASAPI session going inactive, and the
+    /// device ring here is 96000 frames, two seconds at 48 kHz). libvlc's own
+    /// mute cannot cut that, because the thread that applies it is the thread
+    /// playing the audio: it lands 315-618 ms late. So the mute goes at the
+    /// session directly, where the mixer applies it to what is already queued.
+    /// </summary>
+    private void SilencePausedOutput()
+    {
+        if (_pauseMuted)
+        {
+            return;
+        }
+
+        var watch = Stopwatch.StartNew();
+        switch (AudioSessionMute.MuteUnlessAlreadyMuted())
+        {
+            case AudioSessionMute.Result.Applied:
+                _pauseMuted = true;
+                PlayerLog.Write(
+                    $"session muted directly in {watch.Elapsed.TotalMilliseconds:0.0}ms to cut the audio libvlc already queued");
+                return;
+
+            case AudioSessionMute.Result.AlreadyMuted:
+                // Muted by somebody else. With the output already silent there is
+                // nothing to cut, and lifting their mute is not this page's call.
+                PlayerLog.Write("pause not muted: the session was already muted");
+                return;
+        }
+
+        // No session yet, or it refused. libvlc's mute is late, but it is what is
+        // left, and it is still better than the whole queue playing out.
+        if (!_engine.IsMuted)
+        {
+            _engine.SetMuted(true);
+            _pauseMuted = true;
+            _pauseMuteViaVlc = true;
+            PlayerLog.Write(
+                $"session mute unavailable after {watch.Elapsed.TotalMilliseconds:0.0}ms, muted libvlc instead (which applies late)");
+        }
+    }
+
+    /// <summary>Lifts a mute this page put on, and only that one.</summary>
+    private void RestorePausedOutput()
+    {
+        if (!_pauseMuted)
+        {
+            return;
+        }
+
+        _pauseMuted = false;
+        if (_pauseMuteViaVlc)
+        {
+            _pauseMuteViaVlc = false;
+            if (_engine.IsMuted)
+            {
+                _engine.SetMuted(false);
+            }
+
+            return;
+        }
+
+        if (!AudioSessionMute.SetMute(false))
+        {
+            // Usually the session is already gone (teardown, device switch).
+            // Worth a line: a mute left behind here is silence nobody expects.
+            PlayerLog.Write("could not lift the pause mute: no matching audio session");
+        }
+    }
+
     private void UpdatePlayPauseUi()
     {
-        var glyph = _playing ? "\uE769" : _ended ? "\uE72C" : "\uE768";
+        var playing = ShownPlaying;
+        var glyph = playing ? "\uE769" : _ended ? "\uE72C" : "\uE768";
         PlayPauseIcon.Glyph = glyph;
         CenterPlayIcon.Glyph = glyph;
         CenterPlayIcon.FontSize = _ended ? 26 : 34;
 
-        var name = _playing ? "Pause" : _ended ? "Replay" : "Play";
+        var name = playing ? "Pause" : _ended ? "Replay" : "Play";
         AutomationProperties.SetName(PlayPauseButton, name);
         AutomationProperties.SetName(CenterPlayButton, name);
 
-        CenterPlayButton.Visibility = _playing || _errorVisible || _sourcesFlyoutOpen || _disposed
+        CenterPlayButton.Visibility = playing || _errorVisible || _sourcesFlyoutOpen || _disposed
             ? Visibility.Collapsed
             : Visibility.Visible;
     }
@@ -3201,7 +3702,9 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        var muted = _engine.IsMuted || _engine.Volume == 0;
+        // The pause mute is the page's, not a mute the user asked for, so it
+        // leaves the volume icon alone.
+        var muted = (!_pauseMuted && _engine.IsMuted) || _engine.Volume == 0;
         VolumeIcon.Glyph = muted ? "\uE74F" : "\uE767";
         AutomationProperties.SetName(VolumeButton, muted ? "Unmute" : "Mute");
         ToolTipService.SetToolTip(VolumeButton, muted ? "Unmute (M)" : "Mute (M)");
@@ -3227,7 +3730,10 @@ public sealed partial class PlayerPage : Page
 
     private void ShowPlaybackError(string message, bool canSwitch)
     {
+        _infoTimer.Stop();
+        HideInfoCard();
         _errorVisible = true;
+        ClearPlayingIntent();
         _playing = false;
         _switching = false;
         _stallTimer.Stop();
@@ -3243,7 +3749,14 @@ public sealed partial class PlayerPage : Page
         _chromeTimer.Stop();
     }
 
-    private void DisposePlayback()
+    /// <summary>
+    /// Releases everything the player owns. With <paramref name="stopOnWorker"/>
+    /// the native stop runs on a worker thread and <see cref="_videoStopped"/>
+    /// completes once libvlc has let go of the video surface; the caller then
+    /// navigates, so the swap chain is only torn down after VLC stopped drawing
+    /// into it.
+    /// </summary>
+    private void DisposePlayback(bool stopOnWorker = false)
     {
         if (_disposed)
         {
@@ -3257,15 +3770,21 @@ public sealed partial class PlayerPage : Page
 
         _disposed = true;
         _chromeTimer.Stop();
+        _infoTimer.Stop();
         _resumeHintTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();
+        ClearPlayingIntent();
         _stallTimer.Stop();
         _streamCacheCts.Cancel();
         var cacheSession = _streamCache;
         _streamCache = null;
         if (cacheSession is not null)
         {
+            // VLC reads through this server, and its input thread is parked in
+            // a socket read. End those connections first, so the stop below
+            // does not have to wait one out.
+            cacheSession.StopServing();
             _ = cacheSession.DisposeAsync().AsTask();
         }
 
@@ -3283,22 +3802,63 @@ public sealed partial class PlayerPage : Page
         // A timing change made just before leaving must reach the next session.
         _ = App.SubtitleOffsets.FlushAsync();
 
-        if (_subtitleDirectory is not null)
+        var subtitleDirectory = _subtitleDirectory;
+        _subtitleDirectory = null;
+        if (subtitleDirectory is not null)
         {
-            try
-            {
-                Directory.Delete(_subtitleDirectory, recursive: true);
-            }
-            catch
-            {
-            }
-
-            _subtitleDirectory = null;
+            // File deletion is not worth a frame of the back transition.
+            _ = Task.Run(() => DeleteDirectory(subtitleDirectory));
         }
 
-        // Detach the surface before the engine tears its swap chain down, so
-        // XAML never presents a dead surface.
+        if (stopOnWorker)
+        {
+            _videoStopped = _engine.ShutdownAsync();
+        }
+        else
+        {
+            _engine.Dispose();
+        }
+
+        // ShutdownAsync detaches the player synchronously before its worker
+        // stop, so the surface is safe to remove even while the stop runs.
         VideoHost.Children.Remove(_engine.Surface);
-        _engine.Dispose();
+    }
+
+    /// <summary>
+    /// Stops playback, then waits (bounded) until VLC has released the surface.
+    /// The native stop joins VLC's input and output threads, and a stalled
+    /// source can hold that up for a second or more — on the UI thread that is
+    /// exactly the freeze the back button used to show. The frame stays alive
+    /// until the stop finishes, because navigation destroys the swap chain on
+    /// unload and libvlc must not still be drawing into it.
+    /// </summary>
+    internal Task LeaveAsync() => _leaveTask ??= LeaveCoreAsync();
+
+    private async Task LeaveCoreAsync()
+    {
+        DisposePlayback(stopOnWorker: true);
+
+        if (_videoStopped is not { } stopped || stopped.IsCompleted)
+        {
+            return;
+        }
+
+        // A wedged engine must not trap the user in the player.
+        var finished = await Task.WhenAny(stopped, Task.Delay(TimeSpan.FromSeconds(2)));
+        if (!ReferenceEquals(finished, stopped))
+        {
+            PlayerLog.Write("video engine did not stop within 2 s; leaving anyway");
+        }
+    }
+
+    private static void DeleteDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+        }
     }
 }

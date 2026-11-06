@@ -78,11 +78,17 @@ public interface IPlaybackEngine : IDisposable
     /// </summary>
     bool TryPlay(PlaybackMedia media);
 
-    void Pause();
-
-    void Resume();
+    /// <summary>Explicit pause or resume; never a toggle.</summary>
+    void SetPaused(bool paused);
 
     void Stop();
+
+    /// <summary>
+    /// Releases the native engine without blocking the UI thread. The surface
+    /// is detached synchronously; the caller may navigate once the task
+    /// completes (or after a bounded wait).
+    /// </summary>
+    Task ShutdownAsync();
 
     void SetRate(double rate);
 
