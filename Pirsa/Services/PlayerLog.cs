@@ -1,12 +1,11 @@
-using LibVLCSharp.Shared;
-
 namespace Pirsa.Services;
 
 /// <summary>
 /// Append-only playback log for diagnosing buffering and seeking. It records the
-/// media options handed to VLC, every seek next to how long VLC actually spent
-/// buffering afterwards, and VLC's own stream-layer messages, so "it stalls when
-/// I skip" can be answered with numbers instead of guesses.
+/// media options handed to the engine, every seek next to how long the engine
+/// actually spent buffering afterwards, and the engine's own stream-layer
+/// messages, so "it stalls when I skip" can be answered with numbers instead of
+/// guesses.
 ///
 /// The log is local only, capped, and reset every time the player opens, so it
 /// never grows without bound and never leaves the machine.
@@ -87,20 +86,25 @@ public static class PlayerLog
         }
     }
 
-    /// <summary>Records one libVLC message, filtered down to the stream plumbing.</summary>
-    public static void WriteVlc(LogEventArgs e)
+    /// <summary>
+    /// Records one engine message, filtered down to the stream plumbing. The
+    /// level names are the backend's own (Debug, Notice, Warning, Error).
+    /// </summary>
+    public static void WriteEngine(string engine, string level, string? module, string message)
     {
-        var module = e.Module ?? "";
+        module ??= "";
 
-        if (e.Level is LogLevel.Error or LogLevel.Warning)
+        if (level.Equals("Error", StringComparison.OrdinalIgnoreCase) ||
+            level.Equals("Warning", StringComparison.OrdinalIgnoreCase))
         {
-            Write($"vlc {e.Level,-7} {module}: {e.Message}");
+            Write($"{engine} {level,-7} {module}: {message}");
             return;
         }
 
-        if (e.Level == LogLevel.Debug && InterestingModules.Contains(module))
+        if (level.Equals("Debug", StringComparison.OrdinalIgnoreCase) &&
+            InterestingModules.Contains(module))
         {
-            Write($"vlc {e.Level,-7} {module}: {e.Message}");
+            Write($"{engine} {level,-7} {module}: {message}");
         }
     }
 

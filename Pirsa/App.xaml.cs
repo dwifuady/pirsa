@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Pirsa.Playback;
 using Pirsa.Services;
 
 namespace Pirsa;
@@ -100,7 +101,17 @@ public partial class App : Application
         _ = SearchHistory.EnsureLoadedAsync();
         _ = SubtitleOffsets.EnsureLoadedAsync();
         _ = SubtitleChoices.EnsureLoadedAsync();
-        _ = VideoEngine.WarmUpAsync();
+        _ = WarmUpPlaybackAsync();
+    }
+
+    /// <summary>
+    /// Warms the backend the user selected, after settings have loaded. Loading
+    /// both in parallel would always warm the default.
+    /// </summary>
+    private static async Task WarmUpPlaybackAsync()
+    {
+        await Settings.EnsureLoadedAsync();
+        await PlaybackEngines.WarmUpAsync(Settings.PlaybackEngine);
     }
 
     private static void AppInstance_Activated(object? sender, AppActivationArguments args)

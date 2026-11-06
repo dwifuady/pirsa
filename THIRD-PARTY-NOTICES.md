@@ -12,6 +12,7 @@ Keep it in sync when dependencies change.
 | Component | Version | License | Role |
 | --- | --- | --- | --- |
 | libvlc / VLC | 3.0.24 | LGPL-2.1-or-later | Media engine (`libvlc.dll`, `libvlccore.dll`, `plugins/`) |
+| libmpv / mpv | 0.41.0 | LGPL-2.1-or-later | Optional media engine (`libmpv-2.dll`) |
 | LibVLCSharp | 3.10.2 | LGPL-2.1-or-later | .NET bindings for libvlc |
 | LibVLCSharp.WinUI | 3.10.2 | LGPL-2.1-or-later | WinUI video surface |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM source generators |
@@ -38,6 +39,21 @@ MSIX package cannot be modified in place, so the portable build is the
 supported way to substitute a rebuilt `libvlc.dll` / `libvlccore.dll` /
 `plugins/`. Pirsa does not modify any libvlc binary; the DLLs are loaded
 unmodified from the application directory.
+
+### libmpv / mpv
+
+The optional mpv backend is distributed as a separate `libmpv-2.dll` in the
+`libmpv/win-x64` or `libmpv/win-arm64` folder. The package used is
+`Endpne.LibMPV.Windows` 0.41.0, which builds mpv under
+LGPL-2.1-or-later. The same LGPL obligations apply: this notice and the full
+license text ship with the binary, the source is available, and the DLL can be
+replaced in the portable build.
+
+**Full LGPL-2.1 text:** <https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html>
+
+**mpv source:** <https://github.com/mpv-player/mpv>
+
+**Windows libmpv package:** <https://www.nuget.org/packages/Endpne.LibMPV.Windows>
 
 The libvlc build also contains FFmpeg and other codec modules, each under its
 own license. The `plugins` folder is shipped byte-for-byte as published by the
@@ -78,7 +94,8 @@ font file is bundled. Fonts and theme brushes come from Windows itself.
 
 ```
 Pirsa — GPL-3.0-or-later
-Media engine: libvlc 3.0.24, LGPL-2.1-or-later (videolan.org)
+Media engines: libvlc 3.0.24, LGPL-2.1-or-later (videolan.org)
+               libmpv 0.41.0, LGPL-2.1-or-later (mpv.io)
 Bindings: LibVLCSharp, LGPL-2.1-or-later
 Windows App SDK © Microsoft Corporation
 Icons and UI original to the Pirsa project

@@ -35,6 +35,7 @@ internal static class AudioSessionMute
 
     private const int EDataFlowRender = 0;
     private const int ERoleMultimedia = 1;
+    private const int DeviceStateActive = 1;
     private const int ClsCtxAll = 23; // CLSCTX_INPROC_SERVER | LOCAL_SERVER | REMOTE_SERVER
 
     private static readonly Guid InterfaceIdSessionManager2 = new("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
@@ -107,6 +108,12 @@ internal static class AudioSessionMute
 
         try
         {
+            if (sessions.Count == 0)
+            {
+                PlayerLog.Write("audio session: none found on active render devices");
+                return false;
+            }
+
             var applied = false;
             foreach (var session in sessions)
             {
@@ -131,25 +138,53 @@ internal static class AudioSessionMute
         var processId = (uint)Environment.ProcessId;
 
         var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-        IMMDevice? device = null;
+        IMMDeviceCollection? collection = null;
+        try
+        {
+            // Enumerate every active render device, not just the default
+            // multimedia endpoint: mpv and VLC can pick a different role or
+            // device from the one Windows reports as the default.
+            if (enumerator.EnumAudioEndpoints(EDataFlowRender, DeviceStateActive, out collection) < 0 ||
+                collection.GetCount(out var deviceCount) < 0)
+            {
+                return sessions;
+            }
+
+            for (var deviceIndex = 0; deviceIndex < deviceCount; deviceIndex++)
+            {
+                if (collection.Item(deviceIndex, out var device) < 0)
+                {
+                    continue;
+                }
+
+                AddDeviceSessions(device, processId, sessions);
+                Release(device);
+            }
+
+            return sessions;
+        }
+        finally
+        {
+            Release(collection);
+            Release(enumerator);
+        }
+    }
+
+    private static void AddDeviceSessions(
+        IMMDevice device,
+        uint processId,
+        List<ISimpleAudioVolume> sessions)
+    {
         IAudioSessionManager2? manager = null;
         IAudioSessionEnumerator? list = null;
         try
         {
-            if (enumerator.GetDefaultAudioEndpoint(EDataFlowRender, ERoleMultimedia, out device) < 0)
-            {
-                return sessions;
-            }
-
             var interfaceId = InterfaceIdSessionManager2;
-            if (device.Activate(ref interfaceId, ClsCtxAll, IntPtr.Zero, out manager) < 0)
+            if (device.Activate(ref interfaceId, ClsCtxAll, IntPtr.Zero, out manager) < 0 ||
+                manager.GetSessionEnumerator(out list) < 0 ||
+                list.GetCount(out var count) < 0)
             {
-                return sessions;
-            }
-
-            if (manager.GetSessionEnumerator(out list) < 0 || list.GetCount(out var count) < 0)
-            {
-                return sessions;
+                return;
             }
 
             for (var index = 0; index < count; index++)
@@ -173,15 +208,11 @@ internal static class AudioSessionMute
                     Release(session);
                 }
             }
-
-            return sessions;
         }
         finally
         {
             Release(list);
             Release(manager);
-            Release(device);
-            Release(enumerator);
         }
     }
 
@@ -226,7 +257,7 @@ internal static class AudioSessionMute
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IMMDeviceEnumerator
     {
-        int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
+        int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection devices);
 
         int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
 
@@ -235,6 +266,16 @@ internal static class AudioSessionMute
         int RegisterEndpointNotificationCallback(IntPtr client);
 
         int UnregisterEndpointNotificationCallback(IntPtr client);
+    }
+
+    [ComImport]
+    [Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMMDeviceCollection
+    {
+        int GetCount(out int count);
+
+        int Item(int index, out IMMDevice device);
     }
 
     [ComImport]

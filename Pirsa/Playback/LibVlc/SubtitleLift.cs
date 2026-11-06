@@ -1,7 +1,8 @@
 using System.Runtime.InteropServices;
 using LibVLCSharp.Shared;
+using Pirsa.Services;
 
-namespace Pirsa.Services;
+namespace Pirsa.Playback.LibVlc;
 
 /// <summary>
 /// Lifts libVLC's own subtitles clear of the playback chrome.
@@ -16,7 +17,7 @@ namespace Pirsa.Services;
 /// Everything here is best effort. If a future libvlc changes these internals
 /// the calls fail, the player logs it once, and subtitles simply stay put.
 /// </summary>
-public static class SubtitleLift
+internal static class SubtitleLift
 {
     /// <summary>input_query_e.INPUT_GET_VOUTS in libvlc 3.0.x.</summary>
     private const int InputGetVouts = 43;

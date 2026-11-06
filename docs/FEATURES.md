@@ -121,7 +121,7 @@ Everything Pirsa does, in detail. For install and build steps see
 
 ## Native player
 
-- LibVLCSharp + libvlc in a WinUI SwapChainPanel, with Windows 11-style chrome:
+- libVLC or mpv in a WinUI SwapChainPanel, with Windows 11-style chrome:
   seek bar, 10-second skips, volume, speed, fullscreen, auto-hiding controls, a
   **source** picker next to the **CC** and **audio track** buttons.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
@@ -169,6 +169,10 @@ Everything Pirsa does, in detail. For install and build steps see
   source for the next episode starts instantly, otherwise the best found source
   is used even when the source picker is normally shown. Turning this off keeps
   the Up next card, so episodes can still be skipped by hand.
+- **Video engine** — Settings → Playback → **Video engine** selects
+  **Automatic**, **libVLC** or **mpv**. Automatic uses mpv when it is available
+  and falls back to libVLC; picking libVLC explicitly overrides that. The
+  choice is saved locally and applied the next time the player opens.
 - Playback engine details, source discovery, caching and diagnostics are in
   [PLAYER.md](PLAYER.md).
 

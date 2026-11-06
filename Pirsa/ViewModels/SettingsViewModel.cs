@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Pirsa.Helpers;
+using Pirsa.Playback;
 using Pirsa.Services;
 
 namespace Pirsa.ViewModels;
@@ -46,6 +47,13 @@ public partial class SettingsViewModel : ObservableObject
             SubtitleLanguageOptions.Add(option);
         }
 
+        // Automatic first, then every backend this build can actually start.
+        PlaybackEngineOptions.Add(new PlaybackEngineOption("", "Automatic"));
+        foreach (var factory in PlaybackEngines.All.Where(factory => factory.IsAvailable))
+        {
+            PlaybackEngineOptions.Add(new PlaybackEngineOption(factory.Id, factory.DisplayName));
+        }
+
         NewManifestUrl = "";
         SearchText = "";
         ErrorMessage = "";
@@ -53,6 +61,7 @@ public partial class SettingsViewModel : ObservableObject
         _loadingSettings = true;
         AutoplayEnabled = false;
         QualityIndex = 0;
+        SelectedPlaybackEngine = PlaybackEngineOptions[0];
         SelectedSubtitleLanguage = SubtitleLanguageOptions[0];
         _loadingSettings = false;
 
@@ -134,6 +143,12 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>0 = best, 1 = 4K, 2 = 1440p, 3 = 1080p, 4 = 720p, 5 = 480p.</summary>
     [ObservableProperty]
     public partial int QualityIndex { get; set; }
+
+    /// <summary>Automatic plus every available playback backend.</summary>
+    public ObservableCollection<PlaybackEngineOption> PlaybackEngineOptions { get; } = [];
+
+    [ObservableProperty]
+    public partial PlaybackEngineOption? SelectedPlaybackEngine { get; set; }
 
     /// <summary>Off plus every language subtitles can turn on automatically.</summary>
     public ObservableCollection<SubtitleLanguageOption> SubtitleLanguageOptions { get; } = [];
@@ -259,6 +274,7 @@ public partial class SettingsViewModel : ObservableObject
             _loadingSettings = true;
             AutoplayEnabled = _settings.Autoplay;
             AutoAdvanceEnabled = _settings.AutoAdvance;
+            SelectedPlaybackEngine = ResolvePlaybackEngine(_settings.PlaybackEngine);
             SelectedSubtitleLanguage = ResolveSubtitleLanguage(_settings.PreferredSubtitleLanguage);
             var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
             QualityIndex = qualityIndex < 0 ? 0 : qualityIndex;
@@ -498,6 +514,15 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    partial void OnSelectedPlaybackEngineChanged(PlaybackEngineOption? value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.PlaybackEngine = value?.Id ?? "";
+            _ = _settings.SaveAsync();
+        }
+    }
+
     partial void OnSelectedSubtitleLanguageChanged(SubtitleLanguageOption? value)
     {
         if (!_loadingSettings)
@@ -537,6 +562,22 @@ public partial class SettingsViewModel : ObservableObject
             SubtitleLanguages.DisplayName(code));
         SubtitleLanguageOptions.Add(extra);
         return extra;
+    }
+
+    /// <summary>
+    /// Finds the picker row for a stored backend id. A choice this build no
+    /// longer ships falls back to Automatic rather than failing to start.
+    /// </summary>
+    private PlaybackEngineOption ResolvePlaybackEngine(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return PlaybackEngineOptions[0];
+        }
+
+        return PlaybackEngineOptions.FirstOrDefault(option =>
+                   option.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+               ?? PlaybackEngineOptions[0];
     }
 
     private void RebuildVisible()
@@ -675,4 +716,7 @@ public partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SearchHistoryText));
     }
 }
+
+/// <summary>One row in the video engine picker. An empty id means Automatic.</summary>
+public sealed record PlaybackEngineOption(string Id, string Name);
 

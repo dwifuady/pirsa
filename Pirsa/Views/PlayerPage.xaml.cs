@@ -1,8 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
-using LibVLCSharp.Platforms.Windows;
-using LibVLCSharp.Shared;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -13,6 +11,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Helpers;
 using Pirsa.Models;
+using Pirsa.Playback;
 using Pirsa.Services;
 using Pirsa.ViewModels;
 using Windows.Foundation;
@@ -23,14 +22,13 @@ using Windows.UI.ViewManagement;
 namespace Pirsa.Views;
 
 /// <summary>
-/// Native-feeling video player built on LibVLC's WinUI SwapChainPanel view.
-/// VLC handles the container/codec variety these addons throw at it (MKV,
-/// HEVC, HDR, HLS, DASH) while the chrome is WinUI.
+/// Native-feeling video player with WinUI chrome. Playback goes through
+/// <see cref="IPlaybackEngine"/>; libVLC is the current backend and handles the
+/// container/codec variety these addons throw at it (MKV, HEVC, HDR, HLS,
+/// DASH).
 /// </summary>
 public sealed partial class PlayerPage : Page
 {
-    private static readonly object CoreLock = new();
-    private static bool _coreReady;
     private static readonly HttpClient SubtitleHttp = CreateSubtitleHttpClient();
 
     /// <summary>Volume points changed per mouse-wheel detent.</summary>
@@ -46,33 +44,6 @@ public sealed partial class PlayerPage : Page
     private const double SubtitleLiftGapDip = 12;
 
     /// <summary>
-    /// LibVLC's demuxer cache for on-demand video. It is a jitter buffer, not a
-    /// seek window: VLC's HTTP access answers a seek with a fresh range request,
-    /// so nothing here is ever replayed from memory. What it does control is how
-    /// long VLC waits for the buffer to refill after a start or a seek (the
-    /// buffering percentage is measured against this target), which is why it is
-    /// kept short. A real seek window needs a local read-ahead cache in front of
-    /// VLC, not a bigger VLC buffer.
-    /// </summary>
-    private const int VodNetworkCachingMs = 3000;
-
-    /// <summary>
-    /// The same buffer for live TV, kept shorter still: every cached second is a
-    /// second further behind the live edge.
-    /// </summary>
-    private const int LiveNetworkCachingMs = 2500;
-
-    /// <summary>
-    /// libvlc's audio output candidates, most modern first. This is the same
-    /// order VLC picks on its own (mmdevice scores 150, directsound 100,
-    /// waveout 50), so naming them changes nothing except that the winner is
-    /// now deterministic and readable in the player log. It is worth knowing:
-    /// the module that wins owns the buffer of audio the device still has to
-    /// play, and that buffer is the sound that outlives a pause.
-    /// </summary>
-    private const string AudioOutputModules = "mmdevice,directsound";
-
-    /// <summary>
     /// How long the transport waits for libvlc to confirm a play/pause press
     /// before it stops showing the requested state on faith.
     /// </summary>
@@ -80,14 +51,14 @@ public sealed partial class PlayerPage : Page
 
     /// <summary>
     /// How long the playhead may stand still before the buffering overlay shows.
-    /// VLC only emits time updates a few times a second, and a healthy seek
+    /// Engines only emit time updates a few times a second, and a healthy seek
     /// pauses decoding for a fraction of that, so this clears normal seeks.
     /// </summary>
     private static readonly TimeSpan StallThreshold = TimeSpan.FromMilliseconds(1200);
 
     /// <summary>
-    /// The last seconds of a title are not watched through a spinner. VLC stops
-    /// advancing the clock while the final buffered frames drain, so the playhead
+    /// The last seconds of a title are not watched through a spinner. The engine
+    /// stops advancing the clock while the final buffered frames drain, so the playhead
     /// looks frozen at ~99% even though the picture is fine.
     /// </summary>
     private const long EndOfTitleGraceMs = 4000;
@@ -107,9 +78,7 @@ public sealed partial class PlayerPage : Page
     private DateTime _advanceUtc = DateTime.UtcNow;
     private string _bufferText = "Buffering…";
 
-    private LibVLC? _libVlc;
-    private MediaPlayer? _mediaPlayer;
-    private Media? _media;
+    private readonly IPlaybackEngine _engine;
     private CancellationTokenSource? _sourceCts;
     private CancellationTokenSource? _subtitleCts;
     private PlaybackSource? _pendingSource;
@@ -118,7 +87,7 @@ public sealed partial class PlayerPage : Page
     private SubtitleLanguageChoice? _versionsLanguage;
     private string? _selectedSubtitlePath;
     private string? _subtitleDirectory;
-    private int _selectedEmbeddedTrackId = -1;
+    private long _selectedEmbeddedTrackId = -1;
     private string? _selectedEmbeddedName;
     private string? _selectedEmbeddedCode;
     private long _subtitleDelayMs;
@@ -128,7 +97,6 @@ public sealed partial class PlayerPage : Page
     private Task? _leaveTask;
     private Task? _videoStopped;
     private bool _navigatingBack;
-    private bool _vlcReady;
 
     /// <summary>libvlc's own answer, which trails every state command.</summary>
     private bool _playing;
@@ -163,12 +131,14 @@ public sealed partial class PlayerPage : Page
     private bool _draggingSeek;
     private bool _suppressSeek;
     private bool _suppressVolume;
-    private List<TrackDescriptionTile> _audioTracks = new();
-    private int _selectedAudioTrackId = -1;
+    private IReadOnlyList<PlaybackTrack> _audioTracks = [];
+    private long _selectedAudioTrackId = -1;
     private bool _audioListDirty = true;
     private bool _chromeHidden = true;
     private bool _infoPinned;
     private bool _infoSuppressed;
+    private bool _clearedStalePauseMute;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _pauseMuteClearTimer;
     private int _appliedSubtitleLift = -1;
     private bool _keyboardActive;
     private bool _isFullScreen;
@@ -201,6 +171,12 @@ public sealed partial class PlayerPage : Page
     public PlayerPage()
     {
         InitializeComponent();
+
+        // Settings are loaded at launch; if this page opens before that read
+        // finishes, the default backend starts and the choice applies next time.
+        _engine = PlaybackEngines.Create(App.Settings.PlaybackEngine);
+        VideoHost.Children.Add(_engine.Surface);
+        HookEngineEvents();
 
         ConfigureLoadingBreath();
         ConfigureInfoAnimation();
@@ -269,11 +245,11 @@ public sealed partial class PlayerPage : Page
             }
         };
 
-        // VLC's buffering percentage is useless as a UI signal: it reports
-        // "Playing" with a frozen picture while it climbs from 0 to 100 over
-        // several seconds, and it keeps reporting low percentages after a seek
-        // that cost nothing. So the overlay follows the playhead instead: no
-        // movement means the user is actually watching a frozen frame.
+        // The engine's buffering percentage is useless as a UI signal: libVLC
+        // reports "Playing" with a frozen picture while it climbs from 0 to 100
+        // over several seconds, and keeps reporting low percentages after a
+        // seek that cost nothing. So the overlay follows the playhead instead:
+        // no movement means the user is actually watching a frozen frame.
         _stallTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _stallTimer.Tick += (_, _) => CheckStall();
 
@@ -289,7 +265,7 @@ public sealed partial class PlayerPage : Page
 
         Loaded += (_, _) =>
         {
-            VideoSurface.Focus(FocusState.Programmatic);
+            _engine.FocusSurface();
             SyncLoadingBreath();
 
             // Discovery is fast when the details page prefetched it, which can
@@ -450,102 +426,50 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    // ---------------------------------------------------------------- VLC setup
+    // -------------------------------------------------------------- engine events
 
-    private async void VideoSurface_Initialized(object? sender, EventArgs e)
+    private void HookEngineEvents()
     {
-        try
+        _engine.Ready += Engine_Ready;
+        _engine.Playing += (_, _) => Dispatch(HandlePlaying);
+        _engine.Paused += (_, _) => Dispatch(HandlePaused);
+        _engine.Stopped += (_, _) => Dispatch(HandleStopped);
+        _engine.EndReached += (_, _) => Dispatch(HandleEndReached);
+        _engine.Failed += (_, e) => Dispatch(() => HandleEngineFailed(e));
+        _engine.PositionChanged += (_, e) =>
+            Dispatch(() => HandleTimeChanged(e.PositionMs));
+        _engine.DurationChanged += (_, e) =>
+            Dispatch(() => HandleLengthChanged(e.DurationMs));
+        _engine.BufferingChanged += (_, e) =>
+            Dispatch(() => HandleBuffering(e.CachePercent));
+        _engine.TracksChanged += (_, e) => HandleEsChanged(e.Kind);
+
+        // A warm engine can finish before the page subscribes; don't miss that.
+        if (_engine.IsReady)
         {
-            await VideoEngine.WarmUpAsync();
-            if (_disposed)
-            {
-                return;
-            }
-
-            EnsureCoreInitialized();
-
-            var options = new List<string>(VideoSurface.SwapChainOptions)
-            {
-                "--no-video-title-show",
-                "--no-osd",
-                $"--aout={AudioOutputModules}",
-                "--verbose=2",
-            };
-
-            PlayerLog.Reset();
-            PlayerLog.Write($"libvlc options: {string.Join(' ', options)}");
-
-            _libVlc = new LibVLC([.. options]);
-            _libVlc.Log += (_, e) => PlayerLog.WriteVlc(e);
-            _mediaPlayer = new MediaPlayer(_libVlc)
-            {
-                Volume = 80,
-            };
-
-            HookMediaPlayer();
-            VideoSurface.MediaPlayer = _mediaPlayer;
-            _vlcReady = true;
-            VideoSurface.Focus(FocusState.Programmatic);
-            TryStartPlayback();
-        }
-        catch (Exception exception)
-        {
-            ShowPlaybackError($"The video engine couldn't start. {exception.Message}", canSwitch: false);
+            Engine_Ready(_engine, EventArgs.Empty);
         }
     }
 
-    private static void EnsureCoreInitialized()
+    private void Engine_Ready(object? sender, EventArgs e)
     {
-        lock (CoreLock)
-        {
-            if (_coreReady)
-            {
-                return;
-            }
-
-            Core.Initialize();
-            _coreReady = true;
-        }
+        _engine.FocusSurface();
+        TryStartPlayback();
     }
 
-    private void HookMediaPlayer()
+    private void HandleEngineFailed(PlaybackErrorEventArgs e)
     {
-        if (_mediaPlayer is null)
+        PlayerLog.Write($"engine error, state {_engine.State}, url {_currentSource?.Url}");
+
+        // A remembered source that fails before playing is replaced silently;
+        // a backend that cannot start at all has nothing to fall back to.
+        if (!e.IsFatal && _cachedAttempt is not null)
         {
+            _ = HandleCachedSourceFailureAsync();
             return;
         }
 
-        _mediaPlayer.Playing += MediaPlayer_Playing;
-        _mediaPlayer.Paused += MediaPlayer_Paused;
-        _mediaPlayer.Stopped += MediaPlayer_Stopped;
-        _mediaPlayer.EndReached += MediaPlayer_EndReached;
-        _mediaPlayer.EncounteredError += MediaPlayer_EncounteredError;
-        _mediaPlayer.TimeChanged += MediaPlayer_TimeChanged;
-        _mediaPlayer.LengthChanged += MediaPlayer_LengthChanged;
-        _mediaPlayer.Buffering += MediaPlayer_Buffering;
-        _mediaPlayer.ESAdded += MediaPlayer_ESAdded;
-        _mediaPlayer.ESDeleted += MediaPlayer_ESDeleted;
-        _mediaPlayer.ESSelected += MediaPlayer_ESSelected;
-    }
-
-    private void UnhookMediaPlayer()
-    {
-        if (_mediaPlayer is null)
-        {
-            return;
-        }
-
-        _mediaPlayer.Playing -= MediaPlayer_Playing;
-        _mediaPlayer.Paused -= MediaPlayer_Paused;
-        _mediaPlayer.Stopped -= MediaPlayer_Stopped;
-        _mediaPlayer.EndReached -= MediaPlayer_EndReached;
-        _mediaPlayer.EncounteredError -= MediaPlayer_EncounteredError;
-        _mediaPlayer.TimeChanged -= MediaPlayer_TimeChanged;
-        _mediaPlayer.LengthChanged -= MediaPlayer_LengthChanged;
-        _mediaPlayer.Buffering -= MediaPlayer_Buffering;
-        _mediaPlayer.ESAdded -= MediaPlayer_ESAdded;
-        _mediaPlayer.ESDeleted -= MediaPlayer_ESDeleted;
-        _mediaPlayer.ESSelected -= MediaPlayer_ESSelected;
+        ShowPlaybackError(e.Message, e.IsFatal ? false : ViewModel.HasSources);
     }
 
     private async Task LoadSubtitlesAsync(PlaybackRequest request)
@@ -799,16 +723,7 @@ public sealed partial class PlayerPage : Page
         // Stop the dead attempt now so a late "playing" event can't take over
         // the player while the fallback is being prepared.
         _switching = true;
-        try
-        {
-            _mediaPlayer?.Stop();
-        }
-        catch
-        {
-        }
-
-        _media?.Dispose();
-        _media = null;
+        _engine.Stop();
         _currentSource = null;
         ClearPlayingIntent();
         _playing = false;
@@ -930,9 +845,9 @@ public sealed partial class PlayerPage : Page
     {
         _resumeFromHistoryMs = 0;
 
-        if (_mediaPlayer is { IsSeekable: true } player && _currentSource is not null)
+        if (_engine.IsSeekable && _currentSource is not null)
         {
-            player.Time = 0;
+            _engine.PositionMs = 0;
             _positionMs = 0;
         }
 
@@ -1276,17 +1191,7 @@ public sealed partial class PlayerPage : Page
         _sourceDiscovery = null;
         _nextEpisodeCts?.Cancel();
         _switching = true;
-
-        try
-        {
-            _mediaPlayer?.Stop();
-        }
-        catch
-        {
-        }
-
-        _media?.Dispose();
-        _media = null;
+        _engine.Stop();
         _currentSource = null;
 
         var staleCache = _streamCache;
@@ -1347,7 +1252,7 @@ public sealed partial class PlayerPage : Page
 
     private void TryStartPlayback()
     {
-        if (_disposed || !_vlcReady || _pendingSource is null)
+        if (_disposed || !_engine.IsReady || _pendingSource is null)
         {
             return;
         }
@@ -1361,19 +1266,19 @@ public sealed partial class PlayerPage : Page
 
     /// <summary>
     /// Resolves where the source should actually play from, then hands it to
-    /// VLC. On-demand files go through a local read-ahead cache so a seek is a
-    /// disk read instead of another trip to the provider; anything the cache
-    /// can't help with (live TV, HLS, servers without range support) plays
-    /// straight from the addon URL.
+    /// the engine. On-demand files go through a local read-ahead cache so a seek
+    /// is a disk read instead of another trip to the provider; anything the
+    /// cache can't help with (live TV, HLS, servers without range support)
+    /// plays straight from the addon URL.
     /// </summary>
     private async Task PlaySourceAsync(PlaybackSource source)
     {
         // Keep the title artwork up for the whole start-up window: source
-        // discovery, cache setup, and VLC opening the stream. HandlePlaying
-        // takes it down once there are actual frames.
+        // discovery, cache setup, and the engine opening the stream.
+        // HandlePlaying takes it down once there are actual frames.
         ShowLoadingOverlay("Starting stream…");
 
-        if (_mediaPlayer is null || _libVlc is null)
+        if (!_engine.IsReady)
         {
             _pendingSource = source;
             return;
@@ -1441,7 +1346,7 @@ public sealed partial class PlayerPage : Page
 
     private void PlaySourceCore(PlaybackSource source, string url, StreamCacheSession? cache)
     {
-        if (_mediaPlayer is null || _libVlc is null)
+        if (!_engine.IsReady)
         {
             return;
         }
@@ -1452,8 +1357,10 @@ public sealed partial class PlayerPage : Page
             _errorVisible = false;
 
             var resume = !_ended &&
-                         _mediaPlayer.State is VLCState.Playing or VLCState.Paused or VLCState.Buffering
-                ? Math.Max(0, _mediaPlayer.Time)
+                         _engine.State is PlaybackState.Playing
+                             or PlaybackState.Paused
+                             or PlaybackState.Buffering
+                ? Math.Max(0, _engine.PositionMs)
                 : 0;
 
             if (resume > 0 && _lengthMs > 0)
@@ -1473,10 +1380,7 @@ public sealed partial class PlayerPage : Page
             _positionMs = resume;
             _lengthMs = 0;
             _switching = true;
-
-            _mediaPlayer.Stop();
-            _media?.Dispose();
-            _media = null;
+            _engine.Stop();
 
             var previousCache = _streamCache;
             _streamCache = cache;
@@ -1486,7 +1390,7 @@ public sealed partial class PlayerPage : Page
             }
 
             // The discarded source's tracks must not leak into the new menu.
-            _audioTracks = new List<TrackDescriptionTile>();
+            _audioTracks = [];
             _selectedAudioTrackId = -1;
             _audioListDirty = true;
             UpdateAudioIndicator();
@@ -1500,31 +1404,22 @@ public sealed partial class PlayerPage : Page
             UpdateSubtitleCurrent();
             UpdateSubtitleTimingUi();
 
-            var media = new Media(_libVlc, new Uri(url));
-            media.AddOption(":no-video-title-show");
-            media.AddOption(":no-osd");
-            media.AddOption($":network-caching={NetworkCachingFor(ViewModel.Request)}");
+            var media = new PlaybackMedia(
+                url,
+                StartPositionMs: resume,
+                IsLive: IsLive(ViewModel.Request),
+                IsHls: source.IsHls,
+                // The proxy already attaches the provider headers upstream,
+                // and sending them to 127.0.0.1 would only confuse the engine.
+                Headers: cache is null ? source.Headers : null);
 
             PlayerLog.Write(
                 $"play quality={source.QualityLabel} format={source.FormatLabel} " +
                 $"hls={source.IsHls} live={IsLive(ViewModel.Request)} " +
-                $"cache={NetworkCachingFor(ViewModel.Request)}ms resume={resume}ms " +
-                $"local={cache is not null} headers=[{string.Join(',', source.Headers?.Keys ?? [])}] " +
-                $"url={url}");
+                $"resume={resume}ms local={cache is not null} " +
+                $"headers=[{string.Join(',', source.Headers?.Keys ?? [])}] url={url}");
             _seekWatch.Restart();
 
-            if (resume > 0)
-            {
-                media.AddOption($":start-time={resume / 1000.0:0.###}");
-            }
-
-            // The proxy already attaches the provider headers upstream, and
-            // sending them to 127.0.0.1 would only confuse VLC's cache keys.
-            if (cache is null)
-            {
-                ApplyRequestHeaders(media, source.Headers);
-            }
-            _media = media;
             _currentSource = source;
             _subtitleApplied = false;
 
@@ -1543,9 +1438,9 @@ public sealed partial class PlayerPage : Page
             ViewModel.SelectedSource = source;
             CloseSources();
             ShowBuffer("Starting stream…");
-            if (!_mediaPlayer.Play(media))
+            if (!_engine.TryPlay(media))
             {
-                throw new InvalidOperationException("VLC couldn't start this source.");
+                throw new InvalidOperationException("The video engine couldn't start this source.");
             }
 
             ShowChrome();
@@ -1565,13 +1460,6 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    /// <summary>
-    /// On-demand playback gets a cache wide enough to seek inside; live TV keeps
-    /// a short one so it stays close to the live edge.
-    /// </summary>
-    private static int NetworkCachingFor(PlaybackRequest? request) =>
-        IsLive(request) ? LiveNetworkCachingMs : VodNetworkCachingMs;
-
     /// <summary>Live TV channel: "tv"/"channel" type with no episode attached.</summary>
     private static bool IsLive(PlaybackRequest? request) =>
         request is not null &&
@@ -1579,50 +1467,16 @@ public sealed partial class PlayerPage : Page
         (request.Type.Equals("tv", StringComparison.OrdinalIgnoreCase) ||
          request.Type.Equals("channel", StringComparison.OrdinalIgnoreCase));
 
-    private static void ApplyRequestHeaders(Media media, IReadOnlyDictionary<string, string>? headers)
-    {
-        if (headers is null)
-        {
-            return;
-        }
-
-        if (headers.TryGetValue("User-Agent", out var userAgent) && !string.IsNullOrWhiteSpace(userAgent))
-        {
-            media.AddOption($":http-user-agent={userAgent}");
-        }
-
-        if (headers.TryGetValue("Referer", out var referer) && !string.IsNullOrWhiteSpace(referer))
-        {
-            media.AddOption($":http-referrer={referer}");
-        }
-
-        if (headers.TryGetValue("Cookie", out var cookie) && !string.IsNullOrWhiteSpace(cookie))
-        {
-            media.AddOption($":http-cookie={cookie}");
-        }
-    }
-
-    // --------------------------------------------------------------- VLC events
-
     // ------------------------------------------------------------ audio tracks
 
-    private void MediaPlayer_ESAdded(object? sender, MediaPlayerESAddedEventArgs e) =>
-        HandleEsChanged(e.Type);
-
-    private void MediaPlayer_ESDeleted(object? sender, MediaPlayerESDeletedEventArgs e) =>
-        HandleEsChanged(e.Type);
-
-    private void MediaPlayer_ESSelected(object? sender, MediaPlayerESSelectedEventArgs e) =>
-        HandleEsChanged(e.Type);
-
-    private void HandleEsChanged(TrackType type)
+    private void HandleEsChanged(PlaybackTrackKind kind)
     {
         if (_switching)
         {
             return;
         }
 
-        if (type is TrackType.Audio)
+        if (kind is PlaybackTrackKind.Audio)
         {
             // Elementary-stream events arrive off the UI thread.
             _audioListDirty = true;
@@ -1641,7 +1495,7 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        if (type is TrackType.Text)
+        if (kind is PlaybackTrackKind.Subtitle)
         {
             Dispatch(() =>
             {
@@ -1663,16 +1517,12 @@ public sealed partial class PlayerPage : Page
     {
         try
         {
-            _audioTracks = _mediaPlayer?.AudioTrackDescription
-                               .Where(t => t is { Name.Length: > 0 })
-                               .Select(t => new TrackDescriptionTile(t.Id, NameAudioTrack(t.Id, t.Name)))
-                               .ToList()
-                           ?? new List<TrackDescriptionTile>();
-            _selectedAudioTrackId = _mediaPlayer?.AudioTrack ?? -1;
+            _audioTracks = _engine.AudioTracks;
+            _selectedAudioTrackId = _engine.CurrentAudioTrackId;
         }
         catch
         {
-            _audioTracks = new List<TrackDescriptionTile>();
+            _audioTracks = [];
             _selectedAudioTrackId = -1;
         }
 
@@ -1680,41 +1530,9 @@ public sealed partial class PlayerPage : Page
         UpdateAudioIndicator();
     }
 
-    /// <summary>
-    /// VLC names look like "Track 1 - [eng]" or "Track 1 - [au]" depending on
-    /// the container; language tags become their display name.
-    /// </summary>
-    private static string NameAudioTrack(int id, string raw)
-    {
-        if (id == -1)
-        {
-            return "Off";
-        }
-
-        var cleaned = raw;
-        var bracketStart = cleaned.IndexOf('[', StringComparison.Ordinal);
-        var bracketEnd = cleaned.IndexOf(']', StringComparison.Ordinal);
-        if (bracketStart >= 0 && bracketEnd > bracketStart)
-        {
-            var tag = cleaned[(bracketStart + 1)..bracketEnd].Trim();
-            cleaned = cleaned[..bracketStart].Trim().TrimEnd('-', ' ');
-            if (!string.IsNullOrWhiteSpace(tag) &&
-                !tag.StartsWith("au", StringComparison.OrdinalIgnoreCase) &&
-                tag.Length <= 8)
-            {
-                var language = SubtitleLanguages.DisplayName(tag);
-                cleaned = string.IsNullOrWhiteSpace(language)
-                    ? string.IsNullOrWhiteSpace(cleaned) ? tag : $"{cleaned} - {tag}"
-                    : string.IsNullOrWhiteSpace(cleaned) ? language : $"{cleaned} - {language}";
-            }
-        }
-
-        return string.IsNullOrWhiteSpace(cleaned) ? raw : cleaned;
-    }
-
     private void AudioMenu_Opened(object? sender, object e)
     {
-        if (_audioListDirty || _mediaPlayer?.State != VLCState.Playing || AudioMenu.Items.Count == 0)
+        if (_audioListDirty || _engine.State != PlaybackState.Playing || AudioMenu.Items.Count == 0)
         {
             RefreshAudioTracks();
         }
@@ -1726,7 +1544,7 @@ public sealed partial class PlayerPage : Page
     {
         AudioMenu.Items.Clear();
 
-        if (_mediaPlayer is null || _audioTracks.Count == 0)
+        if (!_engine.IsReady || _audioTracks.Count == 0)
         {
             AudioMenu.Items.Add(new MenuFlyoutItem { Text = "No audio tracks", IsEnabled = false });
             return;
@@ -1736,7 +1554,7 @@ public sealed partial class PlayerPage : Page
         {
             var item = new ToggleMenuFlyoutItem
             {
-                Text = track.Name,
+                Text = track.DisplayName,
                 IsChecked = track.Id == _selectedAudioTrackId,
                 Tag = track.Id,
             };
@@ -1747,12 +1565,12 @@ public sealed partial class PlayerPage : Page
 
     private void AudioTrack_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not MenuFlyoutItem { Tag: int id } || _mediaPlayer is null)
+        if (sender is not MenuFlyoutItem { Tag: long id } || !_engine.IsReady)
         {
             return;
         }
 
-        if (!_mediaPlayer.SetAudioTrack(id))
+        if (!_engine.SelectAudioTrack(id))
         {
             return;
         }
@@ -1760,7 +1578,7 @@ public sealed partial class PlayerPage : Page
         _selectedAudioTrackId = id;
         foreach (var item in AudioMenu.Items.OfType<ToggleMenuFlyoutItem>())
         {
-            item.IsChecked = item.Tag is int other && other == id;
+            item.IsChecked = item.Tag is long other && other == id;
         }
     }
 
@@ -1781,8 +1599,6 @@ public sealed partial class PlayerPage : Page
         AudioIcon.Style = _audioTracks.Count > 1
             ? Resources["PlayerIconActiveStyle"] as Style
             : null;
-
-    private sealed record TrackDescriptionTile(int Id, string Name);
 
     private void Dispatch(Action action)
     {
@@ -1807,45 +1623,10 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private void MediaPlayer_Playing(object? sender, EventArgs e) => Dispatch(HandlePlaying);
-
-    private void MediaPlayer_Paused(object? sender, EventArgs e) => Dispatch(HandlePaused);
-
-    private void MediaPlayer_Stopped(object? sender, EventArgs e) => Dispatch(HandleStopped);
-
-    private void MediaPlayer_EndReached(object? sender, EventArgs e) => Dispatch(HandleEndReached);
-
-    private void MediaPlayer_EncounteredError(object? sender, EventArgs e) =>
-        Dispatch(HandleEncounteredError);
-
-    private void HandleEncounteredError()
-    {
-        PlayerLog.Write($"vlc error, state {_mediaPlayer?.State}, url {_currentSource?.Url}");
-        // A remembered source that fails before playing is replaced silently.
-        if (_cachedAttempt is not null)
-        {
-            _ = HandleCachedSourceFailureAsync();
-            return;
-        }
-
-        ShowPlaybackError(
-            "The selected source stopped responding or uses a format VLC can't open.",
-            ViewModel.HasSources);
-    }
-
-    private void MediaPlayer_TimeChanged(object? sender, MediaPlayerTimeChangedEventArgs e) =>
-        Dispatch(() => HandleTimeChanged(e.Time));
-
-    private void MediaPlayer_LengthChanged(object? sender, MediaPlayerLengthChangedEventArgs e) =>
-        Dispatch(() => HandleLengthChanged(e.Length));
-
-    private void MediaPlayer_Buffering(object? sender, MediaPlayerBufferingEventArgs e) =>
-        Dispatch(() => HandleBuffering(e.Cache));
-
     private void HandlePlaying()
     {
         PlayerLog.Write(
-            $"playing at {_mediaPlayer?.Time ?? 0}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start");
+            $"playing at {_engine.PositionMs}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start");
         LogPlayPauseReached("playing");
         _playingIntent = null;
         RestorePausedOutput();
@@ -1853,8 +1634,10 @@ public sealed partial class PlayerPage : Page
         _playing = true;
         _ended = false;
         _errorVisible = false;
+
+        ClearStalePauseMute();
         ResetInfoCard();
-        ResetStallClock(_mediaPlayer?.Time ?? 0);
+        ResetStallClock(_engine.PositionMs);
         _stallTimer.Start();
 
         HideLoadingOverlay();
@@ -1862,7 +1645,7 @@ public sealed partial class PlayerPage : Page
         EndedText.Visibility = Visibility.Collapsed;
         HideBuffer();
         UpdatePlayPauseUi();
-        SeekSlider.IsEnabled = _mediaPlayer?.IsSeekable == true;
+        SeekSlider.IsEnabled = _engine.IsSeekable;
         ShowChrome();
         StartChromeTimer();
 
@@ -1872,9 +1655,9 @@ public sealed partial class PlayerPage : Page
             _resumeHintTimer?.Start();
         }
 
-        if (_resumeMs > 0 && _mediaPlayer is { IsSeekable: true })
+        if (_resumeMs > 0 && _engine.IsSeekable)
         {
-            _mediaPlayer.Time = _resumeMs;
+            _engine.PositionMs = _resumeMs;
         }
 
         _resumeMs = 0;
@@ -1892,7 +1675,7 @@ public sealed partial class PlayerPage : Page
             ApplyLocalSubtitle(_selectedSubtitlePath);
         }
 
-        // libvlc resets subtitle timing for every new media.
+        // The engine resets subtitle timing for every new media.
         ApplySubtitleDelay();
         UpdateSubtitleTimingUi();
 
@@ -2001,7 +1784,7 @@ public sealed partial class PlayerPage : Page
         _suppressSeek = true;
         SeekSlider.Value = Math.Clamp(time, 0, (long)SeekSlider.Maximum);
         _suppressSeek = false;
-        UpdateTimeText(time, _mediaPlayer?.Length ?? 0);
+        UpdateTimeText(time, _engine.DurationMs);
     }
 
     private void HandleLengthChanged(long length)
@@ -2009,8 +1792,8 @@ public sealed partial class PlayerPage : Page
         _lengthMs = Math.Max(0, length);
         UpdateUpNextVisibility();
         SeekSlider.Maximum = Math.Max(1, length);
-        SeekSlider.IsEnabled = length > 0 && _mediaPlayer?.IsSeekable == true;
-        UpdateTimeText(_mediaPlayer?.Time ?? 0, length);
+        SeekSlider.IsEnabled = length > 0 && _engine.IsSeekable;
+        UpdateTimeText(_engine.PositionMs, length);
     }
 
     /// <summary>Writes the position at most every ten seconds while playing.</summary>
@@ -2106,17 +1889,17 @@ public sealed partial class PlayerPage : Page
     /// <summary>
     /// Shows the buffering overlay only while the playhead is genuinely stuck,
     /// and takes it down the moment frames move again. This is the only honest
-    /// stall signal the player has: VLC reports "Playing" over a frozen picture
-    /// and reports partial buffering over playback that is perfectly fine.
+    /// stall signal the player has: engines report "Playing" over a frozen
+    /// picture, and partial buffering over playback that is fine.
     /// </summary>
     private void CheckStall()
     {
-        if (_disposed || !_playing || _ended || _errorVisible || _draggingSeek || _mediaPlayer is null)
+        if (_disposed || !_playing || _ended || _errorVisible || _draggingSeek || !_engine.IsReady)
         {
             return;
         }
 
-        var position = Math.Max(0, _mediaPlayer.Time);
+        var position = Math.Max(0, _engine.PositionMs);
         if (position != _advancePositionMs)
         {
             _advancePositionMs = position;
@@ -2124,7 +1907,7 @@ public sealed partial class PlayerPage : Page
         }
 
         // Draining the last frames is not a stall, whatever the clock says.
-        var length = _mediaPlayer.Length;
+        var length = _engine.DurationMs;
         var draining = length > 0 && position >= length - EndOfTitleGraceMs;
         var stalled = !draining && DateTime.UtcNow - _advanceUtc > StallThreshold;
 
@@ -2157,7 +1940,7 @@ public sealed partial class PlayerPage : Page
 
     private void InputLayer_Tapped(object sender, TappedRoutedEventArgs e)
     {
-        VideoSurface.Focus(FocusState.Pointer);
+        _engine.FocusSurface(FocusState.Pointer);
 
         if (_sourcesFlyoutOpen)
         {
@@ -2176,7 +1959,7 @@ public sealed partial class PlayerPage : Page
 
     private void TogglePlayPause()
     {
-        if (_mediaPlayer is null)
+        if (!_engine.IsReady)
         {
             return;
         }
@@ -2200,12 +1983,11 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        // libvlc's Pause() is a toggle, and its IsPlaying answer only catches
-        // up after the command has travelled to the input thread. Choosing
-        // between Pause() and Play() from that answer means a press can land on
-        // a stale state and flip the wrong way, and pausing while the player is
-        // still opening is swallowed. Pausing is an explicit request instead,
-        // and the transport shows what was asked for until libvlc confirms it.
+        // Pause is an explicit request, not a toggle: the engine's IsPlaying
+        // answer only catches up after the command has travelled to the input
+        // thread, so choosing between Pause and Play from that answer can flip
+        // the wrong way. The transport shows what was asked for until the
+        // engine confirms it.
         var requestPause = ShownPlaying;
 
         _playingIntentTimer?.Stop();
@@ -2216,8 +1998,11 @@ public sealed partial class PlayerPage : Page
             // The pause command goes first: it is the one the user is waiting to
             // see, and the mute only has to beat the queue draining, which takes
             // hundreds of milliseconds.
-            _mediaPlayer.SetPause(true);
-            SilencePausedOutput();
+            _engine.SetPaused(true);
+            if (_engine.CutsAudioOnPause)
+            {
+                SilencePausedOutput();
+            }
         }
         else
         {
@@ -2228,8 +2013,13 @@ public sealed partial class PlayerPage : Page
             // input layer read while paused, which it reports as
             // "prefetch: reading while paused (buggy demux?)" and which froze
             // the playhead for 8 s in the log.
-            var frozen = _mediaPlayer.Time;
-            _mediaPlayer.Play();
+            var frozen = _engine.PositionMs;
+            _engine.SetPaused(false);
+
+            // Lift the session mute with the resume command instead of waiting
+            // for the engine's Playing event; otherwise the picture moves while
+            // the audio remains silent for that round-trip.
+            RestorePausedOutput();
             ResyncAfterResume(frozen);
         }
 
@@ -2237,7 +2027,7 @@ public sealed partial class PlayerPage : Page
         _playingIntentTimer?.Start();
         PlayerLog.Write(
             $"{(requestPause ? "pause" : "play")} requested at {_positionMs}ms " +
-            $"(state {_mediaPlayer.State}, isPlaying {_mediaPlayer.IsPlaying}, muted {_pauseMuted})");
+            $"(state {_engine.State}, isPlaying {_engine.IsPlaying}, muted {_pauseMuted})");
 
         UpdatePlayPauseUi();
         ShowChrome();
@@ -2266,7 +2056,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void ResyncAfterResume(long frozen)
     {
-        if (_mediaPlayer is not { IsSeekable: true } player || _streamCache is null)
+        if (!_engine.IsSeekable || _streamCache is null)
         {
             return;
         }
@@ -2291,7 +2081,7 @@ public sealed partial class PlayerPage : Page
         }
 
         LogSeek(frozen, frozen, "resume");
-        player.Time = frozen;
+        _engine.PositionMs = frozen;
     }
 
     private void Back10_Click(object sender, RoutedEventArgs e) => SeekRelative(-10_000);
@@ -2300,27 +2090,28 @@ public sealed partial class PlayerPage : Page
 
     private void SeekRelative(long deltaMs)
     {
-        if (_mediaPlayer is null || _mediaPlayer.Length <= 0 || !_mediaPlayer.IsSeekable)
+        if (!_engine.IsReady || _engine.DurationMs <= 0 || !_engine.IsSeekable)
         {
             return;
         }
 
-        var target = Math.Clamp(_mediaPlayer.Time + deltaMs, 0, _mediaPlayer.Length);
-        LogSeek(_mediaPlayer.Time, target, "skip");
-        _mediaPlayer.Time = target;
+        var target = Math.Clamp(_engine.PositionMs + deltaMs, 0, _engine.DurationMs);
+        LogSeek(_engine.PositionMs, target, "skip");
+        _engine.PositionMs = target;
         ShowChrome();
         StartChromeTimer();
     }
 
     /// <summary>
     /// Records a seek and restarts the clock the buffering log reports against,
-    /// so the log says how long VLC actually stalled, not just that it did.
+    /// so the log says how long the engine actually stalled, not just that it
+    /// did.
     /// </summary>
     private void LogSeek(long from, long to, string origin)
     {
         PlayerLog.Write(
-            $"seek {origin} {from} -> {to} (len {_mediaPlayer?.Length ?? 0}, " +
-            $"seekable {_mediaPlayer?.IsSeekable}, state {_mediaPlayer?.State})");
+            $"seek {origin} {from} -> {to} (len {_engine.DurationMs}, " +
+            $"seekable {_engine.IsSeekable}, state {_engine.State})");
         _seekWatch.Restart();
         _bufferingLogged = false;
         ResetStallClock(to);
@@ -2333,11 +2124,11 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        UpdateTimeText((long)e.NewValue, _mediaPlayer?.Length ?? 0);
+        UpdateTimeText((long)e.NewValue, _engine.DurationMs);
 
-        if (!_draggingSeek && _mediaPlayer is { IsSeekable: true })
+        if (!_draggingSeek && _engine.IsSeekable)
         {
-            _mediaPlayer.Time = (long)e.NewValue;
+            _engine.PositionMs = (long)e.NewValue;
         }
     }
 
@@ -2360,10 +2151,10 @@ public sealed partial class PlayerPage : Page
         }
 
         _draggingSeek = false;
-        if (_mediaPlayer is { IsSeekable: true })
+        if (_engine.IsSeekable)
         {
-            LogSeek(_mediaPlayer.Time, (long)SeekSlider.Value, "scrub");
-            _mediaPlayer.Time = (long)SeekSlider.Value;
+            LogSeek(_engine.PositionMs, (long)SeekSlider.Value, "scrub");
+            _engine.PositionMs = (long)SeekSlider.Value;
         }
 
         StartChromeTimer();
@@ -2371,13 +2162,13 @@ public sealed partial class PlayerPage : Page
 
     private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
-        if (_suppressVolume || _mediaPlayer is null)
+        if (_suppressVolume || !_engine.IsReady)
         {
             return;
         }
 
         var volume = (int)Math.Round(e.NewValue);
-        _mediaPlayer.Volume = volume;
+        _engine.Volume = volume;
 
         if (volume > 0)
         {
@@ -2385,9 +2176,9 @@ public sealed partial class PlayerPage : Page
 
             // A drag while paused must not undo the mute that is cutting the
             // audio libvlc already queued; the resume lifts it.
-            if (_mediaPlayer.Mute && !_pauseMuted)
+            if (_engine.IsMuted && !_pauseMuted)
             {
-                _mediaPlayer.Mute = false;
+                _engine.SetMuted(false);
             }
         }
 
@@ -2398,7 +2189,7 @@ public sealed partial class PlayerPage : Page
 
     private void ToggleMute()
     {
-        if (_mediaPlayer is null)
+        if (!_engine.IsReady)
         {
             return;
         }
@@ -2408,22 +2199,22 @@ public sealed partial class PlayerPage : Page
         // can see.
         RestorePausedOutput();
 
-        if (_mediaPlayer.Mute || _mediaPlayer.Volume == 0)
+        if (_engine.IsMuted || _engine.Volume == 0)
         {
-            _mediaPlayer.Mute = false;
-            if (_mediaPlayer.Volume == 0)
+            _engine.SetMuted(false);
+            if (_engine.Volume == 0)
             {
-                _mediaPlayer.Volume = _lastVolume is > 0 and <= 100 ? _lastVolume : 80;
+                _engine.Volume = _lastVolume is > 0 and <= 100 ? _lastVolume : 80;
             }
 
             _suppressVolume = true;
-            VolumeSlider.Value = _mediaPlayer.Volume;
+            VolumeSlider.Value = _engine.Volume;
             _suppressVolume = false;
         }
         else
         {
-            _lastVolume = _mediaPlayer.Volume;
-            _mediaPlayer.Mute = true;
+            _lastVolume = _engine.Volume;
+            _engine.SetMuted(true);
         }
 
         UpdateVolumeUi();
@@ -2435,12 +2226,12 @@ public sealed partial class PlayerPage : Page
     {
         if (sender is not MenuFlyoutItem { Tag: string tag } ||
             !float.TryParse(tag, NumberStyles.Float, CultureInfo.InvariantCulture, out var rate) ||
-            _mediaPlayer is null)
+            !_engine.IsReady)
         {
             return;
         }
 
-        _mediaPlayer.SetRate(rate);
+        _engine.SetRate(rate);
         SpeedButton.Content = $"{rate:0.##}×";
     }
 
@@ -2686,7 +2477,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void RefreshSubtitleLift()
     {
-        if (_disposed || _mediaPlayer is null)
+        if (_disposed || !_engine.IsReady)
         {
             return;
         }
@@ -2698,7 +2489,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _appliedSubtitleLift = margin;
-        SubtitleLift.Set(_mediaPlayer, margin);
+        _engine.SetSubtitleLift(margin);
     }
 
     private int SubtitleLiftPixels()
@@ -2711,7 +2502,15 @@ public sealed partial class PlayerPage : Page
         }
 
         var covered = Math.Max(0, panelHeight - ControlBarTop()) * scale;
-        var intrusion = covered - LetterboxHeight(panelHeight, scale);
+
+        // VLC draws subtitles at the bottom of the picture, so a letterboxed
+        // film already keeps them clear of the bar. mpv measures its margin
+        // from the bottom of the surface, so it needs the full bar height.
+        var letterbox = _engine.SubtitlesArePictureRelative
+            ? LetterboxHeight(panelHeight, scale)
+            : 0;
+
+        var intrusion = covered - letterbox;
         return intrusion <= 0
             ? 0
             : (int)Math.Round(intrusion + (SubtitleLiftGapDip * scale));
@@ -2738,10 +2537,7 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private double LetterboxHeight(double panelHeightDip, double scale)
     {
-        uint videoWidth = 0;
-        uint videoHeight = 0;
-        if (_mediaPlayer is null ||
-            !_mediaPlayer.Size(0, ref videoWidth, ref videoHeight) ||
+        if (!_engine.TryGetVideoSize(out var videoWidth, out var videoHeight) ||
             videoWidth == 0 ||
             videoHeight == 0)
         {
@@ -3208,14 +3004,14 @@ public sealed partial class PlayerPage : Page
     }
 
     /// <summary>
-    /// libvlc measures the delay in microseconds and resets it for every new
-    /// media, so this is reapplied on each source start as well as each change.
+    /// The engine resets subtitle timing for every new media, so this is
+    /// reapplied on each source start as well as each change.
     /// </summary>
     private void ApplySubtitleDelay()
     {
         try
         {
-            _mediaPlayer?.SetSpuDelay(_subtitleDelayMs * 1000);
+            _engine.SetSubtitleDelay(_subtitleDelayMs);
         }
         catch
         {
@@ -3339,25 +3135,20 @@ public sealed partial class PlayerPage : Page
 
         try
         {
-            var descriptions = _mediaPlayer?.SpuDescription;
-            if (descriptions is not null)
+            foreach (var track in _engine.SubtitleTracks)
             {
-                foreach (var track in descriptions)
+                if (track.Id < 0 || string.IsNullOrWhiteSpace(track.DisplayName))
                 {
-                    if (track.Id < 0 || string.IsNullOrWhiteSpace(track.Name))
-                    {
-                        continue;
-                    }
-
-                    var (name, code) = DescribeSubtitleTrack(track.Name);
-                    tracks.Add(new SubtitleLanguageChoice(
-                        name,
-                        code,
-                        isOff: false,
-                        [],
-                        "Embedded in this video",
-                        track.Id));
+                    continue;
                 }
+
+                tracks.Add(new SubtitleLanguageChoice(
+                    track.DisplayName,
+                    track.LanguageCode ?? "",
+                    isOff: false,
+                    [],
+                    "Embedded in this video",
+                    track.Id));
             }
         }
         catch
@@ -3387,19 +3178,12 @@ public sealed partial class PlayerPage : Page
 
     private bool SelectEmbeddedSubtitle(SubtitleLanguageChoice track, bool closeFlyout)
     {
-        if (_mediaPlayer is null || track.EmbeddedTrackId < 0)
+        if (!_engine.IsReady || track.EmbeddedTrackId < 0)
         {
             return false;
         }
 
-        try
-        {
-            if (!_mediaPlayer.SetSpu(track.EmbeddedTrackId))
-            {
-                return false;
-            }
-        }
-        catch
+        if (!_engine.SelectSubtitleTrack(track.EmbeddedTrackId))
         {
             return false;
         }
@@ -3415,6 +3199,8 @@ public sealed partial class PlayerPage : Page
         ViewModel.SelectSubtitle(null);
         UpdateSubtitleIndicator();
         ApplySubtitleDelay();
+        _appliedSubtitleLift = -1;
+        RefreshSubtitleLift();
         UpdateSubtitleCurrent();
         UpdateSubtitleTimingUi();
 
@@ -3424,40 +3210,6 @@ public sealed partial class PlayerPage : Page
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// VLC names tracks like "Track 1 - [eng]"; the bracketed tag is the only
-    /// reliable language signal in the container.
-    /// </summary>
-    private static (string Name, string Code) DescribeSubtitleTrack(string raw)
-    {
-        var cleaned = raw.Trim();
-        var bracketStart = cleaned.IndexOf('[', StringComparison.Ordinal);
-        var bracketEnd = cleaned.IndexOf(']', StringComparison.Ordinal);
-
-        if (bracketStart >= 0 && bracketEnd > bracketStart)
-        {
-            var tag = cleaned[(bracketStart + 1)..bracketEnd].Trim();
-            cleaned = cleaned[..bracketStart].Trim().TrimEnd('-', ' ');
-
-            if (!string.IsNullOrWhiteSpace(tag) &&
-                tag.Length <= 8 &&
-                !tag.Equals("und", StringComparison.OrdinalIgnoreCase) &&
-                !tag.Equals("unknown", StringComparison.OrdinalIgnoreCase))
-            {
-                var language = SubtitleLanguages.DisplayName(tag);
-                if (!string.IsNullOrWhiteSpace(language))
-                {
-                    var name = string.IsNullOrWhiteSpace(cleaned)
-                        ? language
-                        : $"{language} · {cleaned}";
-                    return (name, tag);
-                }
-            }
-        }
-
-        return (string.IsNullOrWhiteSpace(cleaned) ? raw : cleaned, "");
     }
 
     private void ShowSubtitleVersions(SubtitleLanguageChoice language)
@@ -3545,7 +3297,7 @@ public sealed partial class PlayerPage : Page
             _selectedEmbeddedTrackId = -1;
             _selectedEmbeddedName = null;
             _selectedEmbeddedCode = null;
-            _mediaPlayer?.SetSpu(-1);
+            _engine.SelectSubtitleTrack(-1);
             _subtitleApplied = true;
             ViewModel.SubtitleStatus = "";
             UpdateSubtitleCurrent();
@@ -3697,29 +3449,25 @@ public sealed partial class PlayerPage : Page
 
     private bool ApplyLocalSubtitle(string path)
     {
-        if (_mediaPlayer is null)
+        if (!_engine.IsReady)
         {
+            // The Playing handler attaches the downloaded track once a source starts.
             return true;
         }
 
-        try
+        if (!_engine.AddSubtitleFile(path))
         {
-            if (!_mediaPlayer.AddSlave(MediaSlaveType.Subtitle, new Uri(path).AbsoluteUri, true))
-            {
-                ViewModel.SubtitleStatus = "Couldn't load that subtitle.";
-                return false;
-            }
-
-            _subtitleApplied = true;
-            // Adding a slave can reset the input's timing; put the saved offset back.
-            ApplySubtitleDelay();
-            return true;
-        }
-        catch (Exception exception)
-        {
-            ViewModel.SubtitleStatus = $"Couldn't load that subtitle. {exception.Message}";
+            ViewModel.SubtitleStatus = "Couldn't load that subtitle.";
             return false;
         }
+
+        _subtitleApplied = true;
+        // Adding a subtitle track can reset the input's timing and margin;
+        // put the saved offset and lift back.
+        ApplySubtitleDelay();
+        _appliedSubtitleLift = -1;
+        RefreshSubtitleLift();
+        return true;
     }
 
     private static HttpClient CreateSubtitleHttpClient()
@@ -3884,6 +3632,44 @@ public sealed partial class PlayerPage : Page
     }
 
     /// <summary>
+    /// Windows remembers a per-app session mute across launches. The first
+    /// Playing event can arrive before mpv/libvlc creates the WASAPI session,
+    /// so retry briefly instead of checking once and giving up.
+    /// </summary>
+    private void ClearStalePauseMute()
+    {
+        if (_clearedStalePauseMute)
+        {
+            return;
+        }
+
+        _clearedStalePauseMute = true;
+        var attempts = 0;
+
+        _pauseMuteClearTimer?.Stop();
+        _pauseMuteClearTimer = DispatcherQueue.CreateTimer();
+        _pauseMuteClearTimer.Interval = TimeSpan.FromMilliseconds(300);
+        _pauseMuteClearTimer.IsRepeating = true;
+        _pauseMuteClearTimer.Tick += (_, _) =>
+        {
+            attempts++;
+
+            if (AudioSessionMute.SetMute(false))
+            {
+                _pauseMuteClearTimer?.Stop();
+                PlayerLog.Write("audio session checked and unmuted");
+                return;
+            }
+
+            if (attempts >= 8)
+            {
+                _pauseMuteClearTimer?.Stop();
+            }
+        };
+        _pauseMuteClearTimer.Start();
+    }
+
+    /// <summary>
     /// Mutes the audio session when the user pauses.
     ///
     /// A pause stops the picture at once, but not the sound: libvlc hands the
@@ -3911,17 +3697,20 @@ public sealed partial class PlayerPage : Page
                 return;
 
             case AudioSessionMute.Result.AlreadyMuted:
-                // Muted by somebody else. With the output already silent there is
-                // nothing to cut, and lifting their mute is not this page's call.
-                PlayerLog.Write("pause not muted: the session was already muted");
+                // The session is already muted, most likely by an earlier pause
+                // that never got to lift it. Take ownership so resume restores
+                // the sound; an in-app mute is still controlled separately.
+                _pauseMuted = true;
+                _pauseMuteViaVlc = false;
+                PlayerLog.Write("pause found the session already muted; will lift it on resume");
                 return;
         }
 
         // No session yet, or it refused. libvlc's mute is late, but it is what is
         // left, and it is still better than the whole queue playing out.
-        if (_mediaPlayer is { Mute: false })
+        if (!_engine.IsMuted)
         {
-            _mediaPlayer.Mute = true;
+            _engine.SetMuted(true);
             _pauseMuted = true;
             _pauseMuteViaVlc = true;
             PlayerLog.Write(
@@ -3941,9 +3730,9 @@ public sealed partial class PlayerPage : Page
         if (_pauseMuteViaVlc)
         {
             _pauseMuteViaVlc = false;
-            if (_mediaPlayer is { Mute: true })
+            if (_engine.IsMuted)
             {
-                _mediaPlayer.Mute = false;
+                _engine.SetMuted(false);
             }
 
             return;
@@ -3976,14 +3765,14 @@ public sealed partial class PlayerPage : Page
 
     private void UpdateVolumeUi()
     {
-        if (_mediaPlayer is null)
+        if (!_engine.IsReady)
         {
             return;
         }
 
         // The pause mute is the page's, not a mute the user asked for, so it
         // leaves the volume icon alone.
-        var muted = (!_pauseMuted && _mediaPlayer.Mute) || _mediaPlayer.Volume == 0;
+        var muted = (!_pauseMuted && _engine.IsMuted) || _engine.Volume == 0;
         VolumeIcon.Glyph = muted ? "\uE74F" : "\uE767";
         AutomationProperties.SetName(VolumeButton, muted ? "Unmute" : "Mute");
         ToolTipService.SetToolTip(VolumeButton, muted ? "Unmute (M)" : "Mute (M)");
@@ -4050,6 +3839,7 @@ public sealed partial class PlayerPage : Page
         _disposed = true;
         _chromeTimer.Stop();
         _infoTimer.Stop();
+        _pauseMuteClearTimer?.Stop();
         _resumeHintTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();
@@ -4089,37 +3879,18 @@ public sealed partial class PlayerPage : Page
             _ = Task.Run(() => DeleteDirectory(subtitleDirectory));
         }
 
-        UnhookMediaPlayer();
-
-        var mediaPlayer = _mediaPlayer;
-        var media = _media;
-        var libVlc = _libVlc;
-        _mediaPlayer = null;
-        _media = null;
-        _libVlc = null;
-
-        try
-        {
-            VideoSurface.MediaPlayer = null;
-        }
-        catch
-        {
-            // The swap chain may already be gone during shutdown.
-        }
-
-        if (mediaPlayer is null && media is null && libVlc is null)
-        {
-            return;
-        }
-
         if (stopOnWorker)
         {
-            _videoStopped = StopVideoEngineAsync(mediaPlayer, media, libVlc);
+            _videoStopped = _engine.ShutdownAsync();
         }
         else
         {
-            StopVideoEngine(mediaPlayer, media, libVlc);
+            _engine.Dispose();
         }
+
+        // ShutdownAsync detaches the player synchronously before its worker
+        // stop, so the surface is safe to remove even while the stop runs.
+        VideoHost.Children.Remove(_engine.Surface);
     }
 
     /// <summary>
@@ -4147,75 +3918,6 @@ public sealed partial class PlayerPage : Page
         {
             PlayerLog.Write("video engine did not stop within 2 s; leaving anyway");
         }
-    }
-
-    private static Task StopVideoEngineAsync(MediaPlayer? mediaPlayer, Media? media, LibVLC? libVlc)
-    {
-        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        _ = Task.Run(() =>
-        {
-            var elapsed = Stopwatch.StartNew();
-
-            try
-            {
-                mediaPlayer?.Stop();
-            }
-            catch
-            {
-            }
-
-            var stopMs = elapsed.ElapsedMilliseconds;
-            stopped.TrySetResult();
-
-            try
-            {
-                mediaPlayer?.Dispose();
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                media?.Dispose();
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                libVlc?.Dispose();
-            }
-            catch
-            {
-            }
-
-            PlayerLog.Write($"video engine released in {elapsed.ElapsedMilliseconds} ms (stop {stopMs} ms)");
-        });
-
-        return stopped.Task;
-    }
-
-    private static void StopVideoEngine(MediaPlayer? mediaPlayer, Media? media, LibVLC? libVlc)
-    {
-        var elapsed = Stopwatch.StartNew();
-
-        try
-        {
-            mediaPlayer?.Stop();
-        }
-        catch
-        {
-        }
-
-        var stopMs = elapsed.ElapsedMilliseconds;
-        mediaPlayer?.Dispose();
-        media?.Dispose();
-        libVlc?.Dispose();
-
-        PlayerLog.Write($"video engine released in {elapsed.ElapsedMilliseconds} ms (stop {stopMs} ms, UI thread)");
     }
 
     private static void DeleteDirectory(string path)

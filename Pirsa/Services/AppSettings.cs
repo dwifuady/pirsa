@@ -22,6 +22,13 @@ public sealed class AppSettings
     public bool AutoAdvance { get; set; } = true;
 
     /// <summary>
+    /// Playback backend id, or empty for Automatic (mpv when available, then
+    /// libVLC). Resolved through <see cref="Pirsa.Playback.PlaybackEngines"/> so
+    /// an unavailable choice falls back cleanly.
+    /// </summary>
+    public string PlaybackEngine { get; set; } = "";
+
+    /// <summary>
     /// Canonical language code for subtitles that should turn on automatically,
     /// or empty when nothing is preferred. Set from Settings or by picking a
     /// language in the player.
@@ -56,6 +63,7 @@ public sealed class AppSettings
                         Autoplay = record.Autoplay;
                         PreferredQuality = record.PreferredQuality ?? "";
                         AutoAdvance = record.AutoAdvance;
+                        PlaybackEngine = record.PlaybackEngine ?? "";
                         PreferredSubtitleLanguage = record.PreferredSubtitleLanguage ?? "";
                     }
                 }
@@ -90,6 +98,7 @@ public sealed class AppSettings
                 Autoplay = Autoplay,
                 PreferredQuality = PreferredQuality ?? "",
                 AutoAdvance = AutoAdvance,
+                PlaybackEngine = PlaybackEngine ?? "",
                 PreferredSubtitleLanguage = PreferredSubtitleLanguage ?? "",
             };
 
@@ -126,6 +135,8 @@ public sealed class AppSettings
         public string PreferredQuality { get; set; } = "";
 
         public bool AutoAdvance { get; set; } = true;
+
+        public string PlaybackEngine { get; set; } = "";
 
         public string PreferredSubtitleLanguage { get; set; } = "";
     }
