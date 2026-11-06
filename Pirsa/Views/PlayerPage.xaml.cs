@@ -63,6 +63,22 @@ public sealed partial class PlayerPage : Page
     private const int LiveNetworkCachingMs = 2500;
 
     /// <summary>
+    /// libvlc's audio output candidates, most modern first. This is the same
+    /// order VLC picks on its own (mmdevice scores 150, directsound 100,
+    /// waveout 50), so naming them changes nothing except that the winner is
+    /// now deterministic and readable in the player log. It is worth knowing:
+    /// the module that wins owns the buffer of audio the device still has to
+    /// play, and that buffer is the sound that outlives a pause.
+    /// </summary>
+    private const string AudioOutputModules = "mmdevice,directsound";
+
+    /// <summary>
+    /// How long the transport waits for libvlc to confirm a play/pause press
+    /// before it stops showing the requested state on faith.
+    /// </summary>
+    private static readonly TimeSpan PlayPauseConfirmTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>
     /// How long the playhead may stand still before the buffering overlay shows.
     /// VLC only emits time updates a few times a second, and a healthy seek
     /// pauses decoding for a fraction of that, so this clears normal seeks.
@@ -84,6 +100,7 @@ public sealed partial class PlayerPage : Page
     private readonly DispatcherTimer _stallTimer;
     private readonly DispatcherTimer _infoTimer;
     private readonly Stopwatch _seekWatch = new();
+    private readonly Stopwatch _playPauseWatch = new();
     private bool _bufferingLogged;
     private bool _stallOverlayVisible;
     private long _advancePositionMs = -1;
@@ -112,7 +129,27 @@ public sealed partial class PlayerPage : Page
     private Task? _videoStopped;
     private bool _navigatingBack;
     private bool _vlcReady;
+
+    /// <summary>libvlc's own answer, which trails every state command.</summary>
     private bool _playing;
+
+    /// <summary>
+    /// The play state the user last asked for, shown until libvlc reports one
+    /// or the confirmation timeout gives up. Null means "follow libvlc".
+    /// </summary>
+    private bool? _playingIntent;
+
+    private DispatcherTimer? _playingIntentTimer;
+
+    /// <summary>
+    /// Set while the session is muted on the app's behalf to cut the audio that
+    /// libvlc has already handed the device when the user pauses. Never set
+    /// when the user muted the player themselves.
+    /// </summary>
+    private bool _pauseMuted;
+
+    /// <summary>True when that mute had to go through libvlc instead of the session.</summary>
+    private bool _pauseMuteViaVlc;
     private bool _ended;
     private bool _switching;
     private bool _errorVisible;
@@ -195,6 +232,30 @@ public sealed partial class PlayerPage : Page
         {
             _subtitleHudTimer?.Stop();
             SubtitleHudPanel.Visibility = Visibility.Collapsed;
+        };
+
+        // A press libvlc never answers would otherwise leave the button showing
+        // the wrong glyph forever. Drop the request back to libvlc's state, and
+        // leave the fact that it went unanswered in the log.
+        _playingIntentTimer = new DispatcherTimer { Interval = PlayPauseConfirmTimeout };
+        _playingIntentTimer.Tick += (_, _) =>
+        {
+            _playingIntentTimer?.Stop();
+            if (_playingIntent is not bool intent)
+            {
+                return;
+            }
+
+            PlayerLog.Write(
+                $"no {(intent ? "playing" : "paused")} event " +
+                $"{PlayPauseConfirmTimeout.TotalSeconds:0}s after the request, back to VLC state");
+
+            // A pause that never landed must not leave the session muted, and a
+            // play that never landed must not keep the mute lift waiting.
+            RestorePausedOutput();
+            _playingIntent = null;
+            _playPauseWatch.Reset();
+            UpdatePlayPauseUi();
         };
 
         // A remembered source that never reaches "playing" is treated as dead.
@@ -407,6 +468,7 @@ public sealed partial class PlayerPage : Page
             {
                 "--no-video-title-show",
                 "--no-osd",
+                $"--aout={AudioOutputModules}",
                 "--verbose=2",
             };
 
@@ -748,6 +810,7 @@ public sealed partial class PlayerPage : Page
         _media?.Dispose();
         _media = null;
         _currentSource = null;
+        ClearPlayingIntent();
         _playing = false;
 
         var request = ViewModel.Request;
@@ -1233,6 +1296,7 @@ public sealed partial class PlayerPage : Page
             _ = staleCache.DisposeAsync().AsTask();
         }
 
+        ClearPlayingIntent();
         _playing = false;
         _ended = false;
         _errorVisible = false;
@@ -1782,6 +1846,9 @@ public sealed partial class PlayerPage : Page
     {
         PlayerLog.Write(
             $"playing at {_mediaPlayer?.Time ?? 0}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start");
+        LogPlayPauseReached("playing");
+        _playingIntent = null;
+        RestorePausedOutput();
         _switching = false;
         _playing = true;
         _ended = false;
@@ -1840,6 +1907,8 @@ public sealed partial class PlayerPage : Page
 
     private void HandlePaused()
     {
+        LogPlayPauseReached("paused");
+        _playingIntent = null;
         _playing = false;
         _stallTimer.Stop();
         HideBuffer();
@@ -1869,6 +1938,7 @@ public sealed partial class PlayerPage : Page
         }
 
         PersistProgress(_positionMs, _lengthMs);
+        ClearPlayingIntent();
         _playing = false;
         _stallTimer.Stop();
         HideBuffer();
@@ -1893,6 +1963,7 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
+        ClearPlayingIntent();
         _playing = false;
         _ended = true;
         _stallTimer.Stop();
@@ -2129,17 +2200,98 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        if (_mediaPlayer.IsPlaying)
+        // libvlc's Pause() is a toggle, and its IsPlaying answer only catches
+        // up after the command has travelled to the input thread. Choosing
+        // between Pause() and Play() from that answer means a press can land on
+        // a stale state and flip the wrong way, and pausing while the player is
+        // still opening is swallowed. Pausing is an explicit request instead,
+        // and the transport shows what was asked for until libvlc confirms it.
+        var requestPause = ShownPlaying;
+
+        _playingIntentTimer?.Stop();
+        _playPauseWatch.Restart();
+
+        if (requestPause)
         {
-            _mediaPlayer.Pause();
+            // The pause command goes first: it is the one the user is waiting to
+            // see, and the mute only has to beat the queue draining, which takes
+            // hundreds of milliseconds.
+            _mediaPlayer.SetPause(true);
+            SilencePausedOutput();
         }
         else
         {
+            // Resume first, then flush: libvlc turns the audio it had queued when
+            // the pause started into a debt and repays it as 0.2-0.8 s of silence
+            // on resume, and the only public flush in libvlc 3 is a seek. The
+            // seek has to come after Play — seeking while paused makes VLC's
+            // input layer read while paused, which it reports as
+            // "prefetch: reading while paused (buggy demux?)" and which froze
+            // the playhead for 8 s in the log.
+            var frozen = _mediaPlayer.Time;
             _mediaPlayer.Play();
+            ResyncAfterResume(frozen);
         }
 
+        _playingIntent = !requestPause;
+        _playingIntentTimer?.Start();
+        PlayerLog.Write(
+            $"{(requestPause ? "pause" : "play")} requested at {_positionMs}ms " +
+            $"(state {_mediaPlayer.State}, isPlaying {_mediaPlayer.IsPlaying}, muted {_pauseMuted})");
+
+        UpdatePlayPauseUi();
         ShowChrome();
         StartChromeTimer();
+    }
+
+    /// <summary>
+    /// Flushes the audio right after a resume so the sound comes back with the
+    /// picture instead of a second later.
+    ///
+    /// libvlc keeps the audio it had queued when the pause started as a debt: on
+    /// resume the next block is scheduled that far in the future and
+    /// <c>aout_DecSynchronize()</c> fills the hole with silence. The log measures
+    /// the hole at 0.2-0.8 s, and it matches the queued depth exactly
+    /// (`playback way too early (-NNNNNN): playing silence`). The only flush
+    /// libvlc 3 exposes is a seek, and it has to run while playing: a seek issued
+    /// while paused leaves the demuxer reading during the pause, which VLC calls
+    /// "reading while paused (buggy demux?)" and which stalled the playhead for
+    /// 8 s.
+    ///
+    /// Worth it only where the bytes are already on disk: the local read-ahead
+    /// cache answers a seek in hundreds of milliseconds, while a direct HTTP or
+    /// HLS source would fetch and stall for longer than the silence it saves. The
+    /// seek is to the position captured before Play, so the picture picks up from
+    /// the frozen frame.
+    /// </summary>
+    private void ResyncAfterResume(long frozen)
+    {
+        if (_mediaPlayer is not { IsSeekable: true } player || _streamCache is null)
+        {
+            return;
+        }
+
+        if (frozen <= 0)
+        {
+            return;
+        }
+
+        // A pending first-play resume seek flushes the output on its own, and two
+        // seeks racing for the same playhead is how a stutter starts.
+        if (_resumeMs > 0)
+        {
+            return;
+        }
+
+        // The last seconds of a title never advance the playhead by design; a
+        // seek there lands in the drain rather than at a clean position.
+        if (_lengthMs > 0 && frozen >= _lengthMs - EndOfTitleGraceMs)
+        {
+            return;
+        }
+
+        LogSeek(frozen, frozen, "resume");
+        player.Time = frozen;
     }
 
     private void Back10_Click(object sender, RoutedEventArgs e) => SeekRelative(-10_000);
@@ -2230,7 +2382,10 @@ public sealed partial class PlayerPage : Page
         if (volume > 0)
         {
             _lastVolume = volume;
-            if (_mediaPlayer.Mute)
+
+            // A drag while paused must not undo the mute that is cutting the
+            // audio libvlc already queued; the resume lifts it.
+            if (_mediaPlayer.Mute && !_pauseMuted)
             {
                 _mediaPlayer.Mute = false;
             }
@@ -2247,6 +2402,11 @@ public sealed partial class PlayerPage : Page
         {
             return;
         }
+
+        // The user owns the mute state from here on. Anything this page muted
+        // for a pause is lifted first, so the toggle acts on the state the user
+        // can see.
+        RestorePausedOutput();
 
         if (_mediaPlayer.Mute || _mediaPlayer.Volume == 0)
         {
@@ -3688,18 +3848,128 @@ public sealed partial class PlayerPage : Page
         BufferPanel.Visibility = Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// What the transport should show: the state the user asked for while
+    /// libvlc is still catching up, otherwise libvlc's own answer.
+    /// </summary>
+    private bool ShownPlaying => _playingIntent ?? _playing;
+
+    /// <summary>
+    /// Closes the press-to-event measurement. Two numbers answer "why did that
+    /// pause feel late": whether libvlc ever reported the change, and how long
+    /// it took; a press that never lands shows up as the timeout line instead.
+    /// </summary>
+    private void LogPlayPauseReached(string what)
+    {
+        _playingIntentTimer?.Stop();
+        if (!_playPauseWatch.IsRunning)
+        {
+            return;
+        }
+
+        PlayerLog.Write($"{what} {_playPauseWatch.ElapsedMilliseconds}ms after the play/pause request");
+        _playPauseWatch.Reset();
+    }
+
+    /// <summary>
+    /// Drops a pending play/pause request so the transport follows libvlc again
+    /// after a stop, an error or a source change.
+    /// </summary>
+    private void ClearPlayingIntent()
+    {
+        _playingIntentTimer?.Stop();
+        _playingIntent = null;
+        _playPauseWatch.Reset();
+        RestorePausedOutput();
+    }
+
+    /// <summary>
+    /// Mutes the audio session when the user pauses.
+    ///
+    /// A pause stops the picture at once, but not the sound: libvlc hands the
+    /// device a buffer of decoded audio ahead of the clock (the log measures
+    /// 0.2-0.8 s from the pause to the WASAPI session going inactive, and the
+    /// device ring here is 96000 frames, two seconds at 48 kHz). libvlc's own
+    /// mute cannot cut that, because the thread that applies it is the thread
+    /// playing the audio: it lands 315-618 ms late. So the mute goes at the
+    /// session directly, where the mixer applies it to what is already queued.
+    /// </summary>
+    private void SilencePausedOutput()
+    {
+        if (_pauseMuted)
+        {
+            return;
+        }
+
+        var watch = Stopwatch.StartNew();
+        switch (AudioSessionMute.MuteUnlessAlreadyMuted())
+        {
+            case AudioSessionMute.Result.Applied:
+                _pauseMuted = true;
+                PlayerLog.Write(
+                    $"session muted directly in {watch.Elapsed.TotalMilliseconds:0.0}ms to cut the audio libvlc already queued");
+                return;
+
+            case AudioSessionMute.Result.AlreadyMuted:
+                // Muted by somebody else. With the output already silent there is
+                // nothing to cut, and lifting their mute is not this page's call.
+                PlayerLog.Write("pause not muted: the session was already muted");
+                return;
+        }
+
+        // No session yet, or it refused. libvlc's mute is late, but it is what is
+        // left, and it is still better than the whole queue playing out.
+        if (_mediaPlayer is { Mute: false })
+        {
+            _mediaPlayer.Mute = true;
+            _pauseMuted = true;
+            _pauseMuteViaVlc = true;
+            PlayerLog.Write(
+                $"session mute unavailable after {watch.Elapsed.TotalMilliseconds:0.0}ms, muted libvlc instead (which applies late)");
+        }
+    }
+
+    /// <summary>Lifts a mute this page put on, and only that one.</summary>
+    private void RestorePausedOutput()
+    {
+        if (!_pauseMuted)
+        {
+            return;
+        }
+
+        _pauseMuted = false;
+        if (_pauseMuteViaVlc)
+        {
+            _pauseMuteViaVlc = false;
+            if (_mediaPlayer is { Mute: true })
+            {
+                _mediaPlayer.Mute = false;
+            }
+
+            return;
+        }
+
+        if (!AudioSessionMute.SetMute(false))
+        {
+            // Usually the session is already gone (teardown, device switch).
+            // Worth a line: a mute left behind here is silence nobody expects.
+            PlayerLog.Write("could not lift the pause mute: no matching audio session");
+        }
+    }
+
     private void UpdatePlayPauseUi()
     {
-        var glyph = _playing ? "\uE769" : _ended ? "\uE72C" : "\uE768";
+        var playing = ShownPlaying;
+        var glyph = playing ? "\uE769" : _ended ? "\uE72C" : "\uE768";
         PlayPauseIcon.Glyph = glyph;
         CenterPlayIcon.Glyph = glyph;
         CenterPlayIcon.FontSize = _ended ? 26 : 34;
 
-        var name = _playing ? "Pause" : _ended ? "Replay" : "Play";
+        var name = playing ? "Pause" : _ended ? "Replay" : "Play";
         AutomationProperties.SetName(PlayPauseButton, name);
         AutomationProperties.SetName(CenterPlayButton, name);
 
-        CenterPlayButton.Visibility = _playing || _errorVisible || _sourcesFlyoutOpen || _disposed
+        CenterPlayButton.Visibility = playing || _errorVisible || _sourcesFlyoutOpen || _disposed
             ? Visibility.Collapsed
             : Visibility.Visible;
     }
@@ -3711,7 +3981,9 @@ public sealed partial class PlayerPage : Page
             return;
         }
 
-        var muted = _mediaPlayer.Mute || _mediaPlayer.Volume == 0;
+        // The pause mute is the page's, not a mute the user asked for, so it
+        // leaves the volume icon alone.
+        var muted = (!_pauseMuted && _mediaPlayer.Mute) || _mediaPlayer.Volume == 0;
         VolumeIcon.Glyph = muted ? "\uE74F" : "\uE767";
         AutomationProperties.SetName(VolumeButton, muted ? "Unmute" : "Mute");
         ToolTipService.SetToolTip(VolumeButton, muted ? "Unmute (M)" : "Mute (M)");
@@ -3740,6 +4012,7 @@ public sealed partial class PlayerPage : Page
         _infoTimer.Stop();
         HideInfoCard();
         _errorVisible = true;
+        ClearPlayingIntent();
         _playing = false;
         _switching = false;
         _stallTimer.Stop();
@@ -3780,6 +4053,7 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();
+        ClearPlayingIntent();
         _stallTimer.Stop();
         _streamCacheCts.Cancel();
         var cacheSession = _streamCache;

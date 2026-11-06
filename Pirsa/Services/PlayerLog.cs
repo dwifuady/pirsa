@@ -20,6 +20,11 @@ public static class PlayerLog
     {
         "access", "http", "hls", "adaptive", "mp4", "mkv", "cache",
         "input", "stream", "prefetch", "tls", "xml", "dash",
+
+        // Which audio output was created, and with what format. "using audio
+        // output module" lives here, and the module that wins owns the buffer
+        // of already-played audio that a pause cannot take back.
+        "audio output", "mmdevice", "directsound", "waveout", "wasapi",
     };
 
     private static readonly object Gate = new();
