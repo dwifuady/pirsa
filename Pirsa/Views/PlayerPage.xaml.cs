@@ -108,6 +108,9 @@ public sealed partial class PlayerPage : Page
     private DispatcherTimer? _subtitleHudTimer;
 
     private bool _disposed;
+    private Task? _leaveTask;
+    private Task? _videoStopped;
+    private bool _navigatingBack;
     private bool _vlcReady;
     private bool _playing;
     private bool _ended;
@@ -2283,21 +2286,38 @@ public sealed partial class PlayerPage : Page
 
     private void FullScreen_Click(object sender, RoutedEventArgs e) => ToggleFullscreen();
 
-    private void Back_Click(object sender, RoutedEventArgs e) => GoBack();
+    private void Back_Click(object sender, RoutedEventArgs e) => _ = LeavePlayerAsync();
 
     /// <summary>
     /// The player can be reached without the details page (resume, up next,
     /// deep link), so a missing or broken addon still has a way forward.
     /// </summary>
-    private void ManageAddons_Click(object sender, RoutedEventArgs e) =>
+    private async void ManageAddons_Click(object sender, RoutedEventArgs e)
+    {
+        await LeaveAsync();
         Frame.Navigate(typeof(SettingsPage));
+    }
+
+    private async Task LeavePlayerAsync()
+    {
+        if (!Frame.CanGoBack)
+        {
+            return;
+        }
+
+        await LeaveAsync();
+        GoBack();
+    }
 
     private void GoBack()
     {
-        if (Frame.CanGoBack)
+        if (_navigatingBack || !Frame.CanGoBack)
         {
-            Frame.GoBack();
+            return;
         }
+
+        _navigatingBack = true;
+        Frame.GoBack();
     }
 
     // --------------------------------------------------------------- chrome state
@@ -3735,7 +3755,14 @@ public sealed partial class PlayerPage : Page
         _chromeTimer.Stop();
     }
 
-    private void DisposePlayback()
+    /// <summary>
+    /// Releases everything the player owns. With <paramref name="stopOnWorker"/>
+    /// the native stop runs on a worker thread and <see cref="_videoStopped"/>
+    /// completes once libvlc has let go of the video surface; the caller then
+    /// navigates, so the swap chain is only torn down after VLC stopped drawing
+    /// into it.
+    /// </summary>
+    private void DisposePlayback(bool stopOnWorker = false)
     {
         if (_disposed)
         {
@@ -3759,6 +3786,10 @@ public sealed partial class PlayerPage : Page
         _streamCache = null;
         if (cacheSession is not null)
         {
+            // VLC reads through this server, and its input thread is parked in
+            // a socket read. End those connections first, so the stop below
+            // does not have to wait one out.
+            cacheSession.StopServing();
             _ = cacheSession.DisposeAsync().AsTask();
         }
 
@@ -3776,20 +3807,22 @@ public sealed partial class PlayerPage : Page
         // A timing change made just before leaving must reach the next session.
         _ = App.SubtitleOffsets.FlushAsync();
 
-        if (_subtitleDirectory is not null)
+        var subtitleDirectory = _subtitleDirectory;
+        _subtitleDirectory = null;
+        if (subtitleDirectory is not null)
         {
-            try
-            {
-                Directory.Delete(_subtitleDirectory, recursive: true);
-            }
-            catch
-            {
-            }
-
-            _subtitleDirectory = null;
+            // File deletion is not worth a frame of the back transition.
+            _ = Task.Run(() => DeleteDirectory(subtitleDirectory));
         }
 
         UnhookMediaPlayer();
+
+        var mediaPlayer = _mediaPlayer;
+        var media = _media;
+        var libVlc = _libVlc;
+        _mediaPlayer = null;
+        _media = null;
+        _libVlc = null;
 
         try
         {
@@ -3800,19 +3833,125 @@ public sealed partial class PlayerPage : Page
             // The swap chain may already be gone during shutdown.
         }
 
+        if (mediaPlayer is null && media is null && libVlc is null)
+        {
+            return;
+        }
+
+        if (stopOnWorker)
+        {
+            _videoStopped = StopVideoEngineAsync(mediaPlayer, media, libVlc);
+        }
+        else
+        {
+            StopVideoEngine(mediaPlayer, media, libVlc);
+        }
+    }
+
+    /// <summary>
+    /// Stops playback, then waits (bounded) until VLC has released the surface.
+    /// The native stop joins VLC's input and output threads, and a stalled
+    /// source can hold that up for a second or more — on the UI thread that is
+    /// exactly the freeze the back button used to show. The frame stays alive
+    /// until the stop finishes, because navigation destroys the swap chain on
+    /// unload and libvlc must not still be drawing into it.
+    /// </summary>
+    internal Task LeaveAsync() => _leaveTask ??= LeaveCoreAsync();
+
+    private async Task LeaveCoreAsync()
+    {
+        DisposePlayback(stopOnWorker: true);
+
+        if (_videoStopped is not { } stopped || stopped.IsCompleted)
+        {
+            return;
+        }
+
+        // A wedged engine must not trap the user in the player.
+        var finished = await Task.WhenAny(stopped, Task.Delay(TimeSpan.FromSeconds(2)));
+        if (!ReferenceEquals(finished, stopped))
+        {
+            PlayerLog.Write("video engine did not stop within 2 s; leaving anyway");
+        }
+    }
+
+    private static Task StopVideoEngineAsync(MediaPlayer? mediaPlayer, Media? media, LibVLC? libVlc)
+    {
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        _ = Task.Run(() =>
+        {
+            var elapsed = Stopwatch.StartNew();
+
+            try
+            {
+                mediaPlayer?.Stop();
+            }
+            catch
+            {
+            }
+
+            var stopMs = elapsed.ElapsedMilliseconds;
+            stopped.TrySetResult();
+
+            try
+            {
+                mediaPlayer?.Dispose();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                media?.Dispose();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                libVlc?.Dispose();
+            }
+            catch
+            {
+            }
+
+            PlayerLog.Write($"video engine released in {elapsed.ElapsedMilliseconds} ms (stop {stopMs} ms)");
+        });
+
+        return stopped.Task;
+    }
+
+    private static void StopVideoEngine(MediaPlayer? mediaPlayer, Media? media, LibVLC? libVlc)
+    {
+        var elapsed = Stopwatch.StartNew();
+
         try
         {
-            _mediaPlayer?.Stop();
+            mediaPlayer?.Stop();
         }
         catch
         {
         }
 
-        _mediaPlayer?.Dispose();
-        _mediaPlayer = null;
-        _media?.Dispose();
-        _media = null;
-        _libVlc?.Dispose();
-        _libVlc = null;
+        var stopMs = elapsed.ElapsedMilliseconds;
+        mediaPlayer?.Dispose();
+        media?.Dispose();
+        libVlc?.Dispose();
+
+        PlayerLog.Write($"video engine released in {elapsed.ElapsedMilliseconds} ms (stop {stopMs} ms, UI thread)");
+    }
+
+    private static void DeleteDirectory(string path)
+    {
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+        }
     }
 }

@@ -41,6 +41,12 @@ controls see [FEATURES.md](FEATURES.md).
   regular XAML (it stays native, themeable, and keyboard accessible).
 - The native libvlc binaries add roughly 150–200 MB to the packaged app and are
   licensed LGPL-2.1; review your distribution obligations if you publish it.
+- Leaving the player releases VLC before the frame navigates. `Stop()` joins
+  libvlc's input and output threads, and a source stalled in a socket read can
+  hold that for a second or more, so it runs on a worker thread while the page
+  (and its swap chain) stays up — the frame only leaves once VLC has released
+  the surface, with a 2-second safety timeout. The local stream cache closes
+  VLC's connections first, so that pending read ends immediately.
 
 ## Local stream cache
 
@@ -90,7 +96,8 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
 
 - every seek and how long the playhead stayed frozen afterwards,
 - the source format and options,
-- VLC's own stream-layer messages.
+- VLC's own stream-layer messages,
+- how long the video engine took to stop and be released when the player closed.
 
 It is reset when the player opens, capped at 1 MB, and never leaves the machine.
 The header names the data root in use.
