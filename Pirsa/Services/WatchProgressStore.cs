@@ -656,6 +656,106 @@ public sealed class WatchProgressStore
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Writes a resume position that came from a sync provider. The local
+    /// duration is preferred when it is known, because it was measured against
+    /// the file that actually plays; the provider's value is the fallback.
+    /// A newer local position, or a watched mark, is never overwritten.
+    /// </summary>
+    public async Task ApplyRemoteResumeAsync(
+        string imdbId,
+        SyncMediaKind kind,
+        int? season,
+        int? episode,
+        double percent,
+        long durationMs,
+        DateTimeOffset pausedAt,
+        string? name = null,
+        string? poster = null,
+        string? type = null,
+        string? episodeTitle = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(imdbId) || percent <= 0)
+        {
+            return;
+        }
+
+        await EnsureLoadedAsync(cancellationToken);
+
+        var isSeries = kind == SyncMediaKind.Series && season is > 0 && episode is > 0;
+        var videoId = isSeries ? $"{imdbId}:{season}:{episode}" : imdbId;
+        var existing = Find(videoId);
+
+        // A watched title stays watched. Continue watching does not list it,
+        // and a remote pause must not silently clear the mark.
+        if (existing is { IsWatched: true })
+        {
+            return;
+        }
+
+        if (existing is { PositionMs: > 0 } && existing.UpdatedAt > pausedAt)
+        {
+            return;
+        }
+
+        var duration = existing?.DurationMs > 0 ? existing.DurationMs : durationMs;
+        if (duration <= 0)
+        {
+            return;
+        }
+
+        var position = (long)Math.Round(duration * Math.Clamp(percent, 0, 100) / 100.0);
+        position = Math.Clamp(position, 0, Math.Max(0, duration - 1000));
+
+        if (position < WatchProgressEntry.MinimumPositionMs)
+        {
+            // "Just opened it" on the other device is not a resume point.
+            return;
+        }
+
+        var entry = new WatchProgressEntry
+        {
+            MetaId = imdbId,
+            Type = string.IsNullOrWhiteSpace(type)
+                ? isSeries ? "series" : "movie"
+                : type,
+            VideoId = videoId,
+            Name = name ?? existing?.Name ?? imdbId,
+            Poster = poster ?? existing?.Poster,
+            Background = existing?.Background,
+            EpisodeTitle = episodeTitle ?? existing?.EpisodeTitle,
+            Season = isSeries ? season!.Value : 0,
+            Episode = isSeries ? episode!.Value : 0,
+            PositionMs = position,
+            DurationMs = duration,
+            Completed = false,
+            NextUp = false,
+            WatchedAt = existing?.WatchedAt,
+            ImdbId = imdbId,
+            EpisodeCount = existing?.EpisodeCount ?? 0,
+            UpdatedAt = pausedAt,
+            SourceUrl = existing?.SourceUrl,
+            SourceAddon = existing?.SourceAddon,
+            SourceAddonUrl = existing?.SourceAddonUrl,
+            SourceQuality = existing?.SourceQuality,
+            SourceHeaders = existing?.SourceHeaders,
+            SourceSavedAt = existing?.SourceSavedAt ?? default,
+        };
+
+        var index = existing is null ? -1 : Entries.IndexOf(existing);
+        if (index >= 0)
+        {
+            Entries.RemoveAt(index);
+        }
+
+        Entries.Insert(0, entry);
+        Trim();
+
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Removes a watched mark because another device removed it.</summary>
     public async Task ApplyRemoteUnwatchedAsync(
         string imdbId,

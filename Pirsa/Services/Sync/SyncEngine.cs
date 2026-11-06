@@ -234,10 +234,11 @@ public sealed class SyncEngine
             await SaveRefreshedCredentialsAsync(connection, session, cancellationToken);
 
             var plan = SyncMerge.Plan(remote, BuildLocalSnapshot());
+            var resumes = remote.Resume ?? [];
 
-            if (plan.ApplyWatched.Count > 0 || plan.ApplyWatchlist.Count > 0)
+            if (plan.ApplyWatched.Count > 0 || plan.ApplyWatchlist.Count > 0 || resumes.Count > 0)
             {
-                await ApplyPlanAsync(plan, cancellationToken);
+                await ApplyPlanAsync(plan, resumes, cancellationToken);
             }
 
             var merged = BuildLocalSnapshot();
@@ -268,11 +269,31 @@ public sealed class SyncEngine
         }
     }
 
-    private async Task ApplyPlanAsync(SyncPlan plan, CancellationToken cancellationToken)
+    private async Task ApplyPlanAsync(
+        SyncPlan plan,
+        IReadOnlyList<RemoteResume> resumes,
+        CancellationToken cancellationToken)
     {
         _applyingRemote = true;
         try
         {
+            foreach (var resume in resumes)
+            {
+                await _watchProgress.ApplyRemoteResumeAsync(
+                    resume.ImdbId,
+                    resume.Kind,
+                    resume.Season,
+                    resume.Episode,
+                    resume.Percent,
+                    resume.DurationMs,
+                    resume.PausedAt,
+                    resume.Name,
+                    resume.Poster,
+                    resume.Type,
+                    resume.EpisodeTitle,
+                    cancellationToken);
+            }
+
             foreach (var item in plan.ApplyWatched)
             {
                 if (item.Change == WatchEventKind.Watched)

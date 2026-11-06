@@ -25,6 +25,9 @@ public enum SyncCapabilities
     Watchlist = 2,
     Scrobble = 4,
     Ratings = 8,
+
+    /// <summary>Paused playback positions, for Continue watching on another device.</summary>
+    Resume = 16,
 }
 
 public enum SyncAuthKind
@@ -87,10 +90,32 @@ public static class SyncKey
             : null;
 }
 
+/// <summary>
+/// A paused playback: where another client stopped, as a percentage so the
+/// applying side can use whatever duration it trusts most.
+/// </summary>
+public sealed record RemoteResume(
+    string ImdbId,
+    SyncMediaKind Kind,
+    int? Season,
+    int? Episode,
+    double Percent,
+    long DurationMs,
+    DateTimeOffset PausedAt,
+    string? Name = null,
+    string? Poster = null,
+    string? Type = null,
+    string? EpisodeTitle = null)
+{
+    [JsonIgnore]
+    public string Key => SyncKey.For(ImdbId, Kind, Season, Episode);
+}
+
 /// <summary>What a provider returned for this account.</summary>
 public sealed record RemoteSnapshot(
     IReadOnlyList<WatchEvent> Watched,
-    IReadOnlyList<WatchlistChange> Watchlist)
+    IReadOnlyList<WatchlistChange> Watchlist,
+    IReadOnlyList<RemoteResume>? Resume = null)
 {
     public static RemoteSnapshot Empty { get; } = new([], []);
 }

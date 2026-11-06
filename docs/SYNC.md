@@ -11,11 +11,13 @@ For the user-facing controls see [FEATURES.md](FEATURES.md#sync).
 - **Unwatched / removed** — a timestamped tombstone, so the next pull cannot
   resurrect something you removed on another device.
 
+Resume positions are **pull-only** for Simkl today: a pause saved by another
+client shows up in Continue watching, but a pause played here is not pushed
+yet. The push half is the scrobble lifecycle and is the next slice.
+
 It does **not** sync:
 
-- Resume positions. Providers do not store them, and merging two positions
-  would rewind playback. Positions stay on the device that played them.
-- Remembered stream sources. Same reason.
+- Remembered stream sources. They are tied to a provider and a device.
 - Live TV and custom id prefixes that have no IMDb id. Both are skipped because
   there is no portable key to match on.
 
@@ -28,7 +30,7 @@ alone.
 | Provider | Status | Auth | Notes |
 | --- | --- | --- | --- |
 | WebDAV / Nextcloud | Implemented | Folder URL + user + app password | One `pirsa-sync.json` file; the only provider that needs no third-party account |
-| Simkl | Implemented | AUTH V2 device flow | Official free API; watched history and Plan to Watch |
+| Simkl | Implemented | AUTH V2 device flow | Official free API; watched history, Plan to Watch and paused playbacks |
 | MDBList | Planned | API key | Aggregator; verify write support and propagation before treating it as a history sink |
 | Trakt | Planned | OAuth2 | Kept for the installed base; no design dependency on it |
 | AniList | Planned | OAuth2 GraphQL | Anime only; absolute episode numbering |
@@ -66,14 +68,26 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
 - **Removing from the local watchlist** removes the item from Simkl only when it
   has no watch history locally. A watched title stays in the Simkl library, so a
   local tidy-up cannot erase a watch event elsewhere.
-- **Not synced yet:** anime catalogs (Simkl numbers anime by AniDB/absolute
-  episodes, which does not map cleanly onto Stremio/Cinemeta season numbers),
-  ratings and scrobbling. Remote un-watches and remote removals are not detected
-  by a delta; Simkl only reports those as a timestamp, not as rows.
+- **Continue watching** is pulled from `/sync/playback`, gated on the
+  `playback` timestamps in `/sync/activities`, so a pause saved by Plex, a
+  media-server plugin or another Simkl client becomes a normal local resume
+  row. The item's percentage is turned into a position with the runtime from
+  the Simkl detail endpoint; an existing local duration wins because it was
+  measured against the file that actually plays. A watched title is left
+  watched — a remote pause never clears the mark.
+- **Playback retention is per plan:** Simkl keeps paused sessions for 7 days on
+  Free, 30 on PRO and 90 on VIP. An old pause simply stops being returned.
+- **Not synced yet:** pushing resume positions (the scrobble lifecycle), anime
+  catalogs (Simkl numbers anime by AniDB/absolute episodes, which does not map
+  cleanly onto Stremio/Cinemeta season numbers), ratings and scrobbling. Remote
+  un-watches and remote removals are not detected by a delta; Simkl only reports
+  those as a timestamp, not as rows.
 
 ## Merge rules
 
-`SyncMerge.Plan(remote, local)` is pure and has no I/O.
+`SyncMerge.Plan(remote, local)` is pure and has no I/O. Resume rows are applied
+separately by the engine through `WatchProgressStore.ApplyRemoteResumeAsync`,
+which performs the same newest-wins check against the local position.
 
 - The newer timestamp wins, per item key:
   - movie → `imdbId`
@@ -84,6 +98,8 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
 - Only the newer side is applied. Nothing is ever deleted because it is absent
   from the other side; absence is not a signal.
 - Applying a remote watched mark never touches resume fields on an existing row.
+- A remote resume is applied only when its `paused_at` is newer than the local
+  position, and never over a watched mark.
 - Applying a remote watched mark for a title with no local row creates a
   watched-only row (no position), which is what an explicit "mark as watched"
   already writes.

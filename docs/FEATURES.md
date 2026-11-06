@@ -244,9 +244,13 @@ Everything Pirsa does, in detail. For install and build steps see
 - **Settings → Sync** connects one or more watched-state providers. Each one is
   an independent mirror; a failure in one never blocks another.
 - **Simkl** connects through its AUTH V2 device flow: Pirsa shows a short code,
-  you approve it at `simkl.com/pin`, and watched history and Plan to Watch start
-  syncing. Your Simkl password is never shared, and the connection refreshes on
-  its own.
+  you approve it at `simkl.com/pin`, and watched history, Plan to Watch and
+  paused playbacks start syncing. Your Simkl password is never shared, and the
+  connection refreshes on its own.
+- **Continue watching from other clients** — a pause saved by Plex, a
+  media-server plugin or another Simkl client appears in Pirsa's Continue
+  watching with its progress. Playback saved here is not pushed back yet.
+  Simkl keeps paused sessions for 7 days on Free, 30 on PRO and 90 on VIP.
 - **WebDAV** is available too: give Pirsa a folder URL, user name and app
   password (Nextcloud, ownCloud, Box or any other WebDAV host). Pirsa keeps one
   small `pirsa-sync.json` document in that folder.
@@ -297,6 +301,8 @@ Everything Pirsa does, in detail. For install and build steps see
 - Simkl anime catalogs are not synced yet: AniDB/absolute episode numbering does
   not map cleanly onto Stremio/Cinemeta seasons. Simkl remote un-watches and
   removals are not detected by a delta.
+- Resume positions are pulled from Simkl but not pushed to it yet; the push half
+  is the scrobble lifecycle.
 - Sync covers watched state and the watchlist only. Resume positions,
   remembered sources and addons stay on this device.
 - A `stremio://` link opened while Pirsa is already running starts a second

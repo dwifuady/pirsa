@@ -33,7 +33,7 @@ public sealed class SimklSyncProvider : ISyncProvider
         Name: "Simkl",
         Description: "Keep watched history and Plan to Watch in step with your Simkl account.",
         Coverage: "Movies · Series",
-        Capabilities: SyncCapabilities.Watched | SyncCapabilities.Watchlist,
+        Capabilities: SyncCapabilities.Watched | SyncCapabilities.Watchlist | SyncCapabilities.Resume,
         AuthKind: SyncAuthKind.OAuthDevice,
         ConnectLabel: "Connect Simkl",
         Hint: "Pirsa opens simkl.com/pin with a short code. You approve it there; your Simkl password is never shared.",
@@ -281,7 +281,9 @@ internal sealed class SimklSyncSession : ISyncSession
     private string _refreshToken;
     private DateTimeOffset? _expiresAt;
     private string? _pendingActivities;
+    private string? _pendingPlayback;
     private SimklCursor? _cursor;
+    private readonly Dictionary<long, MediaDetail> _details = [];
     private SyncCredentials? _updatedCredentials;
 
     public SimklSyncSession(
@@ -357,10 +359,11 @@ internal sealed class SimklSyncSession : ISyncSession
         var activities = await GetActivitiesAsync(cancellationToken);
 
         if (_cursor?.Activities is { Length: > 0 } saved &&
-            string.Equals(saved, activities, StringComparison.Ordinal))
+            string.Equals(saved, activities.All, StringComparison.Ordinal))
         {
-            // Nothing moved. Do not touch /sync/all-items.
-            _pendingActivities = activities;
+            // Nothing moved. Do not touch /sync/all-items or /sync/playback.
+            _pendingActivities = activities.All;
+            _pendingPlayback = activities.Playback;
             return RemoteSnapshot.Empty;
         }
 
@@ -374,8 +377,18 @@ internal sealed class SimklSyncSession : ISyncSession
             ParseAllItems(type, body, watched, watchlist);
         }
 
-        _pendingActivities = activities;
-        return new RemoteSnapshot(watched, watchlist);
+        // Playback has its own timestamp; a history delta does not carry it.
+        var playbackChanged =
+            _cursor is null ||
+            !string.Equals(_cursor.Playback, activities.Playback, StringComparison.Ordinal);
+
+        var resume = playbackChanged
+            ? await PullPlaybackAsync(dateFrom, cancellationToken)
+            : [];
+
+        _pendingActivities = activities.All;
+        _pendingPlayback = activities.Playback;
+        return new RemoteSnapshot(watched, watchlist, resume);
     }
 
     public async Task PushAsync(
@@ -470,6 +483,7 @@ internal sealed class SimklSyncSession : ISyncSession
         _cursor = new SimklCursor
         {
             Activities = _pendingActivities ?? _cursor?.Activities,
+            Playback = _pendingPlayback ?? _cursor?.Playback,
             PushedThrough = pushedThrough == DateTimeOffset.MinValue
                 ? _cursor?.PushedThrough
                 : pushedThrough,
@@ -485,7 +499,7 @@ internal sealed class SimklSyncSession : ISyncSession
 
     // ------------------------------------------------------------------ pull
 
-    private async Task<string?> GetActivitiesAsync(CancellationToken cancellationToken)
+    private async Task<SimklActivities> GetActivitiesAsync(CancellationToken cancellationToken)
     {
         var (status, body) = await SendAsync(
             HttpMethod.Get,
@@ -502,14 +516,208 @@ internal sealed class SimklSyncSession : ISyncSession
         try
         {
             using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
 
-            return document.RootElement.TryGetProperty("all", out var all)
-                ? all.GetString()
+            var all = root.TryGetProperty("all", out var allValue)
+                ? allValue.GetString()
                 : null;
+
+            // The newer of the three playback buckets. The top-level "all"
+            // already covers them, but this lets a playback-only change skip
+            // /sync/all-items.
+            string? playback = null;
+            foreach (var bucket in new[] { "tv_shows", "anime", "movies" })
+            {
+                if (!root.TryGetProperty(bucket, out var block) ||
+                    !block.TryGetProperty("playback", out var value) ||
+                    value.GetString() is not { Length: > 0 } stamp)
+                {
+                    continue;
+                }
+
+                if (playback is null || string.CompareOrdinal(stamp, playback) > 0)
+                {
+                    playback = stamp;
+                }
+            }
+
+            return new SimklActivities(all, playback);
         }
         catch (JsonException)
         {
             throw new StremioException("Simkl returned an unreadable activities response.");
+        }
+    }
+
+    private async Task<IReadOnlyList<RemoteResume>> PullPlaybackAsync(
+        string? dateFrom,
+        CancellationToken cancellationToken)
+    {
+        var query = new Dictionary<string, string>();
+        if (dateFrom is { Length: > 0 })
+        {
+            query["date_from"] = dateFrom;
+        }
+
+        var (status, body) = await SendAsync(
+            HttpMethod.Get,
+            "/sync/playback",
+            query,
+            content: null,
+            authorize: true,
+            cancellationToken);
+
+        if (SimklSyncProvider.IsSuccess(status) && string.IsNullOrWhiteSpace(body))
+        {
+            return [];
+        }
+
+        if (!SimklSyncProvider.IsSuccess(status))
+        {
+            // A missing or unsupported playback list must not fail the whole
+            // sync; watched state and the watchlist are still valuable.
+            return [];
+        }
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(body);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        var resume = new List<RemoteResume>();
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return resume;
+            }
+
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                var entry = await ParsePlaybackAsync(item, cancellationToken);
+                if (entry is not null)
+                {
+                    resume.Add(entry);
+                }
+            }
+        }
+
+        return resume;
+    }
+
+    private async Task<RemoteResume?> ParsePlaybackAsync(
+        JsonElement item,
+        CancellationToken cancellationToken)
+    {
+        var type = ReadString(item, "type");
+        var isMovie = string.Equals(type, "movie", StringComparison.OrdinalIgnoreCase);
+
+        // Anime entries use an "anime" object and AniDB numbering; those are
+        // deliberately out of scope for now.
+        if (!item.TryGetProperty(isMovie ? "movie" : "show", out var media) ||
+            !TryReadImdb(media, out var imdbId) ||
+            ReadDouble(item, "progress") is not { } percent ||
+            ReadDate(item, "paused_at") is not { } pausedAt)
+        {
+            return null;
+        }
+
+        int? season = null;
+        int? episode = null;
+        string? episodeTitle = null;
+
+        if (!isMovie)
+        {
+            if (!item.TryGetProperty("episode", out var episodeElement) ||
+                ReadInt(episodeElement, "season") is not { } seasonNumber ||
+                ReadInt(episodeElement, "number") is not { } episodeNumber ||
+                seasonNumber <= 0 ||
+                episodeNumber <= 0)
+            {
+                return null;
+            }
+
+            season = seasonNumber;
+            episode = episodeNumber;
+            episodeTitle = ReadString(episodeElement, "title");
+        }
+
+        var simklId = ReadLong(media, "ids", "simkl");
+        var detail = simklId > 0
+            ? await GetDetailAsync(simklId, isMovie, cancellationToken)
+            : new MediaDetail(null, null);
+
+        if (detail.RuntimeMinutes is not > 0)
+        {
+            return null;
+        }
+
+        return new RemoteResume(
+            imdbId,
+            isMovie ? SyncMediaKind.Movie : SyncMediaKind.Series,
+            season,
+            episode,
+            percent,
+            detail.RuntimeMinutes.Value * 60_000L,
+            pausedAt,
+            ReadString(media, "title"),
+            detail.Poster ?? BuildPoster(ReadString(media, "poster")),
+            isMovie ? "movie" : "series",
+            episodeTitle);
+    }
+
+    private async Task<MediaDetail> GetDetailAsync(
+        long simklId,
+        bool isMovie,
+        CancellationToken cancellationToken)
+    {
+        if (_details.TryGetValue(simklId, out var cached))
+        {
+            return cached;
+        }
+
+        var (status, body) = await SendAsync(
+            HttpMethod.Get,
+            isMovie ? $"/movies/{simklId}" : $"/tv/{simklId}",
+            content: null,
+            authorize: true,
+            cancellationToken);
+
+        if (!SimklSyncProvider.IsSuccess(status))
+        {
+            var missing = new MediaDetail(null, null);
+            _details[simklId] = missing;
+            return missing;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                var empty = new MediaDetail(null, null);
+                _details[simklId] = empty;
+                return empty;
+            }
+
+            var detail = new MediaDetail(
+                ReadInt(document.RootElement, "runtime"),
+                BuildPoster(ReadString(document.RootElement, "poster")));
+
+            _details[simklId] = detail;
+            return detail;
+        }
+        catch (JsonException)
+        {
+            var missing = new MediaDetail(null, null);
+            _details[simklId] = missing;
+            return missing;
         }
     }
 
@@ -737,6 +945,22 @@ internal sealed class SimklSyncSession : ISyncSession
                 poster,
                 "series"));
         }
+    }
+
+    private static bool TryReadImdb(JsonElement media, out string imdbId)
+    {
+        imdbId = "";
+
+        if (!media.TryGetProperty("ids", out var ids) ||
+            !ids.TryGetProperty("imdb", out var imdb) ||
+            imdb.GetString() is not { Length: > 2 } value ||
+            !value.StartsWith("tt", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        imdbId = value;
+        return true;
     }
 
     private static bool TryReadMedia(
@@ -1203,6 +1427,36 @@ internal sealed class SimklSyncSession : ISyncSession
         }
     }
 
+    private static long ReadLong(JsonElement item, params string[] path)
+    {
+        var current = item;
+        foreach (var name in path)
+        {
+            if (!current.TryGetProperty(name, out current))
+            {
+                return 0;
+            }
+        }
+
+        return current.ValueKind == JsonValueKind.Number && current.TryGetInt64(out var value)
+            ? value
+            : 0;
+    }
+
+    private static int? ReadInt(JsonElement item, string property) =>
+        item.TryGetProperty(property, out var value) &&
+        value.ValueKind == JsonValueKind.Number &&
+        value.TryGetInt32(out var number)
+            ? number
+            : null;
+
+    private static double? ReadDouble(JsonElement item, string property) =>
+        item.TryGetProperty(property, out var value) &&
+        value.ValueKind == JsonValueKind.Number &&
+        value.TryGetDouble(out var number)
+            ? number
+            : null;
+
     private static string? ReadString(JsonElement item, string property) =>
         item.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
@@ -1283,8 +1537,14 @@ internal sealed class SimklSyncSession : ISyncSession
     {
         public string? Activities { get; set; }
 
+        public string? Playback { get; set; }
+
         public DateTimeOffset? PushedThrough { get; set; }
     }
+
+    private sealed record SimklActivities(string? All, string? Playback);
+
+    private sealed record MediaDetail(int? RuntimeMinutes, string? Poster);
 
     private sealed class ImdbIds(string imdb)
     {
