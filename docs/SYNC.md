@@ -10,8 +10,8 @@ For the user-facing controls see [FEATURES.md](FEATURES.md#sync).
 - **Watchlist** — the saved titles and when they were added.
 - **Unwatched / removed** — a timestamped tombstone, so the next pull cannot
   resurrect something you removed on another device.
-- **Resume positions** — with Simkl: pulled from paused playbacks, and pushed
-  from the player's start, pause, stop and completion events.
+- **Resume positions** — with Simkl and MDBList: pulled from paused playbacks,
+  and pushed from the player's start, pause, stop and completion events.
 
 Resume positions sync with Simkl both ways: a pause saved by another client
 shows up in Continue watching, and playback here is reported through the
@@ -33,7 +33,7 @@ alone.
 | --- | --- | --- | --- |
 | WebDAV / Nextcloud | Implemented | Folder URL + user + app password | One `pirsa-sync.json` file; the only provider that needs no third-party account |
 | Simkl | Implemented | AUTH V2 device flow | Official free API; watched history, Plan to Watch and paused playbacks |
-| MDBList | Planned | API key | Aggregator; verify write support and propagation before treating it as a history sink |
+| MDBList | Implemented | User API key | Watched history, watchlist, playback and scrobbles; no app registration |
 | Trakt | Planned | OAuth2 | Kept for the installed base; no design dependency on it |
 | AniList | Planned | OAuth2 GraphQL | Anime only; absolute episode numbering |
 
@@ -104,6 +104,32 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
   ratings. Remote un-watches and remote removals are not detected by a delta;
   Simkl only reports those as a timestamp, not as rows.
 
+## MDBList
+
+- **Auth is a user API key**, created at `mdblist.com/preferences`. There is no
+  app registration and nothing to ship; the key is stored encrypted like every
+  other credential.
+- **Capabilities:** watched history, watchlist, paused playback and scrobbles.
+- **Pull** reads `/sync/watched` (movies and per-episode rows), paginated
+  `/watchlist/items`, and `/sync/playback`. MDBList's playback rows already
+  carry `runtime`, so no detail lookup is needed to turn the percentage into a
+  position.
+- **Push** uses `/sync/watched`, `/sync/watched/remove`, the watchlist
+  add/remove endpoints, and `/scrobble/start|pause|stop`. Removing a resume row
+  clears it with `/scrobble/clear`.
+- **Limits:** the free tier allows 1,000 requests a day, plus 1,000 reads and
+  300 writes per five-minute window. Batches are capped at 100 items with a
+  short gap, and a `429` is retried once when `Retry-After` is short enough.
+- **Known gaps:**
+  - Show-level and season-level watched rows are ignored; only movie and
+    episode rows can be mapped to local state.
+  - MDBList's watchlist has no per-item timestamp, so pulled items use the time
+    of the first import rather than the date they were really added.
+  - `POST /scrobble/pause` marks an item watched at 80% or above, unlike
+    Simkl's pause. A pause at 85% therefore becomes watched on MDBList even
+    though Pirsa still treats it as in progress.
+  - Remote removals are not detected; like Simkl, the API has no deletion rows.
+
 ## Merge rules
 
 `SyncMerge.Plan(remote, local)` is pure and has no I/O. Resume rows are applied
@@ -127,8 +153,13 @@ which performs the same newest-wins check against the local position.
 
 `SyncEngine` runs **pull → merge → push** for every provider, one at a time.
 What push sends is the provider's choice: WebDAV rewrites the whole document,
-while Simkl sends only facts newer than its cursor. Both read the full local
-snapshot, so a missed event cannot leave the two sides permanently out of step.
+while Simkl and MDBList send only facts newer than their cursor. All read the
+full local snapshot, so a missed event cannot leave the two sides permanently
+out of step.
+
+A position is written every ten seconds while playing, so the engine compares a
+small fingerprint of watched state and the watchlist before scheduling a sync.
+Progress updates alone never wake a provider.
 
 ## Storage
 

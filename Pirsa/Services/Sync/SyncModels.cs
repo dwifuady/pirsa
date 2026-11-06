@@ -112,6 +112,17 @@ public sealed record RemoteResume(
     public string Key => SyncKey.For(ImdbId, Kind, Season, Episode);
 }
 
+/// <summary>The identity of a resume row, for deleting a provider playback.</summary>
+public sealed record PlaybackRef(
+    string ImdbId,
+    SyncMediaKind Kind,
+    int? Season,
+    int? Episode)
+{
+    [JsonIgnore]
+    public string Key => SyncKey.For(ImdbId, Kind, Season, Episode);
+}
+
 /// <summary>What a provider returned for this account.</summary>
 public sealed record RemoteSnapshot(
     IReadOnlyList<WatchEvent> Watched,

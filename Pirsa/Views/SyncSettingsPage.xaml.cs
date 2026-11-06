@@ -66,6 +66,15 @@ public sealed partial class SyncSettingsPage : Page
         }
     }
 
+    private void ProviderApiKey_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SyncProviderRowViewModel row &&
+            sender is PasswordBox passwordBox)
+        {
+            row.ApiKey = passwordBox.Password;
+        }
+    }
+
     private void ProviderPassword_PasswordChanged(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is SyncProviderRowViewModel row &&

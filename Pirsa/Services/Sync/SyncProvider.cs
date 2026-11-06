@@ -87,7 +87,7 @@ public interface ISyncSession : IAsyncDisposable
     /// Deletes a paused playback whose local resume row went away. Providers
     /// without server-side playbacks ignore it.
     /// </summary>
-    Task RemovePlaybackAsync(string key, CancellationToken cancellationToken = default);
+    Task RemovePlaybackAsync(PlaybackRef playback, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The providers this build knows about. Order is the Settings order.</summary>
@@ -96,6 +96,7 @@ public static class SyncProviders
     public static IReadOnlyList<ISyncProvider> All { get; } =
     [
         new Providers.SimklSyncProvider(),
+        new Providers.MdbListSyncProvider(),
         new Providers.WebDavSyncProvider(),
     ];
 

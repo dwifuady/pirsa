@@ -581,7 +581,7 @@
                                 <TextBlock
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Style="{StaticResource BodyTextBlockStyle}"
-                                    Text="Keep watched titles and saved titles in step across devices with Simkl or a WebDAV folder you control. Simkl also keeps Continue watching in step across your clients."
+                                    Text="Keep watched titles and saved titles in step across devices with Simkl, MDBList or a WebDAV folder you control. Simkl and MDBList also keep Continue watching in step across your clients."
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Button

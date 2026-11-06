@@ -312,7 +312,9 @@ public sealed class WatchlistStore
         var existing = Find(metaId);
         if (existing is not null)
         {
-            if (existing.AddedAt >= addedAt)
+            // Providers without a watchlist timestamp send default. Keep the
+            // local date rather than replacing the row on every pull.
+            if (addedAt == default || existing.AddedAt >= addedAt)
             {
                 return false;
             }
@@ -326,7 +328,9 @@ public sealed class WatchlistStore
             Type = string.IsNullOrWhiteSpace(type) ? "movie" : type,
             Name = string.IsNullOrWhiteSpace(name) ? metaId : name,
             Poster = poster,
-            AddedAt = addedAt,
+            // Providers without a watchlist timestamp get the import time
+            // once. Later pulls keep the stored value, so it never churns.
+            AddedAt = addedAt == default ? DateTimeOffset.UtcNow : addedAt,
         };
 
         var index = 0;

@@ -19,6 +19,7 @@ public sealed partial class SyncProviderRowViewModel : ObservableObject
         UserName = "";
         Password = "";
         ClientId = "";
+        ApiKey = "";
         AuthCode = "";
         AuthUrl = "";
         AccountLabel = "";
@@ -48,6 +49,8 @@ public sealed partial class SyncProviderRowViewModel : ObservableObject
 
     public bool UsesClientId => Descriptor.AsksForClientId;
 
+    public bool UsesApiKey => Descriptor.AuthKind == SyncAuthKind.ApiKey;
+
     /// <summary>Connect form state, never persisted.</summary>
     [ObservableProperty]
     public partial string Url { get; set; }
@@ -60,6 +63,9 @@ public sealed partial class SyncProviderRowViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string ClientId { get; set; }
+
+    [ObservableProperty]
+    public partial string ApiKey { get; set; }
 
     [ObservableProperty]
     public partial bool IsAuthorizing { get; set; }
@@ -174,6 +180,8 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
                     Password: row.Password),
                 SyncAuthKind.OAuthDevice => new SyncCredentials(
                     ClientId: row.ClientId.Trim()),
+                SyncAuthKind.ApiKey => new SyncCredentials(
+                    ApiKey: row.ApiKey.Trim()),
                 _ => null,
             };
 
@@ -208,6 +216,7 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
             if (result.Success)
             {
                 row.Password = "";
+                row.ApiKey = "";
                 SetStatus(result.Message);
             }
             else

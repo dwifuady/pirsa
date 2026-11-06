@@ -222,7 +222,7 @@ internal sealed class WebDavSyncSession : ISyncSession
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
-    public Task RemovePlaybackAsync(string key, CancellationToken cancellationToken = default) =>
+    public Task RemovePlaybackAsync(PlaybackRef playback, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
     public ValueTask DisposeAsync()

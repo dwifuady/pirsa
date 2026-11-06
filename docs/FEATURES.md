@@ -256,6 +256,9 @@ Everything Pirsa does, in detail. For install and build steps see
 - **Scrobbling** — play, pause, leaving the player and finishing are reported to
   Simkl. A stop at or above 80% marks the title watched there; below it saves the
   resume point. Reporting is silent on failure and never delays playback.
+- **MDBList** connects with a personal API key from `mdblist.com/preferences`.
+  Watched history, the watchlist, paused playback and scrobbles sync both ways,
+  with no app registration.
 - **WebDAV** is available too: give Pirsa a folder URL, user name and app
   password (Nextcloud, ownCloud, Box or any other WebDAV host). Pirsa keeps one
   small `pirsa-sync.json` document in that folder.
@@ -301,8 +304,11 @@ Everything Pirsa does, in detail. For install and build steps see
 
 - Auto-advance stops at the end of the last known episode and does not know
   about unaired episodes.
-- Sync supports Simkl and WebDAV. MDBList, Trakt and AniList adapters are
+- Sync supports Simkl, MDBList and WebDAV. Trakt and AniList adapters are
   planned; nothing else leaves the machine until you connect a provider.
+- MDBList's show-level and season-level watched rows are not imported, and its
+  watchlist has no per-item added date. Its pause marks a title watched at 80%,
+  earlier than Pirsa does.
 - Simkl anime catalogs are not synced yet: AniDB/absolute episode numbering does
   not map cleanly onto Stremio/Cinemeta seasons. Simkl remote un-watches and
   removals are not detected by a delta.

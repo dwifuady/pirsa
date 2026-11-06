@@ -594,9 +594,11 @@ internal sealed class SimklSyncSession : ISyncSession
     /// response. A 404 means it is already gone, which is the goal.
     /// </summary>
     public async Task RemovePlaybackAsync(
-        string key,
+        PlaybackRef playback,
         CancellationToken cancellationToken = default)
     {
+        var key = playback.Key;
+
         if (!_playbackIds.TryGetValue(key, out var id))
         {
             return;
