@@ -25,6 +25,7 @@ public sealed class SyncEngine
         new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource? _debounce;
+    private string? _lastFingerprint;
     private bool _started;
     private bool _applyingRemote;
 
@@ -265,7 +266,7 @@ public sealed class SyncEngine
         }
 
         var kind = entry.IsSeries ? SyncMediaKind.Series : SyncMediaKind.Movie;
-        var key = SyncKey.For(
+        var playback = new PlaybackRef(
             imdbId,
             kind,
             entry.IsSeries ? entry.Season : null,
@@ -286,7 +287,7 @@ public sealed class SyncEngine
 
                 try
                 {
-                    await session.RemovePlaybackAsync(key, CancellationToken.None);
+                    await session.RemovePlaybackAsync(playback, CancellationToken.None);
                     connection.Cursor = session.Cursor;
                 }
                 catch
@@ -380,6 +381,7 @@ public sealed class SyncEngine
             connection.Cursor = session.Cursor;
             connection.LastSyncedAt = DateTimeOffset.UtcNow;
             connection.LastError = null;
+            _lastFingerprint = BuildStateFingerprint();
             await SaveQuietlyAsync(cancellationToken);
             Changed?.Invoke(this, EventArgs.Empty);
 
@@ -634,7 +636,48 @@ public sealed class SyncEngine
             return;
         }
 
+        // A playback position is written every ten seconds. Only watched
+        // state and the watchlist are worth a provider round trip.
+        var fingerprint = BuildStateFingerprint();
+        if (string.Equals(fingerprint, _lastFingerprint, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         ScheduleSync();
+    }
+
+    /// <summary>
+    /// A cheap summary of what sync actually carries. Progress updates change
+    /// UpdatedAt constantly but leave this unchanged, so they do not wake a
+    /// provider every ten seconds.
+    /// </summary>
+    private string BuildStateFingerprint()
+    {
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var entry in _watchProgress.Entries
+                     .Where(entry => entry.IsWatched)
+                     .OrderBy(entry => entry.VideoId, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.Append(entry.VideoId)
+                .Append('@')
+                .Append(entry.WatchedAt?.UtcTicks ?? entry.UpdatedAt.UtcTicks)
+                .Append(';');
+        }
+
+        builder.Append('|');
+
+        foreach (var entry in _watchlist.Entries
+                     .OrderBy(entry => entry.MetaId, StringComparer.OrdinalIgnoreCase))
+        {
+            builder.Append(entry.MetaId)
+                .Append('@')
+                .Append(entry.AddedAt.UtcTicks)
+                .Append(';');
+        }
+
+        return builder.ToString();
     }
 
     private void WatchProgress_Unwatched(object? sender, WatchProgressEntry entry)
