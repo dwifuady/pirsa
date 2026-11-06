@@ -23,6 +23,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         VerticalAlignment = VerticalAlignment.Stretch,
     };
 
+    /// <summary>mpv's default bottom margin for unstyled subtitles, in scaled pixels.</summary>
+    private const int DefaultSubtitleMargin = 34;
+
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcher;
     private IntPtr _handle;
     private IntPtr _swapChain;
@@ -31,6 +34,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     private volatile bool _disposed;
     private volatile bool _fileLoaded;
     private int _state = (int)PlaybackState.Idle;
+    private int _subtitleLiftDevicePixels;
+    private int _appliedSubtitleMargin = -1;
 
     public MpvPlaybackEngine()
     {
@@ -53,6 +58,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     public PlaybackState State => (PlaybackState)Volatile.Read(ref _state);
 
     public bool IsPlaying => State == PlaybackState.Playing;
+
+    public bool CutsAudioOnPause => false;
 
     public bool IsSeekable => GetFlag("seekable", out var seekable) && seekable;
 
@@ -243,13 +250,35 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     public bool SelectAudioTrack(long id) =>
         SetPropertyString("aid", id < 0 ? "no" : id.ToString(CultureInfo.InvariantCulture));
 
-    public bool SelectSubtitleTrack(long id) =>
-        SetPropertyString("sid", id < 0 ? "no" : id.ToString(CultureInfo.InvariantCulture));
+    public bool SelectSubtitleTrack(long id)
+    {
+        var selected = SetPropertyString(
+            "sid",
+            id < 0 ? "no" : id.ToString(CultureInfo.InvariantCulture));
 
-    public bool AddSubtitleFile(string path) =>
-        _handle != IntPtr.Zero &&
-        !string.IsNullOrWhiteSpace(path) &&
-        Command("sub-add", path, "select") >= 0;
+        if (selected)
+        {
+            ApplySubtitleLift(force: true);
+        }
+
+        return selected;
+    }
+
+    public bool AddSubtitleFile(string path)
+    {
+        if (_handle == IntPtr.Zero || string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var added = Command("sub-add", path, "select") >= 0;
+        if (added)
+        {
+            ApplySubtitleLift(force: true);
+        }
+
+        return added;
+    }
 
     public void SetSubtitleDelay(long delayMs) =>
         SetPropertyString(
@@ -258,15 +287,36 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public void SetSubtitleLift(int devicePixels)
     {
-        // mpv's sub-margin-y is in scaled pixels at a 720p window height.
-        var panelHeightPixels = _panel.ActualHeight * _panel.CompositionScaleY;
-        var scaled = panelHeightPixels > 0
-            ? devicePixels * 720.0 / panelHeightPixels
-            : devicePixels;
+        _subtitleLiftDevicePixels = Math.Max(0, devicePixels);
+        ApplySubtitleLift(force: false);
+    }
 
+    /// <summary>
+    /// Sets the bottom margin above mpv's default padding. sub-margin-y is in
+    /// scaled pixels at a 720p window height, so the page's device-pixel lift is
+    /// converted before it is added to the default. Setting it to the lift alone
+    /// would remove mpv's own padding and put subtitles on the bottom edge.
+    /// </summary>
+    private void ApplySubtitleLift(bool force)
+    {
+        var panelHeightPixels = _panel.ActualHeight * _panel.CompositionScaleY;
+        var scaledLift = panelHeightPixels > 0
+            ? _subtitleLiftDevicePixels * 720.0 / panelHeightPixels
+            : _subtitleLiftDevicePixels;
+
+        var margin = DefaultSubtitleMargin + Math.Max(0, (int)Math.Round(scaledLift));
+
+        if (!force && margin == _appliedSubtitleMargin)
+        {
+            return;
+        }
+
+        _appliedSubtitleMargin = margin;
         SetPropertyString(
             "sub-margin-y",
-            Math.Max(0, (int)Math.Round(scaled)).ToString(CultureInfo.InvariantCulture));
+            margin.ToString(CultureInfo.InvariantCulture));
+        PlayerLog.Write(
+            $"mpv subtitle margin={margin} (lift {_subtitleLiftDevicePixels}px)");
     }
 
     public bool TryGetVideoSize(out uint width, out uint height)
@@ -613,6 +663,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                     _fileLoaded = true;
                     Post(() =>
                     {
+                        // Panel properties are UI-thread only.
+                        ApplySubtitleLift(force: true);
                         TracksChanged?.Invoke(this, new PlaybackTracksChangedEventArgs(PlaybackTrackKind.Audio));
                         TracksChanged?.Invoke(this, new PlaybackTracksChangedEventArgs(PlaybackTrackKind.Subtitle));
                     });
@@ -624,6 +676,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                         !(GetFlag("pause", out var paused) && paused))
                     {
                         SetState(PlaybackState.Playing);
+                        PlayerLog.Write(
+                            $"mpv audio aid={GetString("aid")} ao={GetString("current-ao")} " +
+                            $"device={GetString("audio-device")} mute={GetString("mute")} " +
+                            $"volume={GetString("volume")}");
                         Post(() => Playing?.Invoke(this, EventArgs.Empty));
                     }
                     break;

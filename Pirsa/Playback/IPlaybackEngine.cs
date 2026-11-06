@@ -25,6 +25,12 @@ public interface IPlaybackEngine : IDisposable
 
     bool IsPlaying { get; }
 
+    /// <summary>
+    /// True when pausing leaves audio already queued in the device, so the page
+    /// should mute the Windows audio session to cut it immediately.
+    /// </summary>
+    bool CutsAudioOnPause { get; }
+
     bool IsSeekable { get; }
 
     /// <summary>0–100, matching the transport slider.</summary>

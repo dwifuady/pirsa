@@ -137,6 +137,8 @@ public sealed partial class PlayerPage : Page
     private bool _chromeHidden = true;
     private bool _infoPinned;
     private bool _infoSuppressed;
+    private bool _clearedStalePauseMute;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _pauseMuteClearTimer;
     private int _appliedSubtitleLift = -1;
     private bool _keyboardActive;
     private bool _isFullScreen;
@@ -1632,6 +1634,8 @@ public sealed partial class PlayerPage : Page
         _playing = true;
         _ended = false;
         _errorVisible = false;
+
+        ClearStalePauseMute();
         ResetInfoCard();
         ResetStallClock(_engine.PositionMs);
         _stallTimer.Start();
@@ -1995,7 +1999,10 @@ public sealed partial class PlayerPage : Page
             // see, and the mute only has to beat the queue draining, which takes
             // hundreds of milliseconds.
             _engine.SetPaused(true);
-            SilencePausedOutput();
+            if (_engine.CutsAudioOnPause)
+            {
+                SilencePausedOutput();
+            }
         }
         else
         {
@@ -3184,6 +3191,8 @@ public sealed partial class PlayerPage : Page
         ViewModel.SelectSubtitle(null);
         UpdateSubtitleIndicator();
         ApplySubtitleDelay();
+        _appliedSubtitleLift = -1;
+        RefreshSubtitleLift();
         UpdateSubtitleCurrent();
         UpdateSubtitleTimingUi();
 
@@ -3445,8 +3454,11 @@ public sealed partial class PlayerPage : Page
         }
 
         _subtitleApplied = true;
-        // Adding a subtitle track can reset the input's timing; put the saved offset back.
+        // Adding a subtitle track can reset the input's timing and margin;
+        // put the saved offset and lift back.
         ApplySubtitleDelay();
+        _appliedSubtitleLift = -1;
+        RefreshSubtitleLift();
         return true;
     }
 
@@ -3612,6 +3624,44 @@ public sealed partial class PlayerPage : Page
     }
 
     /// <summary>
+    /// Windows remembers a per-app session mute across launches. The first
+    /// Playing event can arrive before mpv/libvlc creates the WASAPI session,
+    /// so retry briefly instead of checking once and giving up.
+    /// </summary>
+    private void ClearStalePauseMute()
+    {
+        if (_clearedStalePauseMute)
+        {
+            return;
+        }
+
+        _clearedStalePauseMute = true;
+        var attempts = 0;
+
+        _pauseMuteClearTimer?.Stop();
+        _pauseMuteClearTimer = DispatcherQueue.CreateTimer();
+        _pauseMuteClearTimer.Interval = TimeSpan.FromMilliseconds(300);
+        _pauseMuteClearTimer.IsRepeating = true;
+        _pauseMuteClearTimer.Tick += (_, _) =>
+        {
+            attempts++;
+
+            if (AudioSessionMute.SetMute(false))
+            {
+                _pauseMuteClearTimer?.Stop();
+                PlayerLog.Write("audio session checked and unmuted");
+                return;
+            }
+
+            if (attempts >= 8)
+            {
+                _pauseMuteClearTimer?.Stop();
+            }
+        };
+        _pauseMuteClearTimer.Start();
+    }
+
+    /// <summary>
     /// Mutes the audio session when the user pauses.
     ///
     /// A pause stops the picture at once, but not the sound: libvlc hands the
@@ -3639,9 +3689,12 @@ public sealed partial class PlayerPage : Page
                 return;
 
             case AudioSessionMute.Result.AlreadyMuted:
-                // Muted by somebody else. With the output already silent there is
-                // nothing to cut, and lifting their mute is not this page's call.
-                PlayerLog.Write("pause not muted: the session was already muted");
+                // The session is already muted, most likely by an earlier pause
+                // that never got to lift it. Take ownership so resume restores
+                // the sound; an in-app mute is still controlled separately.
+                _pauseMuted = true;
+                _pauseMuteViaVlc = false;
+                PlayerLog.Write("pause found the session already muted; will lift it on resume");
                 return;
         }
 
@@ -3778,6 +3831,7 @@ public sealed partial class PlayerPage : Page
         _disposed = true;
         _chromeTimer.Stop();
         _infoTimer.Stop();
+        _pauseMuteClearTimer?.Stop();
         _resumeHintTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();

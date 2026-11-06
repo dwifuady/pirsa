@@ -90,6 +90,8 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
 
     public bool IsPlaying => State == PlaybackState.Playing;
 
+    public bool CutsAudioOnPause => true;
+
     public bool IsSeekable
     {
         get
