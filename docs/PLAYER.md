@@ -90,17 +90,78 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
 - The last four seconds of a title never show a spinner: VLC stops advancing the
   clock while the final buffered frames drain, which looked like a stall at 99%.
 
+## Play and pause
+
+- The transport does not trust `MediaPlayer.IsPlaying`: its answer trails every
+  command, and `Pause()` is a toggle. Both would let a press land on a stale
+  state and flip the wrong way, and a press while the player is still opening
+  would be swallowed. So a press records an *intent*, pauses with the explicit
+  `SetPause(true)`, and the button shows the intent until libvlc reports
+  `Playing`/`Paused`.
+- A press libvlc never answers is given up after 2 seconds: the button returns
+  to libvlc's own state and the log says so. That is the difference between a
+  slow pause and a lost one.
+- Measured on 3.0.24, the press itself is not the delay: the log shows the
+  press reaching libvlc and the `Paused` event coming back in **0-2 ms**. What
+  takes 0.2-0.8 s is the audio: `wasapi` reports a 96000-frame device ring (two
+  seconds at 48 kHz), libvlc queues decoded audio ahead of the clock, and the
+  WASAPI session stays active for that long after the pause.
+- libvlc's own mute cannot cut that remainder. Its mute is applied by the audio
+  output thread — the thread busy playing the audio — and the log shows it
+  landing **315-618 ms late** (its unmute lands in 1-2 ms, when that thread is
+  running again). So the pause mute goes at the session directly
+  (`Services/AudioSessionMute.cs`, WASAPI `ISimpleAudioVolume::SetMute`, ~2 ms),
+  where the mixer applies it to audio that is already queued. The mute is lifted
+  on resume, where libvlc's own inserted silence covers it.
+- Resuming does not play that queued audio back, it pays for it: the log showed
+  **228-813 ms of silence inserted after every resume**, equal to the queue depth
+  at pause. libvlc 3's only public flush is a seek, so a resume seeks straight
+  back to the frozen position — that flush clears the debt, so the sound starts
+  with the picture. The seek must happen **after** `Play()`, never while paused:
+  a seek issued during the pause leaves the demuxer reading while paused, which
+  VLC logs as `prefetch: reading while paused (buggy demux?)` and which froze the
+  playhead for 8 s while the buffer reported 100%. The seek is skipped whenever
+  the source is not playing through the local read-ahead cache: live TV, HLS,
+  direct HTTP and any source whose cache setup failed would all fetch for longer
+  than the silence it saves. It is skipped in the last seconds of a title too.
+  A first-play resume seek (`_resumeMs`) flushes the output on its own, so the
+  resync stands down and leaves it to that.
+- The whole pause/resume asymmetry is structural in libvlc 3: the aout core
+  converts the audio queued at pause into a debt and repays it as silence, and
+  its audio output modules never report that they emptied themselves. VLC 4's
+  clock rewrite removes it, which is the only real fix.
+- A session the user muted themselves is never touched: the page only takes over
+  an unmuted session, and pressing **M** while paused hands control back.
+- While paused, the D3D11VA decoder keeps trying to decode and logs
+  `hardware acceleration picture allocation failed` about once a second: the
+  vout holds every picture in its pool because nothing is being displayed. It is
+  noise rather than breakage, but it is why a long pause is not free.
+- The audio output chain is named (`--aout=mmdevice,directsound`) rather than
+  left to VLC's scoring, so which module is in use is deterministic and shows up
+  in the log. It is the same order VLC picks on its own (mmdevice 150,
+  directsound 100, waveout 50), so this only removes the guesswork.
+
 ## Diagnostics
 
 `player.log` in the data root records:
 
 - every seek and how long the playhead stayed frozen afterwards,
+- every play/pause press next to how long libvlc took to report the change, and
+  a timeout line when it never did,
+- the elapsed time of the pause mute, and whether it went through the session or
+  fell back to libvlc's (late) mute,
+- which audio output module VLC created (`using audio output module …`),
 - the source format and options,
 - VLC's own stream-layer messages,
 - how long the video engine took to stop and be released when the player closed.
 
 It is reset when the player opens, capped at 1 MB, and never leaves the machine.
 The header names the data root in use.
+
+Note that `--verbose=2` sends every libvlc debug message through managed code and
+`PlayerLog.Write` appends synchronously, so the log fills its 1 MB cap quickly on
+HLS sources. That traffic runs on VLC's own threads; treat a reproducible control
+latency measured with the log on as an upper bound.
 
 ## Episode switching
 
