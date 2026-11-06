@@ -784,7 +784,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="Video engine: selectable above; libVLC 3.0.24 (LGPL-2.1) ships by default. Defaults: Cinemeta + OpenSubtitles v3."
+                                Text="Video engine: selectable above; libVLC 3.0.24 and mpv 0.41.0 (both LGPL-2.1) are installed. Defaults: Cinemeta + OpenSubtitles v3."
                                 TextWrapping="Wrap" />
                             <TextBlock
                                 FontSize="12"

@@ -128,6 +128,7 @@ Pirsa/
   Services/UpdateService.cs        update check, download, checksum, install hand-off
   Playback/IPlaybackEngine.cs     player backend seam: surface, transport, tracks
   Playback/LibVlc/                libVLC backend and background warm-up
+  Playback/Mpv/                   mpv backend (libmpv composition output)
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   Helpers/AddonLinkPrompt.cs      confirmation + install for an activated link
   ViewModels/HomeViewModel.cs     hero + rails across addons

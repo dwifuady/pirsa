@@ -1,4 +1,5 @@
 using Pirsa.Playback.LibVlc;
+using Pirsa.Playback.Mpv;
 using Pirsa.Services;
 
 namespace Pirsa.Playback;
@@ -13,6 +14,7 @@ public static class PlaybackEngines
     private static readonly IReadOnlyList<IPlaybackEngineFactory> Factories =
     [
         new LibVlcPlaybackEngineFactory(),
+        new MpvPlaybackEngineFactory(),
     ];
 
     public static IReadOnlyList<IPlaybackEngineFactory> All => Factories;

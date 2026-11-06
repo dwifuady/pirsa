@@ -14,6 +14,16 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!--
+      The libmpv package copies the native DLL per platform. Pin the flags to
+      the target RID so an AnyCPU evaluation does not copy both architectures.
+    -->
+    <MpvWindowsX64Enabled Condition="'$(RuntimeIdentifier)' == 'win-x64'">true</MpvWindowsX64Enabled>
+    <MpvWindowsX64Enabled Condition="'$(RuntimeIdentifier)' != 'win-x64'">false</MpvWindowsX64Enabled>
+    <MpvWindowsArm64Enabled Condition="'$(RuntimeIdentifier)' == 'win-arm64'">true</MpvWindowsArm64Enabled>
+    <MpvWindowsArm64Enabled Condition="'$(RuntimeIdentifier)' != 'win-arm64'">false</MpvWindowsArm64Enabled>
 
     <!--  Version is overridden from the git tag by the release workflow.  -->
     <Version>0.3.0</Version>
@@ -59,6 +69,7 @@
     <PropertyGroup> above to opt out.
   -->
   <ItemGroup>
+    <PackageReference Include="Endpne.LibMPV.Windows" Version="0.41.0" GeneratePathProperty="true" />
     <PackageReference Include="LibVLCSharp.WinUI" Version="3.10.2" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinUIAnalyzer" Version="0.7.1">
@@ -79,6 +90,26 @@
   <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
   </PropertyGroup>
+
+  <!--
+    The libmpv package's build targets copy the import library and headers for
+    C++ projects, but not libmpv-2.dll for C#. Copy the runtime DLL explicitly
+    into the per-architecture folder the playback resolver reads.
+  -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
+    <Content
+      Include="$(PkgEndpne_LibMPV_Windows)\build\x64\libmpv-2.dll"
+      Link="libmpv\win-x64\libmpv-2.dll"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+    <Content
+      Include="$(PkgEndpne_LibMPV_Windows)\build\arm64\libmpv-2.dll"
+      Link="libmpv\win-arm64\libmpv-2.dll"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <!-- Publish Properties -->
   <!--

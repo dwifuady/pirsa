@@ -34,26 +34,33 @@ controls see [FEATURES.md](FEATURES.md).
 
 ## Engine
 
-- **LibVLCSharp.WinUI** with native **libvlc 3.0.24**. VLC is used because these
-  addon sources are commonly 4K HEVC/HDR MKV, HLS, or DASH; MediaPlayerElement
-  would fail on HEVC without extra codec packages.
-- Playback goes through `IPlaybackEngine`; libVLC is the only registered
-  backend today. Another engine implements that interface and registers a
-  factory, without touching source discovery, resume or the chrome.
-- Settings → Playback → **Video engine** selects **Automatic** or a registered
-  backend. The choice is stored in `settings.json`, warmed up at launch, and
+- **libVLC** via **LibVLCSharp.WinUI**, native **libvlc 3.0.24**. These addon
+  sources are commonly 4K HEVC/HDR MKV, HLS, or DASH; MediaPlayerElement would
+  fail on HEVC without extra codec packages.
+- **mpv** is the optional second backend, using `libmpv-2.dll` 0.41.0 from
+  `Endpne.LibMPV.Windows`. It renders through mpv's D3D11 composition output
+  (`vo=gpu-next`, `gpu-context=d3d11`, `d3d11-output-mode=composition`); mpv
+  publishes its swapchain as the read-only `display-swapchain` property and the
+  WinUI `SwapChainPanel` binds it directly.
+- Playback goes through `IPlaybackEngine`; both backends implement it. Another
+  engine can be added by registering a factory, without touching source
+  discovery, resume or the chrome.
+- Settings → Playback → **Video engine** selects **Automatic**, **libVLC** or
+  **mpv**. The choice is stored in `settings.json`, warmed up at launch, and
   resolved when the player opens; an unknown or unavailable id falls back to
   the default backend and is logged in `player.log`.
 - The video surface is a WinUI `SwapChainPanel`, so the transport chrome is
   regular XAML (it stays native, themeable, and keyboard accessible).
-- The native libvlc binaries add roughly 150–200 MB to the packaged app and are
-  licensed LGPL-2.1; review your distribution obligations if you publish it.
-- Leaving the player releases VLC before the frame navigates. `Stop()` joins
-  libvlc's input and output threads, and a source stalled in a socket read can
-  hold that for a second or more, so it runs on a worker thread while the page
-  (and its swap chain) stays up — the frame only leaves once VLC has released
-  the surface, with a 2-second safety timeout. The local stream cache closes
-  VLC's connections first, so that pending read ends immediately.
+- The native libvlc binaries add roughly 150–200 MB and libmpv adds roughly
+  120 MB on x64 (80 MB on arm64) to the packaged app. Both are LGPL-2.1;
+  review your distribution obligations if you publish it.
+- Leaving the player releases the selected backend before the frame navigates.
+  The native stop can join the engine's input/output threads, and a source
+  stalled in a socket read can hold that for a second or more, so it runs on a
+  worker thread while the page (and its swap chain) stays up — the frame only
+  leaves once the engine has released the surface, with a 2-second safety
+  timeout. The local stream cache closes the engine's connections first, so
+  that pending read ends immediately.
 
 ## Local stream cache
 

@@ -121,7 +121,7 @@ Everything Pirsa does, in detail. For install and build steps see
 
 ## Native player
 
-- LibVLCSharp + libvlc in a WinUI SwapChainPanel, with Windows 11-style chrome:
+- libVLC or mpv in a WinUI SwapChainPanel, with Windows 11-style chrome:
   seek bar, 10-second skips, volume, speed, fullscreen, auto-hiding controls, a
   **source** picker next to the **CC** and **audio track** buttons.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
