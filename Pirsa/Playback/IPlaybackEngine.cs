@@ -33,6 +33,13 @@ public interface IPlaybackEngine : IDisposable
 
     bool IsSeekable { get; }
 
+    /// <summary>
+    /// True when the backend positions subtitles from the bottom of the picture,
+    /// so letterbox bars already keep them above the window bottom. False when
+    /// it positions them from the bottom of the video surface.
+    /// </summary>
+    bool SubtitlesArePictureRelative { get; }
+
     /// <summary>0–100, matching the transport slider.</summary>
     int Volume { get; set; }
 

@@ -61,6 +61,10 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
     public bool CutsAudioOnPause => false;
 
+    // mpv's sub-margin-y is measured from the bottom of the video surface, not
+    // the picture, so letterbox bars do not already move subtitles up.
+    public bool SubtitlesArePictureRelative => false;
+
     public bool IsSeekable => GetFlag("seekable", out var seekable) && seekable;
 
     public int Volume

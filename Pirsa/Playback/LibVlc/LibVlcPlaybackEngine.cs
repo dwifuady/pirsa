@@ -92,6 +92,8 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
 
     public bool CutsAudioOnPause => true;
 
+    public bool SubtitlesArePictureRelative => true;
+
     public bool IsSeekable
     {
         get

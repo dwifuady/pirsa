@@ -2502,7 +2502,15 @@ public sealed partial class PlayerPage : Page
         }
 
         var covered = Math.Max(0, panelHeight - ControlBarTop()) * scale;
-        var intrusion = covered - LetterboxHeight(panelHeight, scale);
+
+        // VLC draws subtitles at the bottom of the picture, so a letterboxed
+        // film already keeps them clear of the bar. mpv measures its margin
+        // from the bottom of the surface, so it needs the full bar height.
+        var letterbox = _engine.SubtitlesArePictureRelative
+            ? LetterboxHeight(panelHeight, scale)
+            : 0;
+
+        var intrusion = covered - letterbox;
         return intrusion <= 0
             ? 0
             : (int)Math.Round(intrusion + (SubtitleLiftGapDip * scale));
