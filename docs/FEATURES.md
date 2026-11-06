@@ -199,6 +199,16 @@ Everything Pirsa does, in detail. For install and build steps see
   show a short timing toast over the picture, so the panel does not need to be
   open. Timing works for embedded and addon tracks alike and is remembered per
   title, including across source switches and the next episode.
+- **Sync by ear** is the alternative to counting tenths. With a downloaded
+  track active, the timing panel offers **Sync by ear**, which shows the lines
+  around the playhead like a lyrics view: the current line large, three before
+  and three after, and empty cues skipped. The video keeps playing, so you can
+  hear the dialogue; click a line the moment it begins and it is aligned to
+  that moment. The timing chip updates immediately, **Undo** sits in the toast
+  and in the footer, and **− 50 ms** / **+ 50 ms** (or **Left** / **Right**)
+  fine-tune the result. **Space** pauses, **Esc** or **Done** finishes. Embedded
+  tracks keep the Earlier/Later controls, because lyric sync needs cue times
+  from a text subtitle file (SRT, VTT or ASS).
 - **Subtitles move clear of the controls.** While the chrome is showing,
   subtitles ride up by the height of the control bar and settle back to the
   bottom of the picture when it hides. On a letterboxed film only the part of
