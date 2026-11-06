@@ -86,6 +86,24 @@
                 <GradientStop Offset="0.65" Color="#99000000" />
                 <GradientStop Offset="1" Color="#00000000" />
             </LinearGradientBrush>
+            <!--
+                Corner shade behind the pause details: dark enough under the
+                text for a 4-line plot, and gone by the far edge so it never
+                reads as a card. Radial, so the bottom and right edges fade too.
+            -->
+            <RadialGradientBrush
+                x:Key="PlayerInfoScrimBrush"
+                Center="0,0"
+                GradientOrigin="0,0"
+                MappingMode="RelativeToBoundingBox"
+                RadiusX="1"
+                RadiusY="1">
+                <GradientStop Offset="0" Color="#F2000000" />
+                <GradientStop Offset="0.42" Color="#E6000000" />
+                <GradientStop Offset="0.64" Color="#D6000000" />
+                <GradientStop Offset="0.82" Color="#9E000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </RadialGradientBrush>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -163,6 +181,19 @@
                 <GradientStop Offset="0.65" Color="#99000000" />
                 <GradientStop Offset="1" Color="#00000000" />
             </LinearGradientBrush>
+            <RadialGradientBrush
+                x:Key="PlayerInfoScrimBrush"
+                Center="0,0"
+                GradientOrigin="0,0"
+                MappingMode="RelativeToBoundingBox"
+                RadiusX="1"
+                RadiusY="1">
+                <GradientStop Offset="0" Color="#F2000000" />
+                <GradientStop Offset="0.42" Color="#E6000000" />
+                <GradientStop Offset="0.64" Color="#D6000000" />
+                <GradientStop Offset="0.82" Color="#9E000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </RadialGradientBrush>
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -208,6 +239,7 @@
             <SolidColorBrush x:Key="PlayerLoadingScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="PlayerTopScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="PlayerBottomScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="PlayerInfoScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>
