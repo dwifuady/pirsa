@@ -58,6 +58,7 @@ public sealed class StreamCacheSession : IAsyncDisposable
     private readonly List<(long Start, long End)> _complete = [];
     private readonly Slot[] _slots = [new(), new()];
     private readonly HashSet<long> _waiters = [];
+    private readonly HashSet<TcpClient> _clients = [];
     private long _readerSequence;
     private readonly TcpListener _listener;
     private readonly Uri _upstream;
@@ -332,6 +333,11 @@ public sealed class StreamCacheSession : IAsyncDisposable
                 return;
             }
 
+            lock (_gate)
+            {
+                _clients.Add(client);
+            }
+
             _ = Task.Run(() => ServeAsync(client, cancellationToken));
         }
     }
@@ -407,6 +413,13 @@ public sealed class StreamCacheSession : IAsyncDisposable
             when (exception is OperationCanceledException or IOException or SocketException)
         {
             // VLC closing a connection on seek is routine.
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _clients.Remove(client);
+            }
         }
     }
 
@@ -595,6 +608,52 @@ public sealed class StreamCacheSession : IAsyncDisposable
     }
 
     // -------------------------------------------------------------- lifecycle
+
+    /// <summary>
+    /// Ends every connection VLC is reading through, before the player is
+    /// stopped. libvlc's input thread is parked in a socket read, so closing
+    /// the connection here turns that read into an immediate end-of-file.
+    /// Without it, <c>MediaPlayer.Stop()</c> waits out whatever the read is
+    /// blocked on, which is the second-long freeze the back button showed.
+    /// Safe to call twice; the listener and the handles are released by
+    /// <see cref="DisposeAsync"/> afterwards.
+    /// </summary>
+    public void StopServing()
+    {
+        TcpClient[] clients;
+        lock (_gate)
+        {
+            clients = [.. _clients];
+            _clients.Clear();
+        }
+
+        try
+        {
+            _listener.Stop();
+        }
+        catch
+        {
+        }
+
+        foreach (var client in clients)
+        {
+            try
+            {
+                client.Client?.Shutdown(SocketShutdown.Both);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                client.Close();
+            }
+            catch
+            {
+            }
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {

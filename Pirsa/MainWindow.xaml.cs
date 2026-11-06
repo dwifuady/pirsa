@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
 
     private bool _playerFullscreen;
     private bool _initialNavigation = true;
+    private bool _backPending;
     private DiscoverViewModel? _discoverViewModel;
 
     /// <summary>The launch update check and its download/install state.</summary>
@@ -109,6 +110,17 @@ public sealed partial class MainWindow : Window
 
             NavView.IsPaneOpen = false;
             return;
+        }
+
+        _ = NavigateToSettingsAsync(message);
+    }
+
+    private async Task NavigateToSettingsAsync(SettingsMessage? message)
+    {
+        // Leaving the player from here must not run VLC's stop on the UI thread.
+        if (RootFrame.Content is PlayerPage player)
+        {
+            await player.LeaveAsync();
         }
 
         RootFrame.BackStack.Clear();
@@ -335,9 +347,34 @@ public sealed partial class MainWindow : Window
 
     private void AppTitleBar_BackRequested(TitleBar sender, object args)
     {
-        if (RootFrame.CanGoBack)
+        _ = BackAsync();
+    }
+
+    private async Task BackAsync()
+    {
+        if (_backPending)
         {
-            RootFrame.GoBack();
+            return;
+        }
+
+        _backPending = true;
+        try
+        {
+            // The player releases VLC before the frame tears its swap chain
+            // down, and that release must not run on the UI thread.
+            if (RootFrame.CanGoBack && RootFrame.Content is PlayerPage player)
+            {
+                await player.LeaveAsync();
+            }
+
+            if (RootFrame.CanGoBack)
+            {
+                RootFrame.GoBack();
+            }
+        }
+        finally
+        {
+            _backPending = false;
         }
     }
 
