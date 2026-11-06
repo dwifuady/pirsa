@@ -619,7 +619,9 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                     break;
 
                 case MpvEventId.PlaybackRestart:
-                    if (_fileLoaded && !(GetFlag("pause", out var paused) && paused))
+                    if (_fileLoaded &&
+                        State != PlaybackState.Playing &&
+                        !(GetFlag("pause", out var paused) && paused))
                     {
                         SetState(PlaybackState.Playing);
                         Post(() => Playing?.Invoke(this, EventArgs.Empty));
@@ -728,10 +730,21 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
                 }
 
                 var isPaused = Marshal.ReadInt32(property.Data) != 0;
+
                 if (isPaused)
                 {
-                    SetState(PlaybackState.Paused);
-                    Post(() => Paused?.Invoke(this, EventArgs.Empty));
+                    if (State != PlaybackState.Paused)
+                    {
+                        SetState(PlaybackState.Paused);
+                        Post(() => Paused?.Invoke(this, EventArgs.Empty));
+                    }
+                }
+                else if (_fileLoaded && State != PlaybackState.Playing)
+                {
+                    // PlaybackRestart is not guaranteed after every resume, and
+                    // the pause flag is the authoritative state transition.
+                    SetState(PlaybackState.Playing);
+                    Post(() => Playing?.Invoke(this, EventArgs.Empty));
                 }
 
                 break;

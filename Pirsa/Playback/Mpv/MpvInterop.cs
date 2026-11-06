@@ -86,8 +86,9 @@ internal struct MpvEventLogMessage
 [StructLayout(LayoutKind.Sequential)]
 internal struct MpvNode
 {
-    public MpvFormat Format;
+    // libmpv puts the union first and the format tag after it.
     public MpvNodeUnion U;
+    public MpvFormat Format;
 }
 
 [StructLayout(LayoutKind.Explicit, Size = 8)]

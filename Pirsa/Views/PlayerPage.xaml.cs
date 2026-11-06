@@ -2008,6 +2008,11 @@ public sealed partial class PlayerPage : Page
             // the playhead for 8 s in the log.
             var frozen = _engine.PositionMs;
             _engine.SetPaused(false);
+
+            // Lift the session mute with the resume command instead of waiting
+            // for the engine's Playing event; otherwise the picture moves while
+            // the audio remains silent for that round-trip.
+            RestorePausedOutput();
             ResyncAfterResume(frozen);
         }
 
