@@ -22,9 +22,9 @@ public sealed class AppSettings
     public bool AutoAdvance { get; set; } = true;
 
     /// <summary>
-    /// Playback backend id, or empty for the default. Resolved through
-    /// <see cref="Pirsa.Playback.PlaybackEngines"/> so an unavailable choice
-    /// falls back cleanly.
+    /// Playback backend id, or empty for Automatic (mpv when available, then
+    /// libVLC). Resolved through <see cref="Pirsa.Playback.PlaybackEngines"/> so
+    /// an unavailable choice falls back cleanly.
     /// </summary>
     public string PlaybackEngine { get; set; } = "";
 

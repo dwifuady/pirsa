@@ -5,9 +5,9 @@ using Pirsa.Services;
 namespace Pirsa.Playback;
 
 /// <summary>
-/// The backends this build ships. Only libVLC is registered for now; adding
-/// mpv means adding its factory here. Settings stores an id, and an unknown or
-/// unavailable id falls back to the default backend.
+/// The backends this build ships. mpv is preferred when it is available and
+/// libVLC is the fallback; Settings stores an id, and an unknown or unavailable
+/// id falls back to that same automatic choice.
 /// </summary>
 public static class PlaybackEngines
 {
@@ -19,7 +19,9 @@ public static class PlaybackEngines
 
     public static IReadOnlyList<IPlaybackEngineFactory> All => Factories;
 
-    public static IPlaybackEngineFactory Default => Factories[0];
+    /// <summary>mpv when its native package is present, otherwise libVLC.</summary>
+    public static IPlaybackEngineFactory Default =>
+        Find("mpv") is { IsAvailable: true } mpv ? mpv : Factories[0];
 
     public static IPlaybackEngineFactory? Find(string? id) =>
         string.IsNullOrWhiteSpace(id)

@@ -46,9 +46,11 @@ controls see [FEATURES.md](FEATURES.md).
   engine can be added by registering a factory, without touching source
   discovery, resume or the chrome.
 - Settings → Playback → **Video engine** selects **Automatic**, **libVLC** or
-  **mpv**. The choice is stored in `settings.json`, warmed up at launch, and
-  resolved when the player opens; an unknown or unavailable id falls back to
-  the default backend and is logged in `player.log`.
+  **mpv**. Automatic prefers mpv when its native package is available and falls
+  back to libVLC; an explicit libVLC choice is still honoured. The choice is
+  stored in `settings.json`, warmed up at launch, and resolved when the player
+  opens; an unknown or unavailable id falls back to the automatic choice and is
+  logged in `player.log`.
 - The video surface is a WinUI `SwapChainPanel`, so the transport chrome is
   regular XAML (it stays native, themeable, and keyboard accessible).
 - The native libvlc binaries add roughly 150–200 MB and libmpv adds roughly

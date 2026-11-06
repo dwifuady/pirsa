@@ -170,9 +170,9 @@ Everything Pirsa does, in detail. For install and build steps see
   is used even when the source picker is normally shown. Turning this off keeps
   the Up next card, so episodes can still be skipped by hand.
 - **Video engine** — Settings → Playback → **Video engine** selects
-  **Automatic** or a registered backend. The choice is saved locally and
-  applied the next time the player opens. An engine this build does not ship
-  falls back to the default.
+  **Automatic**, **libVLC** or **mpv**. Automatic uses mpv when it is available
+  and falls back to libVLC; picking libVLC explicitly overrides that. The
+  choice is saved locally and applied the next time the player opens.
 - Playback engine details, source discovery, caching and diagnostics are in
   [PLAYER.md](PLAYER.md).
 

@@ -636,7 +636,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Automatic uses the default backend. Additional engines appear here when the app ships more than one."
+                                Text="Automatic uses mpv when it is available, otherwise libVLC. Pick an engine only if you want to override that."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -784,7 +784,7 @@
                             <TextBlock
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="Video engine: selectable above; libVLC 3.0.24 and mpv 0.41.0 (both LGPL-2.1) are installed. Defaults: Cinemeta + OpenSubtitles v3."
+                                Text="Video engine: mpv 0.41.0 by default, with libVLC 3.0.24 as the alternative (both LGPL-2.1). Defaults: Cinemeta + OpenSubtitles v3."
                                 TextWrapping="Wrap" />
                             <TextBlock
                                 FontSize="12"
