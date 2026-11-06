@@ -13,6 +13,7 @@ using Pirsa.Helpers;
 using Pirsa.Models;
 using Pirsa.Playback;
 using Pirsa.Services;
+using Pirsa.Services.Sync;
 using Pirsa.ViewModels;
 using Windows.Foundation;
 using Windows.System;
@@ -119,6 +120,7 @@ public sealed partial class PlayerPage : Page
     /// <summary>True when that mute had to go through libvlc instead of the session.</summary>
     private bool _pauseMuteViaVlc;
     private bool _ended;
+    private bool _stopReported;
     private bool _switching;
     private bool _errorVisible;
     private bool _sourcesFlyoutOpen;
@@ -1633,6 +1635,8 @@ public sealed partial class PlayerPage : Page
         _switching = false;
         _playing = true;
         _ended = false;
+        _stopReported = false;
+        ReportScrobble(PlaybackSignal.Started);
         _errorVisible = false;
 
         ClearStalePauseMute();
@@ -1696,6 +1700,7 @@ public sealed partial class PlayerPage : Page
         _stallTimer.Stop();
         HideBuffer();
         PersistProgress(_positionMs, _lengthMs);
+        ReportScrobble(PlaybackSignal.Paused);
         UpdatePlayPauseUi();
         ShowChrome();
         _chromeTimer.Stop();
@@ -1722,6 +1727,13 @@ public sealed partial class PlayerPage : Page
 
         PersistProgress(_positionMs, _lengthMs);
         ClearPlayingIntent();
+
+        if (!_ended && !_stopReported)
+        {
+            ReportScrobble(PlaybackSignal.Stopped);
+            _stopReported = true;
+        }
+
         _playing = false;
         _stallTimer.Stop();
         HideBuffer();
@@ -1752,6 +1764,8 @@ public sealed partial class PlayerPage : Page
         _stallTimer.Stop();
         _positionMs = _lengthMs > 0 ? _lengthMs : _positionMs;
         PersistProgress(_positionMs, _lengthMs, completed: true);
+        ReportScrobble(PlaybackSignal.Completed);
+        _stopReported = true;
 
         if (_nextEpisode is not null && !_upNextDismissed && App.Settings.AutoAdvance)
         {
@@ -1843,6 +1857,54 @@ public sealed partial class PlayerPage : Page
         {
             // History is best effort.
         }
+    }
+
+    /// <summary>
+    /// Sends a real-time playback event to every connected scrobbler. The
+    /// engine coalesces and rate-limits the calls; playback never waits.
+    /// </summary>
+    private void ReportScrobble(PlaybackSignal signal)
+    {
+        if (_disposed || ViewModel.Request is not { } request)
+        {
+            return;
+        }
+
+        var imdbId = WatchProgressEntry.DeriveImdbId(request.Meta.Id)
+            ?? SyncKey.ImdbFrom(request.VideoId);
+
+        if (string.IsNullOrWhiteSpace(imdbId))
+        {
+            return;
+        }
+
+        var duration = _lengthMs > 0 ? _lengthMs : _engine.DurationMs;
+        var position = _positionMs > 0 ? _positionMs : _engine.PositionMs;
+
+        if (duration <= 0 &&
+            signal is PlaybackSignal.Paused or PlaybackSignal.Stopped or PlaybackSignal.Completed)
+        {
+            return;
+        }
+
+        var progress = duration > 0
+            ? Math.Clamp(position * 100.0 / duration, 0, 100)
+            : 0;
+
+        var isSeries = request.Season > 0 && request.Episode > 0;
+
+        App.Sync.ReportPlayback(
+            signal,
+            new PlaybackSnapshot(
+                imdbId,
+                isSeries ? SyncMediaKind.Series : SyncMediaKind.Movie,
+                isSeries ? request.Season : null,
+                isSeries ? request.Episode : null,
+                progress,
+                request.Title,
+                request.Meta.Poster,
+                request.Type,
+                request.EpisodeTitle));
     }
 
     private static PlaybackSourceInfo? ToSourceInfo(PlaybackSource? source) =>
@@ -3834,6 +3896,12 @@ public sealed partial class PlayerPage : Page
         if (!_ended)
         {
             PersistProgress(_positionMs, _lengthMs);
+
+            if (!_stopReported)
+            {
+                ReportScrobble(PlaybackSignal.Stopped);
+                _stopReported = true;
+            }
         }
 
         _disposed = true;

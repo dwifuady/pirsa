@@ -18,6 +18,9 @@ public sealed class SyncEngine
     private readonly WatchlistStore _watchlist;
     private readonly SyncStateStore _stateStore = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _scrobbleGate = new(1, 1);
+    private readonly Dictionary<string, ScrobbleMark> _lastScrobbles =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ISyncSession> _sessions =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -183,6 +186,70 @@ public sealed class SyncEngine
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Reports a player event to every connected scrobbler. Deliberately
+    /// fire-and-forget: a slow or failing provider must never stall playback.
+    /// </summary>
+    public void ReportPlayback(PlaybackSignal signal, PlaybackSnapshot snapshot)
+    {
+        if (Connections.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var key = SyncKey.For(snapshot.ImdbId, snapshot.Kind, snapshot.Season, snapshot.Episode);
+
+        foreach (var connection in Connections.ToList())
+        {
+            var provider = SyncProviders.Find(connection.ProviderId);
+            if (provider is null ||
+                !provider.Descriptor.Capabilities.HasFlag(SyncCapabilities.Scrobble) ||
+                !_sessions.ContainsKey(connection.ProviderId))
+            {
+                continue;
+            }
+
+            // The player can report the same stop twice (VLC event, then page
+            // teardown). Simkl's 20-second lock turns that into a wasted retry.
+            if (_lastScrobbles.TryGetValue(connection.ProviderId, out var last) &&
+                last.Signal == signal &&
+                last.Key.Equals(key, StringComparison.OrdinalIgnoreCase) &&
+                now - last.At < TimeSpan.FromSeconds(15))
+            {
+                continue;
+            }
+
+            _lastScrobbles[connection.ProviderId] = new ScrobbleMark(signal, key, now);
+            _ = ScrobbleAsync(connection.ProviderId, signal, snapshot);
+        }
+    }
+
+    private async Task ScrobbleAsync(
+        string providerId,
+        PlaybackSignal signal,
+        PlaybackSnapshot snapshot)
+    {
+        // One scrobble at a time: Simkl's lock makes parallel writes useless.
+        await _scrobbleGate.WaitAsync();
+        try
+        {
+            if (_sessions.TryGetValue(providerId, out var session))
+            {
+                await session.ScrobbleAsync(signal, snapshot, CancellationToken.None);
+            }
+        }
+        catch
+        {
+            // Playback is never interrupted by a tracking failure. The next
+            // sync still carries watched state and the watchlist.
+        }
+        finally
+        {
+            _scrobbleGate.Release();
+        }
     }
 
     public async Task<SyncResult> SyncNowAsync(CancellationToken cancellationToken = default)
@@ -619,6 +686,11 @@ public sealed class SyncEngine
         {
         }
     }
+
+    private readonly record struct ScrobbleMark(
+        PlaybackSignal Signal,
+        string Key,
+        DateTimeOffset At);
 
     private static bool IsSeriesType(string? type) =>
         type is not null &&

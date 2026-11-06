@@ -253,7 +253,7 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Watched titles and your watchlist, with the time each was changed so two devices can agree. Simkl also pulls paused playback from your other clients; a pause played here is not pushed yet. Remembered sources and your addons stay on this device. Titles without an IMDb id are skipped. Each service only receives ids, titles and timestamps — never a stream URL or an addon token."
+                        Text="Watched titles and your watchlist, with the time each was changed so two devices can agree. Simkl also keeps Continue watching in step both ways, including scrobbles from the player. Remembered sources and your addons stay on this device. Titles without an IMDb id are skipped. Each service only receives ids, titles and timestamps — never a stream URL or an addon token."
                         TextWrapping="Wrap" />
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -215,6 +215,13 @@ internal sealed class WebDavSyncSession : ISyncSession
         }
     }
 
+    /// <summary>WebDAV has no scrobble endpoint; resume push is a later slice.</summary>
+    public Task ScrobbleAsync(
+        PlaybackSignal signal,
+        PlaybackSnapshot snapshot,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
     public ValueTask DisposeAsync()
     {
         _http.Dispose();

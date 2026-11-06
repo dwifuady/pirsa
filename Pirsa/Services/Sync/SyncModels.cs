@@ -166,6 +166,30 @@ public sealed record SyncAuthPrompt(
     string? CompleteUrl,
     TimeSpan ExpiresIn);
 
+/// <summary>A player event worth sending to a scrobble provider.</summary>
+public enum PlaybackSignal
+{
+    Started,
+    Paused,
+    Stopped,
+    Completed,
+}
+
+/// <summary>
+/// The player's current item and progress in the shape every scrobble
+/// provider understands. <see cref="Progress"/> is 0-100.
+/// </summary>
+public sealed record PlaybackSnapshot(
+    string ImdbId,
+    SyncMediaKind Kind,
+    int? Season,
+    int? Episode,
+    double Progress,
+    string? Name = null,
+    string? Poster = null,
+    string? Type = null,
+    string? EpisodeTitle = null);
+
 public sealed record SyncResult(bool Success, string Message)
 {
     public static SyncResult Ok(string message) => new(true, message);

@@ -10,10 +10,12 @@ For the user-facing controls see [FEATURES.md](FEATURES.md#sync).
 - **Watchlist** — the saved titles and when they were added.
 - **Unwatched / removed** — a timestamped tombstone, so the next pull cannot
   resurrect something you removed on another device.
+- **Resume positions** — with Simkl: pulled from paused playbacks, and pushed
+  from the player's start, pause, stop and completion events.
 
-Resume positions are **pull-only** for Simkl today: a pause saved by another
-client shows up in Continue watching, but a pause played here is not pushed
-yet. The push half is the scrobble lifecycle and is the next slice.
+Resume positions sync with Simkl both ways: a pause saved by another client
+shows up in Continue watching, and playback here is reported through the
+scrobble lifecycle so another client can resume it.
 
 It does **not** sync:
 
@@ -77,11 +79,25 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
   watched — a remote pause never clears the mark.
 - **Playback retention is per plan:** Simkl keeps paused sessions for 7 days on
   Free, 30 on PRO and 90 on VIP. An old pause simply stops being returned.
-- **Not synced yet:** pushing resume positions (the scrobble lifecycle), anime
-  catalogs (Simkl numbers anime by AniDB/absolute episodes, which does not map
-  cleanly onto Stremio/Cinemeta season numbers), ratings and scrobbling. Remote
-  un-watches and remote removals are not detected by a delta; Simkl only reports
-  those as a timestamp, not as rows.
+- **Push uses scrobble, not history.** The player reports four moments:
+  - `Started` when playback begins or resumes → `POST /scrobble/start`
+  - `Paused` → `POST /scrobble/pause`
+  - `Stopped` when leaving the player → `POST /scrobble/stop`
+  - `Completed` at the end → `POST /scrobble/stop` with 100%
+
+  A stop at or above 80% marks the item watched; below it saves a resume point.
+  This is separate from manual "mark watched", which still uses
+  `/sync/history`; the two duplicate each other safely.
+- **The 20-second lock is respected.** Simkl rejects any second scrobble write
+  for a user within 20 seconds with `400 RATE_LIMIT`. The engine serialises
+  scrobbles and retries once after 21 seconds, so a pause followed by leaving
+  the player still lands. A `409` on stop means the watch was already recorded
+  within the hour and is treated as success. The player never waits for any of
+  this; a failing scrobbler is silent and never interrupts playback.
+- **Not synced yet:** anime catalogs (Simkl numbers anime by AniDB/absolute
+  episodes, which does not map cleanly onto Stremio/Cinemeta season numbers) and
+  ratings. Remote un-watches and remote removals are not detected by a delta;
+  Simkl only reports those as a timestamp, not as rows.
 
 ## Merge rules
 

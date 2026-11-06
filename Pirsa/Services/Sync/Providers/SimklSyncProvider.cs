@@ -33,7 +33,8 @@ public sealed class SimklSyncProvider : ISyncProvider
         Name: "Simkl",
         Description: "Keep watched history and Plan to Watch in step with your Simkl account.",
         Coverage: "Movies · Series",
-        Capabilities: SyncCapabilities.Watched | SyncCapabilities.Watchlist | SyncCapabilities.Resume,
+        Capabilities: SyncCapabilities.Watched | SyncCapabilities.Watchlist |
+                      SyncCapabilities.Resume | SyncCapabilities.Scrobble,
         AuthKind: SyncAuthKind.OAuthDevice,
         ConnectLabel: "Connect Simkl",
         Hint: "Pirsa opens simkl.com/pin with a short code. You approve it there; your Simkl password is never shared.",
@@ -488,6 +489,85 @@ internal sealed class SimklSyncSession : ISyncSession
                 ? _cursor?.PushedThrough
                 : pushedThrough,
         };
+    }
+
+    /// <summary>
+    /// Posts one playback event. Simkl puts a 20-second per-user lock on
+    /// scrobble writes, so a colliding call is retried once after the lock
+    /// window instead of being dropped. A 409 on stop means the watch was
+    /// already recorded within the last hour, which is success for us.
+    /// </summary>
+    public async Task ScrobbleAsync(
+        PlaybackSignal signal,
+        PlaybackSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        var action = signal switch
+        {
+            PlaybackSignal.Started => "start",
+            PlaybackSignal.Paused => "pause",
+            _ => "stop",
+        };
+
+        var progress = Math.Round(
+            Math.Clamp(snapshot.Progress, 0, 100),
+            2,
+            MidpointRounding.AwayFromZero);
+
+        var hasEpisode = snapshot.Kind == SyncMediaKind.Series &&
+                         snapshot.Season is > 0 &&
+                         snapshot.Episode is > 0;
+
+        object body = hasEpisode
+            ? new
+            {
+                progress,
+                show = new { ids = new { imdb = snapshot.ImdbId } },
+                episode = new
+                {
+                    season = snapshot.Season!.Value,
+                    number = snapshot.Episode!.Value,
+                },
+            }
+            : new
+            {
+                progress,
+                movie = new { ids = new { imdb = snapshot.ImdbId } },
+            };
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var (status, responseBody) = await SendAsync(
+                HttpMethod.Post,
+                $"/scrobble/{action}",
+                content: () => JsonContent(body),
+                authorize: true,
+                cancellationToken);
+
+            if (SimklSyncProvider.IsSuccess(status))
+            {
+                return;
+            }
+
+            // Already finalized in the last hour; the watch is recorded.
+            if (status == HttpStatusCode.Conflict && action == "stop")
+            {
+                return;
+            }
+
+            if (status == HttpStatusCode.BadRequest &&
+                responseBody.Contains("RATE_LIMIT", StringComparison.Ordinal) &&
+                attempt == 0)
+            {
+                // The lock is per user, not per item. Wait it out, then send
+                // the newest event once more.
+                await Task.Delay(TimeSpan.FromSeconds(21), cancellationToken);
+                continue;
+            }
+
+            throw new StremioException(
+                DescribeFailure(status, responseBody, $"report a playback {action}"));
+        }
     }
 
     public ValueTask DisposeAsync()

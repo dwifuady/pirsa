@@ -73,6 +73,15 @@ public interface ISyncSession : IAsyncDisposable
         RemoteSnapshot remote,
         SyncSnapshot local,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports a real-time playback event. Only providers with
+    /// <see cref="SyncCapabilities.Scrobble"/> receive this.
+    /// </summary>
+    Task ScrobbleAsync(
+        PlaybackSignal signal,
+        PlaybackSnapshot snapshot,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>The providers this build knows about. Order is the Settings order.</summary>
