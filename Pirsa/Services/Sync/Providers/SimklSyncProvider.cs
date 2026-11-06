@@ -16,11 +16,12 @@ namespace Pirsa.Services.Sync.Providers;
 public sealed class SimklSyncProvider : ISyncProvider
 {
     /// <summary>
-    /// Register at https://simkl.com/settings/developer/ and paste the client
-    /// id here. Client ids are public; there is no secret to ship.
-    /// Empty means the connect form asks for one.
+    /// Pirsa's AUTH V2 registration, created at
+    /// https://simkl.com/settings/developer/. Client ids are public; there is
+    /// no secret to ship. Empty would make the connect form ask for one, which
+    /// is only useful for a fork without its own registration.
     /// </summary>
-    internal const string BuiltInClientId = "";
+    internal const string BuiltInClientId = "b00b361f6abd04f511a3221aca07886d2b5fdc05e8e3663ce0456a0b87f0d344";
 
     internal const string AppName = "pirsa";
 

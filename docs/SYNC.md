@@ -48,9 +48,10 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
   than a day from expiry, or once after a `401`. The refresh token lasts 180
   days and slides forward on use. Refreshed tokens replace the encrypted
   credential file; the user does not re-authorize.
-- **Client id:** client ids are public and safe to commit. `BuiltInClientId` in
-  `SimklSyncProvider` is the project registration. While it is empty, Settings
-  asks for a client id from `simkl.com/settings/developer`.
+- **Client id:** client ids are public and safe to commit. Pirsa ships the
+  project registration in `SimklSyncProvider.BuiltInClientId`, so users never
+  see or paste one. A fork without its own registration can clear the constant,
+  and Settings will ask for a client id from `simkl.com/settings/developer`.
 - **Pull** follows Simkl's two-phase model: `/sync/activities` is read first,
   and `/sync/all-items` is only called when the top-level `all` timestamp moved.
   The first sync pulls the full library; later syncs send `date_from` and read
