@@ -53,6 +53,7 @@ public sealed partial class SettingsPage : Page
         QualityPanel.Visibility = ViewModel.AutoplayEnabled
             ? Visibility.Visible
             : Visibility.Collapsed;
+        UpdateSkipOptionsVisibility();
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -64,6 +65,16 @@ public sealed partial class SettingsPage : Page
     private void AutoplayToggle_Toggled(object sender, RoutedEventArgs e)
     {
         QualityPanel.Visibility = AutoplayToggle.IsOn
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void SkipSegmentsToggle_Toggled(object sender, RoutedEventArgs e) =>
+        UpdateSkipOptionsVisibility();
+
+    private void UpdateSkipOptionsVisibility()
+    {
+        SkipOptionsPanel.Visibility = SkipSegmentsToggle.IsOn
             ? Visibility.Visible
             : Visibility.Collapsed;
     }

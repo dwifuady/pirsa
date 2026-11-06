@@ -50,6 +50,12 @@ public interface IPlaybackEngine : IDisposable
 
     long DurationMs { get; }
 
+    /// <summary>
+    /// Chapters declared by the container, sorted by start time. Empty when the
+    /// engine or the file has none. The list is stable for one media.
+    /// </summary>
+    IReadOnlyList<PlaybackChapter> Chapters { get; }
+
     IReadOnlyList<PlaybackTrack> AudioTracks { get; }
 
     IReadOnlyList<PlaybackTrack> SubtitleTracks { get; }

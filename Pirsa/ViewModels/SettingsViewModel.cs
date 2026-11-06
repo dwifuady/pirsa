@@ -162,6 +162,19 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool AutoAdvanceEnabled { get; set; }
 
+    /// <summary>When true, the player shows a skip button for intro/recap/outro.</summary>
+    [ObservableProperty]
+    public partial bool SkipSegmentsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoSkipIntroEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoSkipRecapEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoSkipOutroEnabled { get; set; }
+
     /// <summary>0 = best, 1 = 4K, 2 = 1440p, 3 = 1080p, 4 = 720p, 5 = 480p.</summary>
     [ObservableProperty]
     public partial int QualityIndex { get; set; }
@@ -296,6 +309,10 @@ public partial class SettingsViewModel : ObservableObject
             _loadingSettings = true;
             AutoplayEnabled = _settings.Autoplay;
             AutoAdvanceEnabled = _settings.AutoAdvance;
+            SkipSegmentsEnabled = _settings.SkipSegmentsEnabled;
+            AutoSkipIntroEnabled = _settings.AutoSkipIntro;
+            AutoSkipRecapEnabled = _settings.AutoSkipRecap;
+            AutoSkipOutroEnabled = _settings.AutoSkipOutro;
             SelectedPlaybackEngine = ResolvePlaybackEngine(_settings.PlaybackEngine);
             SelectedSubtitleLanguage = ResolveSubtitleLanguage(_settings.PreferredSubtitleLanguage);
             var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
@@ -521,6 +538,42 @@ public partial class SettingsViewModel : ObservableObject
         if (!_loadingSettings)
         {
             _settings.AutoAdvance = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnSkipSegmentsEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.SkipSegmentsEnabled = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoSkipIntroEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoSkipIntro = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoSkipRecapEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoSkipRecap = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoSkipOutroEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoSkipOutro = value;
             _ = _settings.SaveAsync();
         }
     }

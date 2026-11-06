@@ -31,6 +31,13 @@ public sealed record PlaybackMedia(
     IReadOnlyDictionary<string, string>? Headers = null);
 
 /// <summary>
+/// A chapter the playing file declares. Titles often name an opening, ending or
+/// recap, which is how skip segments are found for releases the community
+/// database does not know.
+/// </summary>
+public sealed record PlaybackChapter(long StartMs, string? Title);
+
+/// <summary>
 /// An engine-neutral audio or subtitle track. Ids belong to the current engine
 /// session only; they are never persisted.
 /// </summary>

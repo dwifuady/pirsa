@@ -22,6 +22,21 @@ public sealed class AppSettings
     public bool AutoAdvance { get; set; } = true;
 
     /// <summary>
+    /// When true, the player looks up intro, recap and outro segments and shows
+    /// a skip button while one is playing.
+    /// </summary>
+    public bool SkipSegmentsEnabled { get; set; } = true;
+
+    /// <summary>Seek past a detected opening without waiting for a press.</summary>
+    public bool AutoSkipIntro { get; set; }
+
+    /// <summary>Seek past a "previously on…" recap without waiting for a press.</summary>
+    public bool AutoSkipRecap { get; set; }
+
+    /// <summary>Seek past an episode ending or a film's end credits.</summary>
+    public bool AutoSkipOutro { get; set; }
+
+    /// <summary>
     /// Playback backend id, or empty for Automatic (mpv when available, then
     /// libVLC). Resolved through <see cref="Pirsa.Playback.PlaybackEngines"/> so
     /// an unavailable choice falls back cleanly.
@@ -63,6 +78,10 @@ public sealed class AppSettings
                         Autoplay = record.Autoplay;
                         PreferredQuality = record.PreferredQuality ?? "";
                         AutoAdvance = record.AutoAdvance;
+                        SkipSegmentsEnabled = record.SkipSegmentsEnabled;
+                        AutoSkipIntro = record.AutoSkipIntro;
+                        AutoSkipRecap = record.AutoSkipRecap;
+                        AutoSkipOutro = record.AutoSkipOutro;
                         PlaybackEngine = record.PlaybackEngine ?? "";
                         PreferredSubtitleLanguage = record.PreferredSubtitleLanguage ?? "";
                     }
@@ -98,6 +117,10 @@ public sealed class AppSettings
                 Autoplay = Autoplay,
                 PreferredQuality = PreferredQuality ?? "",
                 AutoAdvance = AutoAdvance,
+                SkipSegmentsEnabled = SkipSegmentsEnabled,
+                AutoSkipIntro = AutoSkipIntro,
+                AutoSkipRecap = AutoSkipRecap,
+                AutoSkipOutro = AutoSkipOutro,
                 PlaybackEngine = PlaybackEngine ?? "",
                 PreferredSubtitleLanguage = PreferredSubtitleLanguage ?? "",
             };
@@ -135,6 +158,14 @@ public sealed class AppSettings
         public string PreferredQuality { get; set; } = "";
 
         public bool AutoAdvance { get; set; } = true;
+
+        public bool SkipSegmentsEnabled { get; set; } = true;
+
+        public bool AutoSkipIntro { get; set; }
+
+        public bool AutoSkipRecap { get; set; }
+
+        public bool AutoSkipOutro { get; set; }
 
         public string PlaybackEngine { get; set; } = "";
 

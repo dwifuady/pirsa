@@ -99,6 +99,8 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         ? (long)Math.Round(seconds * 1000)
         : 0;
 
+    public IReadOnlyList<PlaybackChapter> Chapters => ReadChapterList();
+
     public IReadOnlyList<PlaybackTrack> AudioTracks
     {
         get
@@ -1109,6 +1111,72 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         }
     }
 
+    // ---------------------------------------------------------------- chapters
+
+    private unsafe IReadOnlyList<PlaybackChapter> ReadChapterList()
+    {
+        if (_handle == IntPtr.Zero)
+        {
+            return [];
+        }
+
+        var nodeSize = Marshal.SizeOf<MpvNode>();
+        var memory = Marshal.AllocHGlobal(nodeSize);
+
+        try
+        {
+            // mpv_free_node_contents must not see stale memory when the read
+            // below fails before writing a node.
+            for (var offset = 0; offset < nodeSize; offset++)
+            {
+                Marshal.WriteByte(memory, offset, 0);
+            }
+
+            if (LibMpv.mpv_get_property(_handle, "chapter-list", MpvFormat.Node, (void*)memory) < 0)
+            {
+                return [];
+            }
+
+            var node = Marshal.PtrToStructure<MpvNode>(memory);
+            if (node.Format != MpvFormat.NodeArray || node.U.List == IntPtr.Zero)
+            {
+                return [];
+            }
+
+            var list = Marshal.PtrToStructure<MpvNodeList>(node.U.List);
+            var chapters = new List<PlaybackChapter>(Math.Max(0, list.Num));
+
+            for (var index = 0; index < list.Num; index++)
+            {
+                var item = Marshal.PtrToStructure<MpvNode>(
+                    IntPtr.Add(list.Values, index * nodeSize));
+
+                if (item.Format != MpvFormat.NodeMap ||
+                    MapDouble(item, "time") is not { } seconds ||
+                    !double.IsFinite(seconds) ||
+                    seconds < 0)
+                {
+                    continue;
+                }
+
+                chapters.Add(new PlaybackChapter(
+                    (long)Math.Round(seconds * 1000),
+                    MapString(item, "title")));
+            }
+
+            return chapters.OrderBy(chapter => chapter.StartMs).ToList();
+        }
+        catch
+        {
+            return [];
+        }
+        finally
+        {
+            LibMpv.mpv_free_node_contents(memory);
+            Marshal.FreeHGlobal(memory);
+        }
+    }
+
     private static string DisplayName(TrackInfo track)
     {
         var language = string.IsNullOrWhiteSpace(track.Language)
@@ -1199,6 +1267,21 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         TryGetMapValue(map, key, out var value) &&
         value.Format == MpvFormat.Flag &&
         value.U.Flag != 0;
+
+    private static double? MapDouble(MpvNode map, string key)
+    {
+        if (!TryGetMapValue(map, key, out var value))
+        {
+            return null;
+        }
+
+        return value.Format switch
+        {
+            MpvFormat.Double => value.U.Double,
+            MpvFormat.Int64 => value.U.Int64,
+            _ => null,
+        };
+    }
 
     private static string ErrorString(int error)
     {

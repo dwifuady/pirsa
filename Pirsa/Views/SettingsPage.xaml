@@ -675,6 +675,57 @@
                         BorderBrush="{ThemeResource CardStrokeBrush}"
                         BorderThickness="1"
                         CornerRadius="12">
+                        <StackPanel Spacing="12">
+                            <ToggleSwitch
+                                x:Name="SkipSegmentsToggle"
+                                Header="Skip intro and outro"
+                                IsOn="{x:Bind ViewModel.SkipSegmentsEnabled, Mode=TwoWay}"
+                                OffContent="Off"
+                                OnContent="On"
+                                Toggled="SkipSegmentsToggle_Toggled" />
+
+                            <TextBlock
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Shows a Skip button while an intro, recap or outro is playing. Timestamps come from IntroDB, addressed by IMDb id, and from chapters named in the file itself."
+                                TextWrapping="Wrap" />
+
+                            <StackPanel
+                                x:Name="SkipOptionsPanel"
+                                Spacing="8">
+                                <ToggleSwitch
+                                    Header="Skip intros automatically"
+                                    IsOn="{x:Bind ViewModel.AutoSkipIntroEnabled, Mode=TwoWay}"
+                                    OffContent="Off"
+                                    OnContent="On" />
+
+                                <ToggleSwitch
+                                    Header="Skip recaps automatically"
+                                    IsOn="{x:Bind ViewModel.AutoSkipRecapEnabled, Mode=TwoWay}"
+                                    OffContent="Off"
+                                    OnContent="On" />
+
+                                <ToggleSwitch
+                                    Header="Skip outros and credits automatically"
+                                    IsOn="{x:Bind ViewModel.AutoSkipOutroEnabled, Mode=TwoWay}"
+                                    OffContent="Off"
+                                    OnContent="On" />
+
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Auto-skip jumps ahead as soon as a segment starts. With it off, the Skip button stays available for ten seconds, then reappears whenever the controls are shown."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
                         <StackPanel Spacing="8">
                             <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Video engine" />
                             <ComboBox

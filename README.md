@@ -27,7 +27,8 @@ Indonesian *memirsa* ("to watch") and *pemirsa* ("viewer, audience").
   browsing.
 - **Native player** — mpv by default, with libVLC selectable as the alternative, and custom Windows 11-style controls, embedded
   and addon subtitles with live timing, audio tracks, speed, fullscreen,
-  autoplay, auto-advance and source switching.
+  autoplay, auto-advance and source switching, plus skip intro/outro buttons
+  backed by chapter names and IntroDB timestamps.
 - **Addon manager** — add, enable, disable, reorder and remove Stremio addons.
   Cinemeta and OpenSubtitles v3 are included; no stream addon ships by default.
 - **Sync** — mirror watched state and the watchlist across devices with Simkl,

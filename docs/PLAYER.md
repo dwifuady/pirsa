@@ -157,6 +157,30 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
   in the log. It is the same order VLC picks on its own (mmdevice 150,
   directsound 100, waveout 50), so this only removes the guesswork.
 
+## Skip segments
+
+- Two sources feed the skip button. The engine exposes container chapters
+  (`chapter-list` in mpv, `FullChapterDescriptions` in libVLC); titles that name
+  an Opening, Ending, "End credits", Recap, "Previously on…" or post-credits
+  scene become segments. Separately, `Services/SkipSegmentsService.cs` asks
+  IntroDB for the title's intro, recap, outro and post-credits timestamps, using
+  the IMDb id inside the Stremio meta or video id.
+- Chapters describe the exact release, so they win per category (opening,
+  recap, ending); IntroDB fills gaps. For films IntroDB wins when it has data
+  because it also knows about post-credits scenes.
+- The overlay shows **Skip intro**, **Skip recap**, **Skip outro**,
+  **Skip credits**, or **Skip to post-credits** when end credits lead into a
+  scene. It hides after ten seconds, returns with the controls, and stays hidden
+  once pressed until the next kind of segment starts.
+- Auto-skip is per kind (Settings → Playback). It only seeks while playing, not
+  during a scrub, and marks a segment as handled before the seek lands. Manual
+  seeks mark whichever segments they land in, so rewinding into an intro to
+  watch it does not immediately skip out again.
+- A target is clamped to the file and never moves backwards. Outro and credits
+  stop at the following post-credits scene when the provider reports one.
+- Results are cached in memory for six hours (ten minutes for a miss). Lookups
+  run alongside source discovery and never delay playback.
+
 ## Diagnostics
 
 `player.log` in the data root records:
