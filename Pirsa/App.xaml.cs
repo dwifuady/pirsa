@@ -47,6 +47,9 @@ public partial class App : Application
     /// <summary>Submitted search queries, persisted in search-history.json.</summary>
     public static SearchHistoryStore SearchHistory { get; } = new();
 
+    /// <summary>Watched-state and watchlist sync across every connected provider.</summary>
+    public static SyncEngine Sync { get; } = new(WatchProgress, Watchlist);
+
     /// <summary>Per-title subtitle timing, persisted in subtitle-offsets.json.</summary>
     public static SubtitleOffsetStore SubtitleOffsets { get; } = new();
 
@@ -101,6 +104,7 @@ public partial class App : Application
         _ = SearchHistory.EnsureLoadedAsync();
         _ = SubtitleOffsets.EnsureLoadedAsync();
         _ = SubtitleChoices.EnsureLoadedAsync();
+        _ = Sync.StartAsync();
         _ = WarmUpPlaybackAsync();
     }
 

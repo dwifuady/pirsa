@@ -38,7 +38,8 @@ Everything Pirsa does, in detail. For install and build steps see
 - Settings → Playback → **Watch history** shows how many positions are stored
   and clears them all, including remembered sources and subtitle timing.
 - The history holds at most 500 entries; the oldest are dropped.
-- History is per device; there is no sync between machines.
+- History is local by default; connecting a sync provider mirrors watched state
+  and the watchlist to another device (see [Sync](#sync)).
 
 ### Instant resume
 
@@ -238,6 +239,49 @@ Everything Pirsa does, in detail. For install and build steps see
   Addons. Packaged builds register it through the app package, and the installer
   registers it per user.
 
+## Sync
+
+- **Settings → Sync** connects one or more watched-state providers. Each one is
+  an independent mirror; a failure in one never blocks another.
+- **Simkl** connects through its AUTH V2 device flow: Pirsa shows a short code,
+  you approve it at `simkl.com/pin`, and watched history, Plan to Watch and
+  paused playbacks start syncing. Your Simkl password is never shared, and the
+  connection refreshes on its own.
+- **Continue watching travels both ways with Simkl** — a pause saved by Plex, a
+  media-server plugin or another Simkl client appears in Pirsa's Continue
+  watching with its progress, and a pause played in Pirsa is reported back so
+  another client can resume it. Dismissing a card, or marking the title watched,
+  removes the paused playback on Simkl too. Simkl keeps paused sessions for
+  7 days on Free, 30 on PRO and 90 on VIP.
+- **Scrobbling** — play, pause, leaving the player and finishing are reported to
+  Simkl. A stop at or above 80% marks the title watched there; below it saves the
+  resume point. Reporting is silent on failure and never delays playback.
+- **MDBList** connects with a personal API key from `mdblist.com/preferences`.
+  Watched history, the watchlist, paused playback and scrobbles sync both ways,
+  with no app registration.
+- **WebDAV** is available too: give Pirsa a folder URL, user name and app
+  password (Nextcloud, ownCloud, Box or any other WebDAV host). Pirsa keeps one
+  small `pirsa-sync.json` document in that folder.
+- Watching a title, marking it watched or unwatched, and adding it to or
+  removing it from the watchlist are pushed a few seconds later. A change made
+  offline is pushed on the next launch, before that launch's pull is applied.
+- Each entry carries the time it changed, so two devices agree on the newer
+  fact. Removing a watched mark or a watchlist title is a timestamped fact too,
+  so it cannot be resurrected by the other device.
+- **Removing is not the same as never seeing it:** a local "clear history" or a
+  trimmed row does not delete anything on a provider, while marking a title
+  unwatched does, on every connected provider.
+- The Sync settings page shows the last sync time and the last error per
+  provider, with **Sync now** and **Disconnect**. Disconnecting deletes the
+  saved credentials and leaves both local history and the remote account
+  untouched.
+- Credentials are encrypted for the current Windows user and are never written
+  to `settings.json` or the player log.
+- Only titles with an IMDb id are synced. Live TV and custom id prefixes are
+  skipped because there is no portable key to match on.
+- Sync is off until a provider is connected, and it never sends stream URLs,
+  addon tokens or playback positions. See [SYNC.md](SYNC.md) for the design.
+
 ## Updates
 
 - Every launch of an installer or portable build checks the project's latest
@@ -260,7 +304,18 @@ Everything Pirsa does, in detail. For install and build steps see
 
 - Auto-advance stops at the end of the last known episode and does not know
   about unaired episodes.
-- Watch history is per device; there is no sync between machines.
+- Sync supports Simkl, MDBList and WebDAV. Trakt and AniList adapters are
+  planned; nothing else leaves the machine until you connect a provider.
+- MDBList's show-level and season-level watched rows are not imported, and its
+  watchlist has no per-item added date. Its pause marks a title watched at 80%,
+  earlier than Pirsa does.
+- Simkl anime catalogs are not synced yet: AniDB/absolute episode numbering does
+  not map cleanly onto Stremio/Cinemeta seasons. Simkl remote un-watches and
+  removals are not detected by a delta.
+- Resume positions and scrobbles are Simkl-only. WebDAV still carries watched
+  state and the watchlist.
+- Sync covers watched state and the watchlist only. Resume positions,
+  remembered sources and addons stay on this device.
 - A `stremio://` link opened while Pirsa is already running starts a second
   window instead of handing the link to the running one.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only

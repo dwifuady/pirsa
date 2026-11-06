@@ -161,6 +161,12 @@ public sealed class WatchlistStore
     /// <summary>Raised after the list changed and was persisted.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// Raised when the user removes a title or clears the list. Sync turns this
+    /// into a tombstone so another device's copy cannot bring it back.
+    /// </summary>
+    public event EventHandler<WatchlistEntry>? Removed;
+
     public int Count => Entries.Count;
 
     public Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
@@ -239,6 +245,7 @@ public sealed class WatchlistStore
         }
 
         Entries.Remove(entry);
+        Removed?.Invoke(this, entry);
         await SaveCoreAsync(cancellationToken);
         Changed?.Invoke(this, EventArgs.Empty);
         return true;
@@ -271,9 +278,95 @@ public sealed class WatchlistStore
             return;
         }
 
+        var removed = Entries.ToList();
         Entries.Clear();
+
+        foreach (var entry in removed)
+        {
+            Removed?.Invoke(this, entry);
+        }
+
         await SaveCoreAsync(cancellationToken);
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Adds or re-adds a title that came from a sync provider. Keeps the local
+    /// list newest-first and never removes a locally newer entry.
+    /// </summary>
+    public async Task<bool> ApplyRemoteAsync(
+        string metaId,
+        string type,
+        string? name,
+        string? poster,
+        DateTimeOffset addedAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(metaId))
+        {
+            return false;
+        }
+
+        await EnsureLoadedAsync(cancellationToken);
+
+        var existing = Find(metaId);
+        if (existing is not null)
+        {
+            // Providers without a watchlist timestamp send default. Keep the
+            // local date rather than replacing the row on every pull.
+            if (addedAt == default || existing.AddedAt >= addedAt)
+            {
+                return false;
+            }
+
+            Entries.Remove(existing);
+        }
+
+        var entry = new WatchlistEntry
+        {
+            MetaId = metaId,
+            Type = string.IsNullOrWhiteSpace(type) ? "movie" : type,
+            Name = string.IsNullOrWhiteSpace(name) ? metaId : name,
+            Poster = poster,
+            // Providers without a watchlist timestamp get the import time
+            // once. Later pulls keep the stored value, so it never churns.
+            AddedAt = addedAt == default ? DateTimeOffset.UtcNow : addedAt,
+        };
+
+        var index = 0;
+        while (index < Entries.Count && Entries[index].AddedAt > addedAt)
+        {
+            index++;
+        }
+
+        Entries.Insert(index, entry);
+
+        while (Entries.Count > MaxEntries)
+        {
+            Entries.RemoveAt(Entries.Count - 1);
+        }
+
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>Removes a title because another device removed it.</summary>
+    public async Task<bool> ApplyRemoteRemoveAsync(
+        string metaId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+
+        if (Find(metaId) is not { } entry)
+        {
+            return false;
+        }
+
+        Entries.Remove(entry);
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
     }
 
     private async Task LoadCoreAsync()

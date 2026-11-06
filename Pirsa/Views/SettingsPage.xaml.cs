@@ -19,7 +19,8 @@ public sealed partial class SettingsPage : Page
         App.Addons,
         App.Settings,
         App.WatchProgress,
-        App.SearchHistory);
+        App.SearchHistory,
+        App.Sync);
 
     public SettingsPage()
     {
@@ -90,6 +91,11 @@ public sealed partial class SettingsPage : Page
     private void HomeSettings_Click(object sender, RoutedEventArgs e)
     {
         Frame.Navigate(typeof(HomeSettingsPage));
+    }
+
+    private void SyncSettings_Click(object sender, RoutedEventArgs e)
+    {
+        Frame.Navigate(typeof(SyncSettingsPage));
     }
 
     private async void AddonEnabled_Toggled(object sender, RoutedEventArgs e)

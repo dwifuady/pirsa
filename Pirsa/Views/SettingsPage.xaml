@@ -542,6 +542,58 @@
                     </Border>
                 </StackPanel>
 
+                <!--  Sync  -->
+                <StackPanel Spacing="10">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <Border
+                            Width="4"
+                            Height="20"
+                            Background="{ThemeResource BrandPrimaryBrush}"
+                            CornerRadius="2" />
+                        <TextBlock
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="Sync" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.SyncSummary, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <Border
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="6">
+                                <TextBlock
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    Text="Watched state and watchlist" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Text="Keep watched titles and saved titles in step across devices with Simkl, MDBList or a WebDAV folder you control. Simkl and MDBList also keep Continue watching in step across your clients."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="Open sync settings"
+                                Click="SyncSettings_Click"
+                                Content="Manage" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
                 <!--  Playback  -->
                 <StackPanel Spacing="10">
 
