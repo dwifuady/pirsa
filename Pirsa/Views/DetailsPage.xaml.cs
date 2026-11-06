@@ -263,7 +263,7 @@ public sealed partial class DetailsPage : Page
         }
 
         return ViewModel.ResumeEntry is { } resume
-            ? resume.ToPlaybackRequest()
+            ? resume.ToPlaybackRequest(meta)
             : PlaybackRequest.ForMeta(meta, ViewModel.SelectedSeason?.Episodes.FirstOrDefault());
     }
 

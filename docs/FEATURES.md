@@ -125,10 +125,16 @@ Everything Pirsa does, in detail. For install and build steps see
   seek bar, 10-second skips, volume, speed, fullscreen, auto-hiding controls, a
   **source** picker next to the **CC** and **audio track** buttons.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
-  fullscreen, **M** mute, **E** opens the episode list, **Esc** exits fullscreen or
-  closes the source/subtitle/episode menus, **[** and **]** shift subtitle
-  timing, Enter activates a focused button. Arrow keys adjust volume when the
-  volume slider itself has focus.
+  fullscreen, **M** mute, **E** opens the episode list, **I** toggles the title
+  details card, **Esc** exits fullscreen or closes the
+  source/subtitle/episode menus, **[** and **]** shift subtitle timing, Enter
+  activates a focused button. Arrow keys adjust volume when the volume slider
+  itself has focus.
+- **Pause shows the details.** After a short pause, a card fades in over the
+  top-left of the picture with the logo or title, year, runtime, rating, genres,
+  and the plot (the episode's own synopsis for a series), then disappears on
+  resume. **Info** in the top bar or **I** shows or hides it at any time while
+  playing.
 - The source picker switches sources while keeping the current playback
   position.
 - The source picker is a menu in the transport bar, next to **CC**, audio and

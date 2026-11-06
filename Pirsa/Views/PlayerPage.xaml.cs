@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.Helpers;
@@ -81,6 +82,7 @@ public sealed partial class PlayerPage : Page
         App.WatchProgress);
     private readonly DispatcherTimer _chromeTimer;
     private readonly DispatcherTimer _stallTimer;
+    private readonly DispatcherTimer _infoTimer;
     private readonly Stopwatch _seekWatch = new();
     private bool _bufferingLogged;
     private bool _stallOverlayVisible;
@@ -125,6 +127,8 @@ public sealed partial class PlayerPage : Page
     private int _selectedAudioTrackId = -1;
     private bool _audioListDirty = true;
     private bool _chromeHidden = true;
+    private bool _infoPinned;
+    private bool _infoSuppressed;
     private int _appliedSubtitleLift = -1;
     private bool _keyboardActive;
     private bool _isFullScreen;
@@ -150,6 +154,7 @@ public sealed partial class PlayerPage : Page
     private readonly UISettings _uiSettings = new();
     private readonly AccessibilitySettings _accessibility = new();
     private Storyboard? _loadingBreath;
+    private Storyboard? _infoIn;
 
     public PlayerViewModel ViewModel => _viewModel;
 
@@ -158,6 +163,7 @@ public sealed partial class PlayerPage : Page
         InitializeComponent();
 
         ConfigureLoadingBreath();
+        ConfigureInfoAnimation();
 
         _chromeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _chromeTimer.Tick += (_, _) =>
@@ -168,6 +174,18 @@ public sealed partial class PlayerPage : Page
 
         _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _resumeHintTimer.Tick += (_, _) => HideResumeHint();
+
+        // A pause should last before the card covers the picture: a quick
+        // pause to read a subtitle or check the time shouldn't make it flash.
+        _infoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(550) };
+        _infoTimer.Tick += (_, _) =>
+        {
+            _infoTimer.Stop();
+            if (!_playing && !_switching && !_errorVisible)
+            {
+                ShowInfoCard();
+            }
+        };
 
         _subtitleHudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.4) };
         _subtitleHudTimer.Tick += (_, _) =>
@@ -278,6 +296,45 @@ public sealed partial class PlayerPage : Page
         LoadingBrand.Opacity = 1;
     }
 
+    /// <summary>
+    /// Fade-and-rise for the pause card. Built here rather than in
+    /// Page.Resources because the storyboard targets the panel's own
+    /// CompositeTransform, which a resource dictionary cannot resolve.
+    /// </summary>
+    private void ConfigureInfoAnimation()
+    {
+        if (InfoPanel.RenderTransform is not CompositeTransform transform)
+        {
+            return;
+        }
+
+        var storyboard = new Storyboard();
+
+        var fade = new DoubleAnimation
+        {
+            From = 0,
+            To = 1,
+            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(fade, InfoPanel);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+        storyboard.Children.Add(fade);
+
+        var rise = new DoubleAnimation
+        {
+            From = 12,
+            To = 0,
+            Duration = new Duration(TimeSpan.FromMilliseconds(260)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        Storyboard.SetTarget(rise, transform);
+        Storyboard.SetTargetProperty(rise, "TranslateY");
+        storyboard.Children.Add(rise);
+
+        _infoIn = storyboard;
+    }
+
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -309,6 +366,7 @@ public sealed partial class PlayerPage : Page
         UpdateSubtitleTimingUi();
         ResumePanel.Visibility = Visibility.Collapsed;
         HideUpNext();
+        ResetInfoCard();
         _upNextDismissed = false;
         ViewModel.NextEpisode = null;
         ViewModel.ClearSeries();
@@ -869,6 +927,7 @@ public sealed partial class PlayerPage : Page
         if (!IsEpisodic(request))
         {
             ViewModel.ClearSeries();
+            _ = EnrichDisplayMetaAsync(request, cancellationToken);
             return;
         }
 
@@ -877,7 +936,7 @@ public sealed partial class PlayerPage : Page
             var meta = request.Meta;
             if (meta.Videos is not { Count: > 1 })
             {
-                meta = await FetchSeriesMetaAsync(meta, cancellationToken) ?? meta;
+                meta = await FetchMetaAsync(request.Type, meta, needsEpisodes: true, cancellationToken) ?? meta;
             }
 
             if (cancellationToken.IsCancellationRequested || _disposed)
@@ -886,6 +945,7 @@ public sealed partial class PlayerPage : Page
             }
 
             _seriesMeta = meta;
+            ViewModel.SetDisplayMeta(meta);
             await ViewModel.SetSeriesAsync(meta, request, cancellationToken);
             if (cancellationToken.IsCancellationRequested || _disposed)
             {
@@ -906,12 +966,42 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private async Task<MetaItem?> FetchSeriesMetaAsync(
-        MetaItem meta,
+    /// <summary>
+    /// A movie or live channel opened from Continue watching or a catalog
+    /// carries only the stub meta (name, poster, type). Resolve the plot,
+    /// genres and year in the background so the pause card has something to
+    /// say; the details page path already comes in complete.
+    /// </summary>
+    private async Task EnrichDisplayMetaAsync(
+        PlaybackRequest request,
         CancellationToken cancellationToken)
     {
-        var seriesId = meta.Id;
-        if (string.IsNullOrWhiteSpace(seriesId))
+        if (!string.IsNullOrWhiteSpace(request.Meta.Description))
+        {
+            return;
+        }
+
+        var full = await FetchMetaAsync(
+            request.Type,
+            request.Meta,
+            needsEpisodes: false,
+            cancellationToken);
+        if (full is null || _disposed || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        ViewModel.SetDisplayMeta(full);
+    }
+
+    private async Task<MetaItem?> FetchMetaAsync(
+        string type,
+        MetaItem meta,
+        bool needsEpisodes,
+        CancellationToken cancellationToken)
+    {
+        var id = meta.Id;
+        if (string.IsNullOrWhiteSpace(id))
         {
             return null;
         }
@@ -924,7 +1014,7 @@ public sealed partial class PlayerPage : Page
             // Same priority order as the details page. The source addon is
             // part of the list; custom ids only match the addon that declared
             // their prefix.
-            var clients = App.Addons.MetaCandidates("series", seriesId, meta.SourceAddonUrl)
+            var clients = App.Addons.MetaCandidates(type, id, meta.SourceAddonUrl)
                 .Select(entry => entry.Client)
                 .ToList();
 
@@ -933,15 +1023,24 @@ public sealed partial class PlayerPage : Page
                 clients.Add(preferred);
             }
 
+            var needsVideos = needsEpisodes;
+
             foreach (var client in clients)
             {
                 try
                 {
-                    var full = await client.GetMetaAsync("series", seriesId, cancellationToken);
-                    if (full.Videos is { Count: > 0 })
+                    var full = await client.GetMetaAsync(type, id, cancellationToken);
+                    if (needsVideos && full.Videos is not { Count: > 0 })
                     {
-                        return full;
+                        continue;
                     }
+
+                    if (string.IsNullOrWhiteSpace(full.SourceAddonUrl))
+                    {
+                        full.SourceAddonUrl = meta.SourceAddonUrl;
+                    }
+
+                    return full;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -958,7 +1057,7 @@ public sealed partial class PlayerPage : Page
         }
         catch
         {
-            // Without metadata there is simply no Up next card.
+            // Without metadata the card simply falls back to the stub.
         }
 
         return null;
@@ -1684,6 +1783,7 @@ public sealed partial class PlayerPage : Page
         _playing = true;
         _ended = false;
         _errorVisible = false;
+        ResetInfoCard();
         ResetStallClock(_mediaPlayer?.Time ?? 0);
         _stallTimer.Start();
 
@@ -1744,6 +1844,7 @@ public sealed partial class PlayerPage : Page
         UpdatePlayPauseUi();
         ShowChrome();
         _chromeTimer.Stop();
+        ScheduleInfoCard();
     }
 
     private void HandleStopped()
@@ -1768,6 +1869,7 @@ public sealed partial class PlayerPage : Page
         _playing = false;
         _stallTimer.Stop();
         HideBuffer();
+        HideInfoCard();
         UpdatePlayPauseUi();
         ShowChrome();
     }
@@ -1803,6 +1905,7 @@ public sealed partial class PlayerPage : Page
         UpdateUpNextVisibility();
         HideResumeHint();
         HideBuffer();
+        HideInfoCard();
         EndedText.Visibility = Visibility.Visible;
         UpdatePlayPauseUi();
         ShowChrome();
@@ -2234,6 +2337,126 @@ public sealed partial class PlayerPage : Page
         PickerBackdrop.Visibility = Visibility.Visible;
     }
 
+    // ---------------------------------------------------------------- pause card
+
+    private void ScheduleInfoCard()
+    {
+        _infoTimer.Stop();
+
+        if (_infoSuppressed || InfoPanel.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        _infoTimer.Start();
+    }
+
+    private void ShowInfoCard()
+    {
+        if (_disposed ||
+            InfoPanel.Visibility == Visibility.Visible ||
+            ViewModel.Request is null ||
+            _errorVisible ||
+            _ended ||
+            LoadingOverlay.Visibility == Visibility.Visible ||
+            PickerBackdrop.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        NowPlayingTitle.Visibility = Visibility.Collapsed;
+        InfoPanel.Visibility = Visibility.Visible;
+
+        if (_infoIn is null || !_uiSettings.AnimationsEnabled)
+        {
+            _infoIn?.Stop();
+            InfoPanel.Opacity = 1;
+
+            if (InfoPanel.RenderTransform is CompositeTransform still)
+            {
+                still.TranslateY = 0;
+            }
+
+            return;
+        }
+
+        _infoIn.Begin();
+    }
+
+    private void HideInfoCard()
+    {
+        _infoTimer.Stop();
+        NowPlayingTitle.Visibility = Visibility.Visible;
+
+        if (InfoPanel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        _infoIn?.Stop();
+        InfoPanel.Visibility = Visibility.Collapsed;
+        InfoPanel.Opacity = 0;
+
+        if (InfoPanel.RenderTransform is CompositeTransform transform)
+        {
+            transform.TranslateY = 12;
+        }
+    }
+
+    private void ResetInfoCard()
+    {
+        _infoPinned = false;
+        _infoSuppressed = false;
+        HideInfoCard();
+    }
+
+    /// <summary>
+    /// "I" toggles the details card independently of pausing, like a media
+    /// info key. Dismissing it while paused keeps it down until the next pause.
+    /// </summary>
+    private void ToggleInfoCard()
+    {
+        if (InfoPanel.Visibility == Visibility.Visible)
+        {
+            _infoSuppressed = true;
+            _infoPinned = false;
+            HideInfoCard();
+
+            if (_playing)
+            {
+                StartChromeTimer();
+            }
+
+            return;
+        }
+
+        _infoSuppressed = false;
+        ShowInfoCard();
+
+        if (_playing && InfoPanel.Visibility == Visibility.Visible)
+        {
+            // Auto-hide would take the card down with the chrome.
+            _infoPinned = true;
+            ShowChrome();
+            _chromeTimer.Stop();
+        }
+    }
+
+    private void InfoAccelerator_Invoked(
+        KeyboardAccelerator sender,
+        KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (_sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
+        {
+            return;
+        }
+
+        ToggleInfoCard();
+        args.Handled = true;
+    }
+
+    private void Info_Click(object sender, RoutedEventArgs e) => ToggleInfoCard();
+
     private void ShowChrome()
     {
         if (_disposed)
@@ -2256,7 +2479,7 @@ public sealed partial class PlayerPage : Page
     private void HideChrome()
     {
         if (!_playing || _sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen ||
-            _errorVisible || _ended || _draggingSeek)
+            _errorVisible || _ended || _draggingSeek || _infoPinned)
         {
             return;
         }
@@ -2362,7 +2585,7 @@ public sealed partial class PlayerPage : Page
     private void StartChromeTimer()
     {
         if (_chromeHidden || !_playing || _sourcesFlyoutOpen || _subtitlesFlyoutOpen ||
-            _episodesFlyoutOpen || _errorVisible)
+            _episodesFlyoutOpen || _errorVisible || _infoPinned)
         {
             return;
         }
@@ -3494,6 +3717,8 @@ public sealed partial class PlayerPage : Page
 
     private void ShowPlaybackError(string message, bool canSwitch)
     {
+        _infoTimer.Stop();
+        HideInfoCard();
         _errorVisible = true;
         _playing = false;
         _switching = false;
@@ -3524,6 +3749,7 @@ public sealed partial class PlayerPage : Page
 
         _disposed = true;
         _chromeTimer.Stop();
+        _infoTimer.Stop();
         _resumeHintTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();

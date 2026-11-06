@@ -190,6 +190,94 @@ public partial class PlayerViewModel : ObservableObject
 
     public bool NoLogo => !HasLogo;
 
+    // ------------------------------------------------------------- pause card
+
+    private MetaItem? _displayMeta;
+
+    /// <summary>
+    /// The metadata behind the details card. Continue watching and catalog
+    /// entries carry a stub (name, poster, type only), so the player resolves
+    /// the full meta from a metadata addon and calls this; until then the
+    /// request's own meta is used.
+    /// </summary>
+    private MetaItem? DisplayMeta => _displayMeta ?? Request?.Meta;
+
+    public void SetDisplayMeta(MetaItem? meta)
+    {
+        _displayMeta = meta;
+        RaiseInfoChanged();
+    }
+
+    private void RaiseInfoChanged()
+    {
+        _infoPlot = null;
+        OnPropertyChanged(nameof(InfoTitle));
+        OnPropertyChanged(nameof(InfoTypeLabel));
+        OnPropertyChanged(nameof(InfoMetaLine));
+        OnPropertyChanged(nameof(HasInfoMetaLine));
+        OnPropertyChanged(nameof(InfoRatingText));
+        OnPropertyChanged(nameof(HasInfoRating));
+        OnPropertyChanged(nameof(InfoEpisodeLine));
+        OnPropertyChanged(nameof(HasInfoEpisodeLine));
+        OnPropertyChanged(nameof(InfoPlot));
+        OnPropertyChanged(nameof(HasInfoPlot));
+        OnPropertyChanged(nameof(InfoLogoImage));
+        OnPropertyChanged(nameof(HasInfoLogo));
+    }
+
+    /// <summary>
+    /// Metadata for the card that fades in when playback pauses. A series shows
+    /// the episode's own synopsis; a movie shows its plot.
+    /// </summary>
+    public string InfoTitle => DisplayMeta?.Name ?? Title;
+
+    public string InfoTypeLabel => DisplayMeta?.TypeLabel ?? "";
+
+    public string InfoMetaLine => DisplayMeta?.HeroMetaLine ?? "";
+
+    public bool HasInfoMetaLine => !string.IsNullOrWhiteSpace(InfoMetaLine);
+
+    public string InfoRatingText => DisplayMeta?.RatingText ?? "";
+
+    public bool HasInfoRating => DisplayMeta?.HasRating == true;
+
+    public BitmapImage? InfoLogoImage => DisplayMeta?.LogoImage;
+
+    public bool HasInfoLogo => DisplayMeta?.HasLogo == true;
+
+    /// <summary>"S01E02 · Episode title" for an episode, empty for a movie.</summary>
+    public string InfoEpisodeLine =>
+        string.IsNullOrWhiteSpace(Request?.EpisodeTitle) ? "" : Subtitle;
+
+    public bool HasInfoEpisodeLine => !string.IsNullOrWhiteSpace(InfoEpisodeLine);
+
+    public string InfoPlot => _infoPlot ??= BuildInfoPlot();
+
+    public bool HasInfoPlot => !string.IsNullOrWhiteSpace(InfoPlot);
+
+    private string? _infoPlot;
+
+    private string BuildInfoPlot()
+    {
+        if (Request is not { } request)
+        {
+            return "";
+        }
+
+        if (request.Season > 0 && request.Episode > 0)
+        {
+            var episode = DisplayMeta?.Videos?.FirstOrDefault(video =>
+                video.Season == request.Season && video.EpisodeNumber == request.Episode);
+
+            if (episode is not null && !string.IsNullOrWhiteSpace(episode.DescriptionText))
+            {
+                return episode.DescriptionText.Trim();
+            }
+        }
+
+        return DisplayMeta?.Description?.Trim() ?? "";
+    }
+
     public int SourceCount => Sources.Count;
 
     public bool HasSources => Sources.Count > 0;
@@ -851,6 +939,8 @@ public partial class PlayerViewModel : ObservableObject
         OnPropertyChanged(nameof(LogoImage));
         OnPropertyChanged(nameof(HasLogo));
         OnPropertyChanged(nameof(NoLogo));
+        _displayMeta = null;
+        RaiseInfoChanged();
     }
 
     partial void OnSelectedSeasonChanged(PlayerSeason? value)
