@@ -38,7 +38,8 @@ Everything Pirsa does, in detail. For install and build steps see
 - Settings → Playback → **Watch history** shows how many positions are stored
   and clears them all, including remembered sources and subtitle timing.
 - The history holds at most 500 entries; the oldest are dropped.
-- History is per device; there is no sync between machines.
+- History is local by default; connecting a sync provider mirrors watched state
+  and the watchlist to another device (see [Sync](#sync)).
 
 ### Instant resume
 
@@ -238,6 +239,33 @@ Everything Pirsa does, in detail. For install and build steps see
   Addons. Packaged builds register it through the app package, and the installer
   registers it per user.
 
+## Sync
+
+- **Settings → Sync** connects one or more watched-state providers. Each one is
+  an independent mirror; a failure in one never blocks another.
+- **WebDAV** is available now: give Pirsa a folder URL, user name and app
+  password (Nextcloud, ownCloud, Box or any other WebDAV host). Pirsa keeps one
+  small `pirsa-sync.json` document in that folder.
+- Watching a title, marking it watched or unwatched, and adding it to or
+  removing it from the watchlist are pushed a few seconds later. A change made
+  offline is pushed on the next launch, before that launch's pull is applied.
+- Each entry carries the time it changed, so two devices agree on the newer
+  fact. Removing a watched mark or a watchlist title is a timestamped fact too,
+  so it cannot be resurrected by the other device.
+- **Removing is not the same as never seeing it:** a local "clear history" or a
+  trimmed row does not delete anything on a provider, while marking a title
+  unwatched does, on every connected provider.
+- The Sync settings page shows the last sync time and the last error per
+  provider, with **Sync now** and **Disconnect**. Disconnecting deletes the
+  saved credentials and leaves both local history and the remote account
+  untouched.
+- Credentials are encrypted for the current Windows user and are never written
+  to `settings.json` or the player log.
+- Only titles with an IMDb id are synced. Live TV and custom id prefixes are
+  skipped because there is no portable key to match on.
+- Sync is off until a provider is connected, and it never sends stream URLs,
+  addon tokens or playback positions. See [SYNC.md](SYNC.md) for the design.
+
 ## Updates
 
 - Every launch of an installer or portable build checks the project's latest
@@ -260,7 +288,10 @@ Everything Pirsa does, in detail. For install and build steps see
 
 - Auto-advance stops at the end of the last known episode and does not know
   about unaired episodes.
-- Watch history is per device; there is no sync between machines.
+- Sync currently supports WebDAV. Simkl, MDBList, Trakt and AniList adapters
+  are planned; nothing else leaves the machine until you connect a provider.
+- Sync covers watched state and the watchlist only. Resume positions,
+  remembered sources and addons stay on this device.
 - A `stremio://` link opened while Pirsa is already running starts a second
   window instead of handing the link to the running one.
 - Torrent `infoHash` streams and `externalUrl`-only entries are skipped; only

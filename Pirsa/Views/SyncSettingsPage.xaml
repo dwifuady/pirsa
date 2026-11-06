@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.SyncSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:Pirsa.ViewModels"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            MaxWidth="1000"
+            Margin="40,26,40,64"
+            HorizontalAlignment="Stretch">
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock
+                        FontSize="32"
+                        FontWeight="SemiBold"
+                        Style="{StaticResource TitleTextBlockStyle}"
+                        Text="Sync" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Text="Keep watched titles and your watchlist on more than one device. Several services can be connected at once; each one is a separate copy. Nothing is sent until you connect a service."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="10"
+                    VerticalAlignment="Center">
+                    <ProgressRing
+                        Width="16"
+                        Height="16"
+                        IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ViewModel.ConnectedCountText, Mode=OneWay}" />
+                </StackPanel>
+
+                <Border
+                    Padding="14,10"
+                    Background="{ThemeResource BrandSubtleBrush}"
+                    CornerRadius="8"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasStatus), Mode=OneWay}">
+                    <TextBlock
+                        Foreground="{ThemeResource BrandPrimaryBrush}"
+                        Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                </Border>
+
+                <Border
+                    Padding="14,10"
+                    Background="{ThemeResource BrandSubtleBrush}"
+                    CornerRadius="8"
+                    Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasError), Mode=OneWay}">
+                    <TextBlock
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                        Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                </Border>
+
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Providers}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="12" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SyncProviderRowViewModel">
+                            <Border
+                                Padding="20"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12">
+                                <StackPanel Spacing="12">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Spacing="2">
+                                            <TextBlock
+                                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                Text="{x:Bind Name}" />
+                                            <TextBlock
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{x:Bind Coverage}" />
+                                        </StackPanel>
+
+                                        <Border
+                                            Grid.Column="1"
+                                            Padding="8,3"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource BrandSubtleBrush}"
+                                            CornerRadius="10"
+                                            Visibility="{x:Bind helpers:XamlHelpers.Visible(IsConnected), Mode=OneWay}">
+                                            <TextBlock
+                                                Foreground="{ThemeResource BrandPrimaryBrush}"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="Connected" />
+                                        </Border>
+                                    </Grid>
+
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource BodyTextBlockStyle}"
+                                        Text="{x:Bind Description}"
+                                        TextWrapping="Wrap" />
+
+                                    <!--  Connect form  -->
+                                    <StackPanel
+                                        Spacing="10"
+                                        Visibility="{x:Bind helpers:XamlHelpers.Collapsed(IsConnected), Mode=OneWay}">
+                                        <TextBox
+                                            Header="Folder URL"
+                                            PlaceholderText="{x:Bind Placeholder}"
+                                            Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBox
+                                                Header="User name"
+                                                Text="{x:Bind UserName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <PasswordBox
+                                                Grid.Column="1"
+                                                Header="App password"
+                                                PasswordChanged="ProviderPassword_PasswordChanged" />
+                                        </Grid>
+
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind Hint}"
+                                            TextWrapping="Wrap" />
+
+                                        <Button
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="{x:Bind ConnectLabel}"
+                                            Click="Connect_Click"
+                                            Content="{x:Bind ConnectLabel}"
+                                            Style="{StaticResource AccentButtonStyle}" />
+                                    </StackPanel>
+
+                                    <!--  Connected state  -->
+                                    <StackPanel
+                                        Spacing="8"
+                                        Visibility="{x:Bind helpers:XamlHelpers.Visible(IsConnected), Mode=OneWay}">
+                                        <TextBlock
+                                            Style="{StaticResource BodyTextBlockStyle}"
+                                            Text="{x:Bind AccountLabel}"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind StatusText}"
+                                            TextWrapping="Wrap" />
+
+                                        <TextBlock
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                            Text="{x:Bind ErrorMessage}"
+                                            TextWrapping="Wrap"
+                                            Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(ErrorMessage), Mode=OneWay}" />
+
+                                        <StackPanel
+                                            Orientation="Horizontal"
+                                            Spacing="8">
+                                            <Button
+                                                AutomationProperties.Name="Sync now"
+                                                Click="SyncNow_Click"
+                                                Content="Sync now" />
+                                            <Button
+                                                AutomationProperties.Name="Disconnect"
+                                                Click="Disconnect_Click"
+                                                Content="Disconnect" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <StackPanel Spacing="6">
+                    <TextBlock
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="What syncs" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Text="Watched titles and your watchlist, with the time each was changed so two devices can agree. Resume positions, remembered sources and your addons stay on this device. Titles without an IMDb id are skipped. Each service only receives ids, titles and timestamps — never a stream URL or an addon token."
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource BodyTextBlockStyle}"
+                        Text="Disconnecting stops all syncing and deletes the saved credentials. It leaves both this device's history and the remote service untouched."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

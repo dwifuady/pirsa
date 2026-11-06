@@ -114,7 +114,8 @@ build is launched**, so a development session can never touch an installed copy:
 
 Every file lives in that one root: `addons.json`, `settings.json`,
 `watch-progress.json`, `watchlist.json`, `search-history.json`,
-`subtitle-offsets.json`, `subtitle-choices.json`, `player.log` and the `cache\`
+`subtitle-offsets.json`, `subtitle-choices.json`, `sync.json`,
+`sync-credentials.dat`, `player.log` and the `cache\`
 folder used while a video plays. `Services/LocalPaths.cs` is the only place that resolves it, and
 the player log header names the root it used.
 

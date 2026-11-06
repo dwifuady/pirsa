@@ -129,6 +129,10 @@ Pirsa/
   Playback/IPlaybackEngine.cs     player backend seam: surface, transport, tracks
   Playback/LibVlc/                libVLC backend and background warm-up
   Playback/Mpv/                   mpv backend (libmpv composition output)
+  Services/Sync/SyncEngine.cs      pull, merge and push watched state and watchlist
+  Services/Sync/SyncMerge.cs       the timestamp rules, pure and I/O-free
+  Services/Sync/SyncState.cs       sync.json plus DPAPI-encrypted credentials
+  Services/Sync/Providers/         one class per provider (Simkl, MDBList, WebDAV)
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
   Helpers/AddonLinkPrompt.cs      confirmation + install for an activated link
   ViewModels/HomeViewModel.cs     hero + rails across addons
@@ -141,7 +145,8 @@ Pirsa/
   Views/DiscoverPage.xaml         catalog browser filters, search and poster grid
   Views/DetailsPage.xaml          backdrop hero + facts + episodes
   Views/PlayerPage.xaml           LibVLC surface + transport chrome
-  Views/SettingsPage.xaml         addons + about
+  Views/SettingsPage.xaml         addons, Home, Sync, playback and about
+  Views/SyncSettingsPage.xaml     provider cards, connect form, last sync state
   MainWindow.xaml                 title bar + NavigationView shell
   Themes/Brand.xaml               Light / Dark / HighContrast palette and styles
   Themes/PosterCard.xaml          shared poster card template + grid item style

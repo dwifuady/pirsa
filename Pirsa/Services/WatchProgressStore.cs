@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Pirsa.Models;
+using Pirsa.Services.Sync;
 
 namespace Pirsa.Services;
 
@@ -305,6 +306,13 @@ public sealed class WatchProgressStore
     /// <summary>Raised after the list changed and was persisted.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// Raised when the user marks something unwatched and its row is removed.
+    /// Sync turns this into a timestamped tombstone; local cleanup (clear
+    /// history, trim) deliberately does not raise it.
+    /// </summary>
+    public event EventHandler<WatchProgressEntry>? Unwatched;
+
     public Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
         Task load;
@@ -574,6 +582,108 @@ public sealed class WatchProgressStore
             CountEpisodes(series),
             cancellationToken);
 
+    /// <summary>
+    /// Writes a watched mark that came from a sync provider. Presentation
+    /// fields are filled in only when the provider supplied them; an existing
+    /// resume position and remembered source are preserved.
+    /// </summary>
+    public async Task ApplyRemoteWatchedAsync(
+        string imdbId,
+        SyncMediaKind kind,
+        int season,
+        int episode,
+        DateTimeOffset watchedAt,
+        string? name = null,
+        string? poster = null,
+        string? type = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(imdbId))
+        {
+            return;
+        }
+
+        await EnsureLoadedAsync(cancellationToken);
+
+        var isSeries = kind == SyncMediaKind.Series;
+        var videoId = isSeries ? $"{imdbId}:{season}:{episode}" : imdbId;
+        var existing = Find(videoId);
+
+        if (existing is { IsWatched: true } &&
+            (existing.WatchedAt ?? existing.UpdatedAt) >= watchedAt)
+        {
+            return;
+        }
+
+        var entry = new WatchProgressEntry
+        {
+            MetaId = imdbId,
+            Type = string.IsNullOrWhiteSpace(type)
+                ? isSeries ? "series" : "movie"
+                : type,
+            VideoId = videoId,
+            Name = name ?? existing?.Name ?? imdbId,
+            Poster = poster ?? existing?.Poster,
+            Background = existing?.Background,
+            EpisodeTitle = existing?.EpisodeTitle,
+            Season = isSeries ? season : 0,
+            Episode = isSeries ? episode : 0,
+            PositionMs = existing?.PositionMs ?? 0,
+            DurationMs = existing?.DurationMs ?? 0,
+            Completed = true,
+            WatchedAt = watchedAt,
+            ImdbId = imdbId,
+            EpisodeCount = existing?.EpisodeCount ?? 0,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            SourceUrl = existing?.SourceUrl,
+            SourceAddon = existing?.SourceAddon,
+            SourceAddonUrl = existing?.SourceAddonUrl,
+            SourceQuality = existing?.SourceQuality,
+            SourceHeaders = existing?.SourceHeaders,
+            SourceSavedAt = existing?.SourceSavedAt ?? default,
+        };
+
+        var index = existing is null ? -1 : Entries.IndexOf(existing);
+        if (index >= 0)
+        {
+            Entries.RemoveAt(index);
+        }
+
+        Entries.Insert(0, entry);
+        Trim();
+
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Removes a watched mark because another device removed it.</summary>
+    public async Task ApplyRemoteUnwatchedAsync(
+        string imdbId,
+        SyncMediaKind kind,
+        int season,
+        int episode,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(imdbId))
+        {
+            return;
+        }
+
+        await EnsureLoadedAsync(cancellationToken);
+
+        var videoId = kind == SyncMediaKind.Series ? $"{imdbId}:{season}:{episode}" : imdbId;
+        var existing = Find(videoId);
+
+        if (existing is not { IsWatched: true })
+        {
+            return;
+        }
+
+        Entries.Remove(existing);
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Marks any selection of episodes watched or unwatched at once.</summary>
     public Task SetEpisodesWatchedAsync(
         MetaItem series,
@@ -616,6 +726,7 @@ public sealed class WatchProgressStore
                 if (existing is { IsWatched: true })
                 {
                     Entries.Remove(existing);
+                    Unwatched?.Invoke(this, existing);
                     changed = true;
                 }
 

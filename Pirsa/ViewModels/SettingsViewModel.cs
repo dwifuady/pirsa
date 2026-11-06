@@ -22,6 +22,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly WatchProgressStore _watchProgress;
     private readonly SearchHistoryStore _searchHistory;
+    private readonly SyncEngine _sync;
     private readonly HashSet<AddonEntry> _observed = [];
     private readonly EventHandler _registryChangedHandler;
     private readonly NotifyCollectionChangedEventHandler _entriesChangedHandler;
@@ -33,12 +34,14 @@ public partial class SettingsViewModel : ObservableObject
         AddonRegistry registry,
         AppSettings settings,
         WatchProgressStore watchProgress,
-        SearchHistoryStore searchHistory)
+        SearchHistoryStore searchHistory,
+        SyncEngine sync)
     {
         _registry = registry;
         _settings = settings;
         _watchProgress = watchProgress;
         _searchHistory = searchHistory;
+        _sync = sync;
 
         // Off first, then every language the subtitle picker understands.
         SubtitleLanguageOptions.Add(new SubtitleLanguageOption("", "Off"));
@@ -84,6 +87,9 @@ public partial class SettingsViewModel : ObservableObject
         _registry.Entries.CollectionChanged -= _entriesChangedHandler;
         _registry.Changed += _registryChangedHandler;
         _registry.Entries.CollectionChanged += _entriesChangedHandler;
+
+        _sync.Changed -= Sync_Changed;
+        _sync.Changed += Sync_Changed;
     }
 
     /// <summary>Stops listening to the shared addon list when the page goes away.</summary>
@@ -91,6 +97,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         _registry.Changed -= _registryChangedHandler;
         _registry.Entries.CollectionChanged -= _entriesChangedHandler;
+        _sync.Changed -= Sync_Changed;
 
         foreach (var entry in _observed)
         {
@@ -100,6 +107,18 @@ public partial class SettingsViewModel : ObservableObject
         _observed.Clear();
     }
 
+    private void Sync_Changed(object? sender, EventArgs e)
+    {
+        if (App.DispatcherQueue.HasThreadAccess)
+        {
+            OnPropertyChanged(nameof(SyncSummary));
+        }
+        else
+        {
+            App.DispatcherQueue.TryEnqueue(() => OnPropertyChanged(nameof(SyncSummary)));
+        }
+    }
+
     public ObservableCollection<AddonEntry> Addons => _registry.Entries;
 
     /// <summary>The rows shown after applying the search text and filter.</summary>
@@ -107,6 +126,9 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>Short pinned-catalogs summary for the Home settings card.</summary>
     public string HomeSummary => _registry.HomeSummary;
+
+    /// <summary>Short connection summary for the Sync settings card.</summary>
+    public string SyncSummary => _sync.SummaryText;
 
     [ObservableProperty]
     public partial string NewManifestUrl { get; set; }
