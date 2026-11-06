@@ -18,6 +18,9 @@ public sealed partial class SyncProviderRowViewModel : ObservableObject
         Url = "";
         UserName = "";
         Password = "";
+        ClientId = "";
+        AuthCode = "";
+        AuthUrl = "";
         AccountLabel = "";
         StatusText = "";
         ErrorMessage = "";
@@ -41,6 +44,10 @@ public sealed partial class SyncProviderRowViewModel : ObservableObject
 
     public bool UsesUrl => Descriptor.AuthKind == SyncAuthKind.UrlWithPassword;
 
+    public bool UsesDeviceCode => Descriptor.AuthKind == SyncAuthKind.OAuthDevice;
+
+    public bool UsesClientId => Descriptor.AsksForClientId;
+
     /// <summary>Connect form state, never persisted.</summary>
     [ObservableProperty]
     public partial string Url { get; set; }
@@ -50,6 +57,18 @@ public sealed partial class SyncProviderRowViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string Password { get; set; }
+
+    [ObservableProperty]
+    public partial string ClientId { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsAuthorizing { get; set; }
+
+    [ObservableProperty]
+    public partial string AuthCode { get; set; }
+
+    [ObservableProperty]
+    public partial string AuthUrl { get; set; }
 
     [ObservableProperty]
     public partial bool IsConnected { get; set; }
@@ -76,6 +95,7 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
 {
     private readonly SyncEngine _sync;
     private readonly EventHandler _changedHandler;
+    private CancellationTokenSource? _connectCts;
 
     public SyncSettingsViewModel(SyncEngine sync)
     {
@@ -125,11 +145,6 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
         RefreshCore();
     }
 
-    public void Detach()
-    {
-        _sync.Changed -= _changedHandler;
-    }
-
     public async Task ConnectAsync(
         SyncProviderRowViewModel row,
         CancellationToken cancellationToken = default)
@@ -139,24 +154,56 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
             return;
         }
 
-        if (row.Descriptor.AuthKind != SyncAuthKind.UrlWithPassword)
-        {
-            SetError($"{row.Name} needs a sign-in flow that is not available yet.");
-            return;
-        }
-
         IsBusy = true;
+        row.IsAuthorizing = false;
+        row.AuthCode = "";
+        row.AuthUrl = "";
         SetStatus("");
+
+        _connectCts?.Dispose();
+        _connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var token = _connectCts.Token;
 
         try
         {
-            var result = await _sync.ConnectAsync(
-                row.Id,
-                new SyncCredentials(
+            var credentials = row.Descriptor.AuthKind switch
+            {
+                SyncAuthKind.UrlWithPassword => new SyncCredentials(
                     Url: row.Url.Trim(),
                     UserName: row.UserName.Trim(),
                     Password: row.Password),
-                cancellationToken);
+                SyncAuthKind.OAuthDevice => new SyncCredentials(
+                    ClientId: row.ClientId.Trim()),
+                _ => null,
+            };
+
+            if (credentials is null)
+            {
+                SetError($"{row.Name} needs a sign-in flow that is not available yet.");
+                return;
+            }
+
+            // Device-flow providers report the code here, possibly after the
+            // first network round-trip. Progress<T> posts back to the UI thread.
+            var progress = new Progress<SyncAuthPrompt>(prompt =>
+            {
+                // Progress<T> posts asynchronously; ignore a late report after
+                // the attempt has already finished or been cancelled.
+                if (!IsBusy)
+                {
+                    return;
+                }
+
+                row.IsAuthorizing = true;
+                row.AuthCode = prompt.UserCode;
+                row.AuthUrl = prompt.CompleteUrl ?? prompt.VerificationUrl;
+            });
+
+            var result = await _sync.ConnectAsync(
+                row.Id,
+                credentials,
+                progress,
+                token);
 
             if (result.Success)
             {
@@ -168,8 +215,9 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
                 SetError(result.Message);
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
+            SetStatus($"{row.Name} sign-in cancelled.");
         }
         catch (Exception exception)
         {
@@ -178,9 +226,16 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            row.IsAuthorizing = false;
+            row.AuthCode = "";
+            row.AuthUrl = "";
+            _connectCts?.Dispose();
+            _connectCts = null;
             RefreshCore();
         }
     }
+
+    public void CancelConnect() => _connectCts?.Cancel();
 
     public async Task DisconnectAsync(
         SyncProviderRowViewModel row,
@@ -247,6 +302,12 @@ public sealed partial class SyncSettingsViewModel : ObservableObject
             IsBusy = false;
             RefreshCore();
         }
+    }
+
+    public void Detach()
+    {
+        _sync.Changed -= _changedHandler;
+        CancelConnect();
     }
 
     private void Refresh()

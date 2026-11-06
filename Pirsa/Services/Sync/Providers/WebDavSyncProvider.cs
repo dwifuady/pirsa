@@ -28,6 +28,7 @@ public sealed class WebDavSyncProvider : ISyncProvider
 
     public async Task<ISyncSession> ConnectAsync(
         SyncCredentials credentials,
+        IProgress<SyncAuthPrompt>? prompt = null,
         CancellationToken cancellationToken = default)
     {
         var raw = credentials.Url?.Trim();
@@ -104,6 +105,11 @@ internal sealed class WebDavSyncSession : ISyncSession
     }
 
     public string AccountLabel { get; }
+
+    /// <summary>WebDAV has no server-side cursor; the whole document is the state.</summary>
+    public string? Cursor { get; set; }
+
+    public SyncCredentials? UpdatedCredentials => null;
 
     /// <summary>
     /// Proves the URL and credentials work before the connection is saved.

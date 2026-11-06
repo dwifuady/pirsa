@@ -86,6 +86,7 @@ public sealed class SyncEngine
     public async Task<SyncResult> ConnectAsync(
         string providerId,
         SyncCredentials credentials,
+        IProgress<SyncAuthPrompt>? prompt = null,
         CancellationToken cancellationToken = default)
     {
         var provider = SyncProviders.Find(providerId);
@@ -97,7 +98,7 @@ public sealed class SyncEngine
         ISyncSession session;
         try
         {
-            session = await provider.ConnectAsync(credentials, cancellationToken);
+            session = await provider.ConnectAsync(credentials, prompt, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -123,7 +124,10 @@ public sealed class SyncEngine
 
         try
         {
-            await _stateStore.SaveCredentialsAsync(providerId, credentials, cancellationToken);
+            await _stateStore.SaveCredentialsAsync(
+                providerId,
+                session.UpdatedCredentials ?? credentials,
+                cancellationToken);
             await _stateStore.SaveAsync(cancellationToken);
         }
         catch (Exception exception)
@@ -222,7 +226,13 @@ public sealed class SyncEngine
 
         try
         {
+            // The provider owns the meaning of the cursor; the engine only
+            // carries it between runs.
+            session.Cursor = connection.Cursor;
+
             var remote = await session.PullAsync(cancellationToken);
+            await SaveRefreshedCredentialsAsync(connection, session, cancellationToken);
+
             var plan = SyncMerge.Plan(remote, BuildLocalSnapshot());
 
             if (plan.ApplyWatched.Count > 0 || plan.ApplyWatchlist.Count > 0)
@@ -232,7 +242,9 @@ public sealed class SyncEngine
 
             var merged = BuildLocalSnapshot();
             await session.PushAsync(remote, merged, cancellationToken);
+            await SaveRefreshedCredentialsAsync(connection, session, cancellationToken);
 
+            connection.Cursor = session.Cursor;
             connection.LastSyncedAt = DateTimeOffset.UtcNow;
             connection.LastError = null;
             await SaveQuietlyAsync(cancellationToken);
@@ -440,7 +452,10 @@ public sealed class SyncEngine
                     continue;
                 }
 
-                var session = await provider.ConnectAsync(credentials, cancellationToken);
+                var session = await provider.ConnectAsync(
+                    credentials,
+                    prompt: null,
+                    cancellationToken);
                 _sessions[connection.ProviderId] = session;
                 connection.AccountLabel = session.AccountLabel;
                 connection.LastError = null;
@@ -544,6 +559,30 @@ public sealed class SyncEngine
                 // The provider row shows the error; a background push never nags.
             }
         });
+    }
+
+    private async Task SaveRefreshedCredentialsAsync(
+        SyncConnection connection,
+        ISyncSession session,
+        CancellationToken cancellationToken)
+    {
+        if (session.UpdatedCredentials is not { } updated)
+        {
+            return;
+        }
+
+        try
+        {
+            await _stateStore.SaveCredentialsAsync(
+                connection.ProviderId,
+                updated,
+                cancellationToken);
+        }
+        catch
+        {
+            // The sync itself succeeded; the old credentials remain usable
+            // until the next refresh.
+        }
     }
 
     private async Task SaveQuietlyAsync(CancellationToken cancellationToken)

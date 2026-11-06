@@ -13,7 +13,8 @@ public sealed record SyncProviderDescriptor(
     SyncAuthKind AuthKind,
     string ConnectLabel,
     string? Placeholder = null,
-    string? Hint = null);
+    string? Hint = null,
+    bool AsksForClientId = false);
 
 /// <summary>
 /// The union of the fields a provider might need. Each provider reads only the
@@ -24,7 +25,10 @@ public sealed record SyncCredentials(
     string? UserName = null,
     string? Password = null,
     string? ApiKey = null,
-    string? Token = null);
+    string? ClientId = null,
+    string? Token = null,
+    string? RefreshToken = null,
+    DateTimeOffset? ExpiresAt = null);
 
 public interface ISyncProvider
 {
@@ -34,8 +38,13 @@ public interface ISyncProvider
     /// Validates the credentials and returns a session to keep. Used both by
     /// the Connect button and when restoring a saved connection.
     /// </summary>
+    /// <param name="prompt">
+    /// Device-flow providers report the code to show the user through this.
+    /// Providers that need no interaction ignore it.
+    /// </param>
     Task<ISyncSession> ConnectAsync(
         SyncCredentials credentials,
+        IProgress<SyncAuthPrompt>? prompt = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -43,6 +52,15 @@ public interface ISyncSession : IAsyncDisposable
 {
     /// <summary>Shown in Settings; must not contain a secret.</summary>
     string AccountLabel { get; }
+
+    /// <summary>Opaque state the engine persists after a successful sync.</summary>
+    string? Cursor { get; set; }
+
+    /// <summary>
+    /// Set when a token was refreshed or first issued, so the engine can
+    /// replace the encrypted credentials it stores.
+    /// </summary>
+    SyncCredentials? UpdatedCredentials { get; }
 
     Task<RemoteSnapshot> PullAsync(CancellationToken cancellationToken = default);
 
@@ -62,6 +80,7 @@ public static class SyncProviders
 {
     public static IReadOnlyList<ISyncProvider> All { get; } =
     [
+        new Providers.SimklSyncProvider(),
         new Providers.WebDavSyncProvider(),
     ];
 

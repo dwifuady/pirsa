@@ -52,6 +52,20 @@ public sealed partial class SyncSettingsPage : Page
         await ViewModel.SyncNowAsync();
     }
 
+    private void CancelConnect_Click(object sender, RoutedEventArgs e)
+    {
+        ViewModel.CancelConnect();
+    }
+
+    private async void OpenAuthUrl_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SyncProviderRowViewModel row &&
+            Uri.TryCreate(row.AuthUrl, UriKind.Absolute, out var uri))
+        {
+            await Windows.System.Launcher.LaunchUriAsync(uri);
+        }
+    }
+
     private void ProviderPassword_PasswordChanged(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is SyncProviderRowViewModel row &&

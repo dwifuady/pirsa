@@ -126,26 +126,39 @@
                                     <StackPanel
                                         Spacing="10"
                                         Visibility="{x:Bind helpers:XamlHelpers.Collapsed(IsConnected), Mode=OneWay}">
-                                        <TextBox
-                                            Header="Folder URL"
-                                            PlaceholderText="{x:Bind Placeholder}"
-                                            Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                                        <Grid ColumnSpacing="12">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-
+                                        <!--  WebDAV  -->
+                                        <StackPanel
+                                            Spacing="10"
+                                            Visibility="{x:Bind helpers:XamlHelpers.Visible(UsesUrl), Mode=OneWay}">
                                             <TextBox
-                                                Header="User name"
-                                                Text="{x:Bind UserName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                                Header="Folder URL"
+                                                PlaceholderText="{x:Bind Placeholder}"
+                                                Text="{x:Bind Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
-                                            <PasswordBox
-                                                Grid.Column="1"
-                                                Header="App password"
-                                                PasswordChanged="ProviderPassword_PasswordChanged" />
-                                        </Grid>
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBox
+                                                    Header="User name"
+                                                    Text="{x:Bind UserName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                                <PasswordBox
+                                                    Grid.Column="1"
+                                                    Header="App password"
+                                                    PasswordChanged="ProviderPassword_PasswordChanged" />
+                                            </Grid>
+                                        </StackPanel>
+
+                                        <!--  Device-flow client id, until we ship one  -->
+                                        <TextBox
+                                            Header="Client ID"
+                                            PlaceholderText="From simkl.com/settings/developer"
+                                            Text="{x:Bind ClientId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            Visibility="{x:Bind helpers:XamlHelpers.Visible(UsesClientId), Mode=OneWay}" />
 
                                         <TextBlock
                                             FontSize="12"
@@ -153,12 +166,45 @@
                                             Text="{x:Bind Hint}"
                                             TextWrapping="Wrap" />
 
-                                        <Button
-                                            HorizontalAlignment="Left"
-                                            AutomationProperties.Name="{x:Bind ConnectLabel}"
-                                            Click="Connect_Click"
-                                            Content="{x:Bind ConnectLabel}"
-                                            Style="{StaticResource AccentButtonStyle}" />
+                                        <!--  Waiting for approval  -->
+                                        <Border
+                                            Padding="14"
+                                            Background="{ThemeResource BrandSubtleBrush}"
+                                            CornerRadius="10"
+                                            Visibility="{x:Bind helpers:XamlHelpers.Visible(IsAuthorizing), Mode=OneWay}">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Style="{StaticResource BodyTextBlockStyle}"
+                                                    Text="Approve this code at simkl.com/pin"
+                                                    TextWrapping="Wrap" />
+                                                <TextBlock
+                                                    FontSize="28"
+                                                    FontWeight="SemiBold"
+                                                    Text="{x:Bind AuthCode}" />
+                                                <Button
+                                                    HorizontalAlignment="Left"
+                                                    AutomationProperties.Name="Open the approval page"
+                                                    Click="OpenAuthUrl_Click"
+                                                    Content="Open simkl.com/pin" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <StackPanel
+                                            Orientation="Horizontal"
+                                            Spacing="8">
+                                            <Button
+                                                AutomationProperties.Name="{x:Bind ConnectLabel}"
+                                                Click="Connect_Click"
+                                                Content="{x:Bind ConnectLabel}"
+                                                IsEnabled="{x:Bind helpers:XamlHelpers.Not(IsAuthorizing), Mode=OneWay}"
+                                                Style="{StaticResource AccentButtonStyle}" />
+                                            <Button
+                                                AutomationProperties.Name="Cancel sign-in"
+                                                Click="CancelConnect_Click"
+                                                Content="Cancel"
+                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(IsAuthorizing), Mode=OneWay}" />
+                                        </StackPanel>
                                     </StackPanel>
 
                                     <!--  Connected state  -->

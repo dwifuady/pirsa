@@ -123,7 +123,23 @@ public sealed class SyncConnection
     public DateTimeOffset? LastSyncedAt { get; set; }
 
     public string? LastError { get; set; }
+
+    /// <summary>
+    /// Opaque provider state, for example Simkl's last activities snapshot.
+    /// The engine only transports it; the provider decides what it means.
+    /// </summary>
+    public string? Cursor { get; set; }
 }
+
+/// <summary>
+/// What a device-flow provider shows the user while it waits for approval.
+/// The URL is safe to open; the code is not a credential.
+/// </summary>
+public sealed record SyncAuthPrompt(
+    string UserCode,
+    string VerificationUrl,
+    string? CompleteUrl,
+    TimeSpan ExpiresIn);
 
 public sealed record SyncResult(bool Success, string Message)
 {

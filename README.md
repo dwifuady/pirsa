@@ -30,9 +30,9 @@ Indonesian *memirsa* ("to watch") and *pemirsa* ("viewer, audience").
   autoplay, auto-advance and source switching.
 - **Addon manager** — add, enable, disable, reorder and remove Stremio addons.
   Cinemeta and OpenSubtitles v3 are included; no stream addon ships by default.
-- **Sync** — mirror watched state and the watchlist across devices with a
-  WebDAV folder you control. More providers are planned. Resume positions stay
-  local.
+- **Sync** — mirror watched state and the watchlist across devices with Simkl
+  or a WebDAV folder you control. More providers are planned. Resume positions
+  stay local.
 - **Addon links** — a `stremio://` addon link opens Pirsa with a confirmation
   before installing, and links can be pasted into Settings too.
 - **Automatic updates** — every launch checks GitHub Releases. Download the

@@ -581,7 +581,7 @@
                                 <TextBlock
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Style="{StaticResource BodyTextBlockStyle}"
-                                    Text="Keep watched titles and saved titles in step across devices with WebDAV, and later with other services. Resume positions stay on the device that played them."
+                                    Text="Keep watched titles and saved titles in step across devices with Simkl or a WebDAV folder you control. Resume positions stay on the device that played them."
                                     TextWrapping="Wrap" />
                             </StackPanel>
                             <Button

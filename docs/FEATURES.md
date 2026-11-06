@@ -243,7 +243,11 @@ Everything Pirsa does, in detail. For install and build steps see
 
 - **Settings → Sync** connects one or more watched-state providers. Each one is
   an independent mirror; a failure in one never blocks another.
-- **WebDAV** is available now: give Pirsa a folder URL, user name and app
+- **Simkl** connects through its AUTH V2 device flow: Pirsa shows a short code,
+  you approve it at `simkl.com/pin`, and watched history and Plan to Watch start
+  syncing. Your Simkl password is never shared, and the connection refreshes on
+  its own.
+- **WebDAV** is available too: give Pirsa a folder URL, user name and app
   password (Nextcloud, ownCloud, Box or any other WebDAV host). Pirsa keeps one
   small `pirsa-sync.json` document in that folder.
 - Watching a title, marking it watched or unwatched, and adding it to or
@@ -288,8 +292,11 @@ Everything Pirsa does, in detail. For install and build steps see
 
 - Auto-advance stops at the end of the last known episode and does not know
   about unaired episodes.
-- Sync currently supports WebDAV. Simkl, MDBList, Trakt and AniList adapters
-  are planned; nothing else leaves the machine until you connect a provider.
+- Sync supports Simkl and WebDAV. MDBList, Trakt and AniList adapters are
+  planned; nothing else leaves the machine until you connect a provider.
+- Simkl anime catalogs are not synced yet: AniDB/absolute episode numbering does
+  not map cleanly onto Stremio/Cinemeta seasons. Simkl remote un-watches and
+  removals are not detected by a delta.
 - Sync covers watched state and the watchlist only. Resume positions,
   remembered sources and addons stay on this device.
 - A `stremio://` link opened while Pirsa is already running starts a second
