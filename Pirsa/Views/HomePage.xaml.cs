@@ -180,9 +180,11 @@ public sealed partial class HomePage : Page
             return;
         }
 
+        // Continue watching is already a play intent: start the remembered
+        // source without showing the picker, whatever the autoplay setting.
         Frame.Navigate(
             typeof(PlayerPage),
-            entry.ToPlaybackRequest(),
+            entry.ToPlaybackRequest() with { AutoPlay = true },
             new DrillInNavigationTransitionInfo());
     }
 

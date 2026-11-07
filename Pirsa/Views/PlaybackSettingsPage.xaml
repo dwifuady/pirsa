@@ -44,7 +44,7 @@
                                         <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Start playing automatically" />
                                         <TextBlock
                                             Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
-                                            Text="When this is off, Pirsa opens the source picker every time." />
+                                            Text="When this is off, Pirsa opens the source picker every time, except Continue watching, which resumes its last source." />
                                     </StackPanel>
                                     <ToggleSwitch
                                         Grid.Column="1"
