@@ -468,6 +468,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEngineFailed(PlaybackErrorEventArgs e)
     {
+        AbortLyricSync();
         PlayerLog.Write($"engine error, state {_engine.State}, url {_currentSource?.Url}");
 
         // A remembered source that fails before playing is replaced silently;
@@ -1442,6 +1443,7 @@ public sealed partial class PlayerPage : Page
         {
             ErrorPanel.Visibility = Visibility.Collapsed;
             _errorVisible = false;
+            AbortLyricSync();
 
             var resume = !_ended &&
                          _engine.State is PlaybackState.Playing
@@ -1845,6 +1847,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleStopped()
     {
+        AbortLyricSync();
         if (_disposed)
         {
             return;
@@ -1880,6 +1883,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEndReached()
     {
+        AbortLyricSync();
         // A source that never reached "playing" is a failed attempt, not a
         // finished title. Marking it completed would hide it from Continue
         // watching and lose the resume position.
@@ -1930,6 +1934,7 @@ public sealed partial class PlayerPage : Page
     {
         _positionMs = Math.Max(0, time);
         UpdateUpNextVisibility();
+        UpdateLyricSyncPosition(_positionMs);
 
         if (_draggingSeek)
         {
@@ -2146,6 +2151,12 @@ public sealed partial class PlayerPage : Page
     private void InputLayer_Tapped(object sender, TappedRoutedEventArgs e)
     {
         _engine.FocusSurface(FocusState.Pointer);
+
+        if (_lyricSyncOpen)
+        {
+            // The lyric panel is the only thing taking input while it is open.
+            return;
+        }
 
         if (_sourcesFlyoutOpen)
         {
@@ -2635,7 +2646,7 @@ public sealed partial class PlayerPage : Page
 
     private void ShowChrome()
     {
-        if (_disposed)
+        if (_disposed || _lyricSyncOpen)
         {
             return;
         }
@@ -2840,6 +2851,11 @@ public sealed partial class PlayerPage : Page
 
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_lyricSyncOpen)
+        {
+            return;
+        }
+
         _keyboardActive = true;
         ShowChrome();
         StartChromeTimer();
@@ -2852,6 +2868,12 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_lyricSyncOpen)
+        {
+            HandleLyricSyncKey(e);
+            return;
+        }
+
         if (_sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
         {
             return;
@@ -3240,6 +3262,13 @@ public sealed partial class PlayerPage : Page
         SubtitleResetButton.Visibility = _subtitleDelayMs == 0
             ? Visibility.Collapsed
             : Visibility.Visible;
+
+        // Lyric sync needs cue times from a text file, so embedded tracks keep
+        // the Earlier/Later controls instead.
+        LyricSyncButton.Visibility = HasActiveSubtitle &&
+                                   !string.IsNullOrWhiteSpace(_selectedSubtitlePath)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private static string FormatSubtitleDelaySeconds(long delayMs) =>
@@ -3388,6 +3417,8 @@ public sealed partial class PlayerPage : Page
             return false;
         }
 
+        AbortLyricSync();
+
         if (!_engine.SelectSubtitleTrack(track.EmbeddedTrackId))
         {
             return false;
@@ -3492,6 +3523,7 @@ public sealed partial class PlayerPage : Page
         bool applyNow = true,
         bool remember = true)
     {
+        AbortLyricSync();
         _selectedSubtitle = version;
         ViewModel.SelectSubtitle(version);
         UpdateSubtitleIndicator();
@@ -3761,7 +3793,12 @@ public sealed partial class PlayerPage : Page
 
     private void EscapeAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (_isFullScreen)
+        if (_lyricSyncOpen)
+        {
+            CloseLyricSync();
+            args.Handled = true;
+        }
+        else if (_isFullScreen)
         {
             SetFullscreen(false);
             args.Handled = true;
@@ -4055,6 +4092,8 @@ public sealed partial class PlayerPage : Page
         _autoAdvanceTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _cachedWatchdog?.Stop();
+        _lyricSyncOpen = false;
+        _lyricSyncToastTimer?.Stop();
         ClearPlayingIntent();
         _stallTimer.Stop();
         _streamCacheCts.Cancel();
