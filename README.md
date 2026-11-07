@@ -11,6 +11,24 @@ Indonesian *memirsa* ("to watch") and *pemirsa* ("viewer, audience").
 
 ![WinUI 3](https://img.shields.io/badge/WinUI-3-0E7A0D) ![.NET](https://img.shields.io/badge/.NET-10-512BD4)
 
+## Screenshots
+
+![Home: Top 10 hero, Continue watching and add-on catalogs](docs/screenshots/home.webp)
+
+| Discover | Details |
+| --- | --- |
+| ![Catalogs, filters and search across add-ons](docs/screenshots/discover.webp) | ![Series details with seasons and episodes](docs/screenshots/details.webp) |
+
+| Episodes | Watchlist |
+| --- | --- |
+| ![Season and episode list with progress](docs/screenshots/episodes.webp) | ![Watchlist poster grid](docs/screenshots/watchlist.webp) |
+
+![Full-screen player with the custom Windows 11 controls](docs/screenshots/player.webp)
+
+*Playing Tears of Steel (2012), a Creative Commons film by the Blender Foundation.*
+
+![Add-on manager](docs/screenshots/addons.webp)
+
 ## Features
 
 - **Store-style shell** with a navigation rail: Home, Discover, Watchlist and
