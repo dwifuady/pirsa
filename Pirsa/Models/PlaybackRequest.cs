@@ -15,6 +15,13 @@ public sealed record PlaybackRequest(
     int Season = 0,
     int Episode = 0)
 {
+    /// <summary>
+    /// True when the navigation itself is a play intent (Continue watching), so
+    /// the player starts the remembered source even when the autoplay setting
+    /// is off.
+    /// </summary>
+    public bool AutoPlay { get; init; }
+
     public static PlaybackRequest ForMeta(MetaItem meta, MetaVideo? episode = null)
     {
         if (!string.IsNullOrWhiteSpace(meta.Type) &&

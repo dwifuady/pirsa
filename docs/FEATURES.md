@@ -191,7 +191,9 @@ Everything Pirsa does, in detail. For install and build steps see
   from each addon's source metadata; sources that don't declare a resolution are
   shown as **Unknown**. If the preferred quality isn't available, Pirsa uses the
   best available source. With the switch off, every title opens the source
-  picker.
+  picker — except **Continue watching**, which always resumes the last source
+  you played for that title, and auto-picks one if that source is no longer
+  available.
 - **Auto-advance** — Settings → Playback → **Play next episode automatically**
   (default on). The transition keeps using the fastest path: a fresh remembered
   source for the next episode starts instantly, otherwise the best found source

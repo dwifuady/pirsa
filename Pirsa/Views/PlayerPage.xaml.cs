@@ -159,6 +159,7 @@ public sealed partial class PlayerPage : Page
     private readonly CancellationTokenSource _streamCacheCts = new();
     private int _playAttempt;
     private Task<bool>? _sourceDiscovery;
+    private bool _forceAutoplay;
     private CancellationTokenSource? _nextEpisodeCts;
     private MetaItem? _seriesMeta;
     private MetaVideo? _nextEpisode;
@@ -632,6 +633,10 @@ public sealed partial class PlayerPage : Page
         _sourceCts?.Dispose();
         _sourceCts = new CancellationTokenSource();
 
+        // Continue watching (request.AutoPlay) and episode chaining are already
+        // play intents, so they skip the picker even when autoplay is off.
+        _forceAutoplay = autoStart || request.AutoPlay;
+
         if (ViewModel.Request != request)
         {
             ViewModel.Request = request;
@@ -646,7 +651,7 @@ public sealed partial class PlayerPage : Page
         // normal source search runs in parallel. A dead URL therefore costs
         // at most the watchdog window, never the full discovery wait.
         var savedSource = await FindRememberedSourceAsync(request);
-        if (savedSource is not null && (App.Settings.Autoplay || autoStart))
+        if (savedSource is not null && (App.Settings.Autoplay || _forceAutoplay))
         {
             _sourceDiscovery = ViewModel.LoadAsync(request, _sourceCts.Token);
             _ = CompleteSourceDiscoveryAsync(_sourceDiscovery);
@@ -675,7 +680,7 @@ public sealed partial class PlayerPage : Page
         SourcesButton.IsEnabled = true;
         ShowChrome();
 
-        var autoplay = SelectAutoplaySource(force: autoStart);
+        var autoplay = SelectAutoplaySource(force: _forceAutoplay);
         if (autoplay is not null)
         {
             _pendingSource = autoplay;
@@ -829,7 +834,7 @@ public sealed partial class PlayerPage : Page
 
         ShowChrome();
 
-        var next = SelectAutoplaySource(failed.Url);
+        var next = SelectAutoplaySource(failed.Url, force: _forceAutoplay);
 
         // Sources may still be arriving; give the remaining addons a chance
         // before showing the picker with a single failed entry.
@@ -844,7 +849,7 @@ public sealed partial class PlayerPage : Page
                 return;
             }
 
-            next = SelectAutoplaySource(failed.Url);
+            next = SelectAutoplaySource(failed.Url, force: _forceAutoplay);
         }
 
         if (next is not null)
