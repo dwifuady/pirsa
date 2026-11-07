@@ -17,37 +17,43 @@
         HorizontalScrollMode="Disabled"
         VerticalScrollBarVisibility="Auto">
         <Grid
-            MaxWidth="1000"
-            Margin="40,26,40,64"
+            Margin="32,26,32,64"
             HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
             <StackPanel Spacing="22">
                 <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Sync" />
                     <TextBlock
-                        FontSize="32"
-                        FontWeight="SemiBold"
-                        Style="{StaticResource TitleTextBlockStyle}"
-                        Text="Sync" />
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Keep watched titles and your watchlist on more than one device. Several services can be connected at once; each one is a separate copy. Nothing is sent until you connect a service."
-                        TextWrapping="Wrap" />
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="Keep watched state and your watchlist in step across devices, if you want. Nothing is sent until you connect a service." />
                 </StackPanel>
 
-                <StackPanel
-                    Orientation="Horizontal"
-                    Spacing="10"
-                    VerticalAlignment="Center">
-                    <ProgressRing
-                        Width="16"
-                        Height="16"
-                        IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
-                    <TextBlock
+                <Grid>
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <ProgressRing
+                            Width="16"
+                            Height="16"
+                            IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.ConnectedCountText, Mode=OneWay}" />
+                    </StackPanel>
+                    <Button
+                        HorizontalAlignment="Right"
                         VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="{x:Bind ViewModel.ConnectedCountText, Mode=OneWay}" />
-                </StackPanel>
+                        AutomationProperties.Name="Sync all providers now"
+                        Click="SyncNow_Click"
+                        Content="Sync now"
+                        IsEnabled="{x:Bind helpers:XamlHelpers.Not(ViewModel.IsBusy), Mode=OneWay}"
+                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasConnections), Mode=OneWay}" />
+                </Grid>
 
                 <Border
                     Padding="14,10"
@@ -233,18 +239,11 @@
                                             TextWrapping="Wrap"
                                             Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(ErrorMessage), Mode=OneWay}" />
 
-                                        <StackPanel
-                                            Orientation="Horizontal"
-                                            Spacing="8">
-                                            <Button
-                                                AutomationProperties.Name="Sync now"
-                                                Click="SyncNow_Click"
-                                                Content="Sync now" />
-                                            <Button
-                                                AutomationProperties.Name="Disconnect"
-                                                Click="Disconnect_Click"
-                                                Content="Disconnect" />
-                                        </StackPanel>
+                                        <Button
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="Disconnect"
+                                            Click="Disconnect_Click"
+                                            Content="Disconnect" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
@@ -259,12 +258,12 @@
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Watched titles and your watchlist, with the time each was changed so two devices can agree. Simkl and MDBList also keep Continue watching in step both ways, including scrobbles from the player. Remembered sources and your addons stay on this device. Titles without an IMDb id are skipped. Each service only receives ids, titles and timestamps — never a stream URL or an addon token."
+                        Text="Watched titles and your watchlist, with timestamps so two devices can agree. Simkl and MDBList also keep Continue watching in step. Remembered sources and add-ons stay here; titles without an IMDb id are skipped. Each service only receives ids, titles and timestamps — never a stream URL or an add-on token."
                         TextWrapping="Wrap" />
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Disconnecting stops all syncing and deletes the saved credentials. It leaves both this device's history and the remote service untouched."
+                        Text="Disconnecting deletes the saved credentials and leaves local history untouched."
                         TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>

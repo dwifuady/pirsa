@@ -103,6 +103,16 @@ public partial class UpdateViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// A check the user asked for from Settings. It clears the per-launch
+    /// dismissal so closing the old notice does not block this check.
+    /// </summary>
+    public async Task CheckNowAsync()
+    {
+        _dismissed = false;
+        await CheckAsync();
+    }
+
     /// <summary>Download, or install once the download is complete.</summary>
     public async Task ActAsync()
     {

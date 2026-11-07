@@ -30,13 +30,15 @@ Everything Pirsa does, in detail. For install and build steps see
 - The details page turns its Play button into **Resume S02E04** (or
   **Resume 23:41** for a movie), and episode rows show **Watched** or
   **Resume 12:34** with a thin progress bar.
+- With **Resume where you stopped** off, the Play button stays **Play**,
+  episode rows drop the Resume label, and playback starts at 0.
 - A title counts as **Watched** at 95% and leaves Continue watching.
 - Positions are written every 10 seconds while playing, on pause, on source
   switches, when you leave the player, and when a title finishes. Opening a
   title for a few seconds is ignored, and a small bit of playback never rewinds
   an existing position.
-- Settings → Playback → **Watch history** shows how many positions are stored
-  and clears them all, including remembered sources and subtitle timing.
+- Settings → Library & data → **Watch history** shows how many positions are
+  stored and clears them all, including remembered sources and subtitle timing.
 - The history holds at most 500 entries; the oldest are dropped.
 - History is local by default; connecting a sync provider mirrors watched state
   and the watchlist to another device (see [Sync](#sync)).
@@ -104,7 +106,32 @@ Everything Pirsa does, in detail. For install and build steps see
 - Typing from Home or Settings switches to Discover automatically.
 - Submitted searches (and searches you open a result from) are remembered
   locally and offered as suggestions when the search box is focused, filtered
-  as you type. Clear them in Settings → Search.
+  as you type. Clear them in Settings → Library & data → Search history.
+
+## Settings
+
+- Settings is a category pane with one focused page: **General**, **Playback**,
+  **Subtitles**, **Library & data**, **Add-ons**, **Sync** and **About**. The
+  last category is remembered for the session.
+- The pane search finds any setting by name and opens its page at the matching
+  row, including rows inside an Advanced section.
+- **General** holds the theme (System, Light or Dark), the page Pirsa opens on
+  next launch, and the automatic update check. Changes save immediately.
+- **Playback** keeps autoplay, preferred quality, auto-advance, the wait before
+  the next episode, preferred audio language, resume behavior and the video
+  engine. **Subtitles** keeps the preferred language, text size, background and
+  saved timing. **Library & data** keeps Home rows, watch and search history,
+  storage sizes, cache cleanup, the data folder and reset-all. **About** keeps
+  diagnostics and system information.
+- Moving to a category never stacks back history. Opening the Home rows editor
+  from Library adds a single back arrow inside the Settings pane.
+- **Storage** shows the stream-cache and player-log sizes, clears the cache, and
+  opens the log. **Reset all settings** restores preferences without touching
+  add-ons, history, the watchlist or sync credentials.
+- **About → Diagnostics** opens the player log, opens the data folder and copies
+  a short system summary (version, Windows build, architecture, video engine).
+- Add-ons can be reordered by dragging a row or from the row's `⋯` menu. The
+  menu also holds Remove; Reorder is disabled while the list is filtered.
 
 ## Details
 
@@ -168,8 +195,17 @@ Everything Pirsa does, in detail. For install and build steps see
 - **Auto-advance** — Settings → Playback → **Play next episode automatically**
   (default on). The transition keeps using the fastest path: a fresh remembered
   source for the next episode starts instantly, otherwise the best found source
-  is used even when the source picker is normally shown. Turning this off keeps
-  the Up next card, so episodes can still be skipped by hand.
+  is used even when the source picker is normally shown. **Wait before the next
+  episode** adds an optional countdown on the Up next card (Immediately, 5, 10,
+  15 or 30 seconds) after the episode ends. Turning auto-advance off keeps the
+  card, so episodes can still be skipped by hand.
+- **Preferred audio language** — Settings → Playback → **Preferred audio
+  language** picks the first matching track as soon as the release exposes its
+  tracks. **Original** leaves the release's default audio alone. A manual pick
+  in the player wins for that source.
+- **Resume behavior** — Settings → Playback → **Resume where you stopped**
+  (default on). Turning it off makes Play, Continue watching and episode
+  selection start at 0; the details page stops advertising a resume position.
 - **Video engine** — Settings → Playback → **Video engine** selects
   **Automatic**, **libVLC** or **mpv**. Automatic uses mpv when it is available
   and falls back to libVLC; picking libVLC explicitly overrides that. The
@@ -205,7 +241,11 @@ Everything Pirsa does, in detail. For install and build steps see
   the bar that actually covers the picture counts, so the shift is never larger
   than it needs to be. Tracks that carry their own hard-coded positions (some
   embedded ASS) keep their own placement.
-- **Preferred subtitle language** (Settings → Playback) turns the first matching
+- **Subtitle appearance** (Settings → Subtitles → Appearance) sets text size
+  (Small, Default, Large, Extra large) and background (None, Dim, Solid), with a
+  live preview. It applies to the next source; embedded ASS tracks may keep
+  their own styling.
+- **Preferred subtitle language** (Settings → Subtitles) turns the first matching
   track on automatically for every title and episode, including the next episode
   after auto-advance, and pins that language to the top of the picker. Picking
   another language in the player applies to that title only — a series keeps it
@@ -228,16 +268,16 @@ Everything Pirsa does, in detail. For install and build steps see
   host and what it provides, then explains that addons are third-party.
 - **Install** adds it; **Cancel** works even while the manifest is loading. An
   invalid link or a manifest that cannot be loaded changes nothing.
-- A successful install opens Settings → Addons with a notice. While the player
+- A successful install opens Settings → Add-ons with a notice. While the player
   is open the outcome is shown in a dialog instead, so a running video is never
   closed silently.
 - A link for an addon that is already configured opens Settings with that
   message instead of adding a duplicate.
-- Addon links can also be pasted into Settings → Addons, including the
+- Addon links can also be pasted into Settings → Add-ons, including the
   `https://web.stremio.com/#/addons?addon=…` share form.
 - Portable builds can turn Windows link handling on or off in Settings →
-  Addons. Packaged builds register it through the app package, and the installer
-  registers it per user.
+  Add-ons → Advanced. Packaged builds register it through the app package, and
+  the installer registers it per user.
 
 ## Sync
 

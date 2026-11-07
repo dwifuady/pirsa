@@ -17,21 +17,17 @@
         HorizontalScrollMode="Disabled"
         VerticalScrollBarVisibility="Auto">
         <Grid
-            MaxWidth="1000"
-            Margin="40,26,40,64"
+            Margin="32,26,32,64"
             HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
             <StackPanel Spacing="22">
                 <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Home rows" />
                     <TextBlock
-                        FontSize="32"
-                        FontWeight="SemiBold"
-                        Style="{StaticResource TitleTextBlockStyle}"
-                        Text="Home" />
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Choose which catalogs appear on the Home screen as poster rows, and in what order. Rows can come from any addon, in any mix. Every catalog stays available in Discover and Search no matter what is pinned here."
-                        TextWrapping="Wrap" />
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="Choose which catalogs appear on Home as poster rows, and in what order. Every catalog stays available in Discover and Search." />
                 </StackPanel>
 
                 <ProgressRing

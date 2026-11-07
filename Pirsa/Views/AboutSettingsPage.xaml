@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.AboutSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            Margin="32,26,32,64"
+            HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="About" />
+                    <TextBlock
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="An unofficial, Stremio-compatible client for Windows." />
+                </StackPanel>
+
+                <!--  App identity  -->
+                <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                    <Grid Padding="20" ColumnSpacing="18">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border
+                            Width="64"
+                            Height="64"
+                            Background="{ThemeResource BrandSubtleBrush}"
+                            CornerRadius="14">
+                            <Image
+                                Width="48"
+                                Height="48"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Source="ms-appx:///Assets/BrandMark.png" />
+                        </Border>
+                        <StackPanel
+                            x:Name="VersionRow"
+                            Grid.Column="1"
+                            Spacing="3"
+                            VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock
+                                    FontFamily="Segoe UI Variable Display"
+                                    FontSize="20"
+                                    FontWeight="SemiBold"
+                                    Text="Pirsa" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Text="{x:Bind AppVersion, Mode=OneTime}" />
+                            </StackPanel>
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="Pirsa hosts no content. Catalogs, metadata, subtitles and sources come from the add-ons you add."
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!--  Resources  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Resources" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Padding="16,13"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OpenLink_Click"
+                                Tag="https://github.com/dwifuady/pirsa/releases">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Release notes" />
+                                        <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="What changed in this version." />
+                                    </StackPanel>
+                                    <FontIcon
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="&#xE8A7;" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Button
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Padding="16,13"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OpenLink_Click"
+                                Tag="https://github.com/dwifuady/pirsa">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="GitHub" />
+                                        <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Source, issues and releases." />
+                                    </StackPanel>
+                                    <FontIcon
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="&#xE8A7;" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Button
+                                x:Name="LicenseRow"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Padding="16,13"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OpenLink_Click"
+                                Tag="https://github.com/dwifuady/pirsa/blob/main/LICENSE">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="License" />
+                                        <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="GNU GPL v3.0 or later." />
+                                    </StackPanel>
+                                    <FontIcon
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="&#xE8A7;" />
+                                </Grid>
+                            </Button>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Button
+                                x:Name="ThirdPartyRow"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Padding="16,13"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OpenLink_Click"
+                                Tag="https://github.com/dwifuady/pirsa/blob/main/THIRD-PARTY-NOTICES.md">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Third-party notices" />
+                                        <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="mpv, libVLC and other components." />
+                                    </StackPanel>
+                                    <FontIcon
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="&#xE8A7;" />
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  Diagnostics  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Diagnostics" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="AboutLogRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Player log" />
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Diagnostics from the last playback." />
+                                            <TextBlock
+                                                x:Name="AboutLogSizeText"
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="0 KB" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Open player log from About"
+                                        Click="OpenLog_Click"
+                                        Content="Open log" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="SystemInfoRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="System information" />
+                                        <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Version, Windows build, architecture and video engine." />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Copy system information"
+                                        Click="CopySystemInfo_Click"
+                                        Content="Copy" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="AboutDataFolderRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Data folder" />
+                                        <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Settings, history, logs and the stream cache." />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Open the Pirsa data folder from About"
+                                        Click="OpenDataFolder_Click"
+                                        Content="Open folder" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock
+                        x:Name="DiagnosticsStatus"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                </StackPanel>
+
+                <!--  Keyboard shortcuts  -->
+                <Expander
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Header="Keyboard shortcuts">
+                    <Border
+                        Margin="0,4,0,0"
+                        Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Padding="16,13">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Space" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Play or pause." />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+                            <Border Padding="16,13">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Left / Right" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Skip back or forward 10 seconds." />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+                            <Border Padding="16,13">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="F" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Toggle fullscreen." />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+                            <Border Padding="16,13">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="M / E / I" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Mute, episodes, or title details." />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+                            <Border Padding="16,13">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="[ / ]" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="Shift subtitle timing earlier or later." />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Expander>
+
+                <TextBlock
+                    Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                    Text="Pirsa is free software under the GNU GPL v3.0. It is not affiliated with Stremio. You are responsible for the add-ons you configure and for using them where you have the rights to." />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

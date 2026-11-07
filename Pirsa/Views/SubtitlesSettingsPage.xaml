@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.SubtitlesSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            Margin="32,26,32,64"
+            HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Subtitles" />
+                    <TextBlock
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="Turn on a language once. The player remembers the rest." />
+                </StackPanel>
+
+                <InfoBar
+                    Title="Subtitles cleared"
+                    Closed="Notice_Closed"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.NoticeMessage, Mode=OneWay}"
+                    Severity="Informational" />
+
+                <InfoBar
+                    Title="Couldn't clear subtitle settings"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                    Severity="Error" />
+
+                <!--  Language  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Language" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="LanguageRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Preferred subtitle language" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Pirsa turns this on automatically and pins it to the top of the player's CC menu. Choose Off to keep subtitles off everywhere. Picking another language in the player applies to that title only." />
+                                </StackPanel>
+                                <ComboBox
+                                    Grid.Column="1"
+                                    MinWidth="184"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Preferred subtitle language"
+                                    ItemsSource="{x:Bind ViewModel.SubtitleLanguageOptions}"
+                                    SelectedItem="{x:Bind ViewModel.SelectedSubtitleLanguage, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="helpers:SubtitleLanguageOption">
+                                            <TextBlock Text="{x:Bind Name, Mode=OneTime}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  Appearance  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Appearance" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="SubtitleTextSizeRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Text size" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="Applies to every subtitle track, embedded or downloaded." />
+                                    </StackPanel>
+                                    <ComboBox
+                                        Grid.Column="1"
+                                        MinWidth="168"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Subtitle text size"
+                                        SelectedIndex="{x:Bind ViewModel.SubtitleTextSizeIndex, Mode=TwoWay}"
+                                        SelectionChanged="SubtitleAppearance_SelectionChanged">
+                                        <ComboBoxItem Content="Small" />
+                                        <ComboBoxItem Content="Default" />
+                                        <ComboBoxItem Content="Large" />
+                                        <ComboBoxItem Content="Extra large" />
+                                    </ComboBox>
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="SubtitleBackgroundRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Background" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="A dim or solid box keeps text readable on bright scenes. Applies from the next playback; embedded ASS tracks may keep their own styling." />
+                                    </StackPanel>
+                                    <ComboBox
+                                        Grid.Column="1"
+                                        MinWidth="168"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Subtitle background"
+                                        SelectedIndex="{x:Bind ViewModel.SubtitleBackgroundIndex, Mode=TwoWay}"
+                                        SelectionChanged="SubtitleAppearance_SelectionChanged">
+                                        <ComboBoxItem Content="None" />
+                                        <ComboBoxItem Content="Dim" />
+                                        <ComboBoxItem Content="Solid" />
+                                    </ComboBox>
+                                </Grid>
+                            </Border>
+
+                            <Border Padding="16,0,16,16">
+                                <Border
+                                    Height="148"
+                                    CornerRadius="7">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Offset="0" Color="#FF292732" />
+                                            <GradientStop Offset="0.6" Color="#FF121217" />
+                                            <GradientStop Offset="1" Color="#FF3A2418" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border
+                                        x:Name="SubtitleCaptionBackground"
+                                        Margin="0,0,0,22"
+                                        Padding="8,4"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Bottom"
+                                        Background="#8C000000"
+                                        CornerRadius="4">
+                                        <TextBlock
+                                            x:Name="SubtitleCaption"
+                                            MaxWidth="520"
+                                            Foreground="White"
+                                            FontSize="{x:Bind ViewModel.PreviewFontSize, Mode=OneWay}"
+                                            FontWeight="SemiBold"
+                                            Text="Some stories are better with the sound off."
+                                            TextAlignment="Center"
+                                            TextWrapping="Wrap" />
+                                    </Border>
+                                </Border>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  Advanced  -->
+                <Expander
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Header="Advanced">
+                    <Border
+                        Margin="0,4,0,0"
+                        Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="ClearTimingRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Saved subtitle timing" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Pirsa remembers timing adjustments and per-title choices. Clear them to start fresh." />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Clear saved subtitle timing and choices"
+                                    Click="ClearTiming_Click"
+                                    Content="Clear" />
+                            </Grid>
+                        </Border>
+                    </Border>
+                </Expander>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>
