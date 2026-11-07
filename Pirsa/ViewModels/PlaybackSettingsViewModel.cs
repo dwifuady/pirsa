@@ -38,6 +38,10 @@ public partial class PlaybackSettingsViewModel : ObservableObject
         AutoAdvanceEnabled = true;
         AutoAdvanceDelayIndex = 0;
         ResumeEnabled = true;
+        SkipSegmentsEnabled = true;
+        AutoSkipIntroEnabled = false;
+        AutoSkipRecapEnabled = false;
+        AutoSkipOutroEnabled = false;
         SelectedPlaybackEngine = PlaybackEngineOptions[0];
         SelectedAudioLanguage = AudioLanguageOptions[0];
         _loadingSettings = false;
@@ -64,6 +68,19 @@ public partial class PlaybackSettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool ResumeEnabled { get; set; }
 
+    /// <summary>When true, the player shows a skip button for intro/recap/outro.</summary>
+    [ObservableProperty]
+    public partial bool SkipSegmentsEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoSkipIntroEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoSkipRecapEnabled { get; set; }
+
+    [ObservableProperty]
+    public partial bool AutoSkipOutroEnabled { get; set; }
+
     [ObservableProperty]
     public partial int QualityIndex { get; set; }
 
@@ -89,6 +106,10 @@ public partial class PlaybackSettingsViewModel : ObservableObject
         var delayIndex = Array.IndexOf(AutoAdvanceDelayCodes, _settings.AutoAdvanceDelaySeconds);
         AutoAdvanceDelayIndex = delayIndex < 0 ? 0 : delayIndex;
         ResumeEnabled = _settings.ResumePlayback;
+        SkipSegmentsEnabled = _settings.SkipSegmentsEnabled;
+        AutoSkipIntroEnabled = _settings.AutoSkipIntro;
+        AutoSkipRecapEnabled = _settings.AutoSkipRecap;
+        AutoSkipOutroEnabled = _settings.AutoSkipOutro;
         SelectedPlaybackEngine = ResolvePlaybackEngine(_settings.PlaybackEngine);
         SelectedAudioLanguage = ResolveAudioLanguage(_settings.PreferredAudioLanguage);
         var qualityIndex = Array.IndexOf(QualityCodes, _settings.PreferredQuality ?? "");
@@ -133,6 +154,42 @@ public partial class PlaybackSettingsViewModel : ObservableObject
         if (!_loadingSettings)
         {
             _settings.ResumePlayback = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnSkipSegmentsEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.SkipSegmentsEnabled = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoSkipIntroEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoSkipIntro = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoSkipRecapEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoSkipRecap = value;
+            _ = _settings.SaveAsync();
+        }
+    }
+
+    partial void OnAutoSkipOutroEnabledChanged(bool value)
+    {
+        if (!_loadingSettings)
+        {
+            _settings.AutoSkipOutro = value;
             _ = _settings.SaveAsync();
         }
     }

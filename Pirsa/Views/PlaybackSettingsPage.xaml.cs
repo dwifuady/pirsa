@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using Pirsa.ViewModels;
@@ -18,5 +19,16 @@ public sealed partial class PlaybackSettingsPage : Page
     {
         base.OnNavigatedTo(e);
         await ViewModel.InitializeAsync();
+        UpdateSkipOptionsVisibility();
+    }
+
+    private void SkipSegmentsToggle_Toggled(object sender, RoutedEventArgs e) =>
+        UpdateSkipOptionsVisibility();
+
+    private void UpdateSkipOptionsVisibility()
+    {
+        SkipOptionsPanel.Visibility = SkipSegmentsToggle.IsOn
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 }

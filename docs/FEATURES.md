@@ -206,6 +206,15 @@ Everything Pirsa does, in detail. For install and build steps see
 - **Resume behavior** — Settings → Playback → **Resume where you stopped**
   (default on). Turning it off makes Play, Continue watching and episode
   selection start at 0; the details page stops advertising a resume position.
+- **Skip intro and outro** — Settings → Playback → **Skip intro and outro**
+  (default on). While an opening, "previously on" recap, ending or film credits
+  are playing, a **Skip intro**, **Skip recap**, **Skip outro** or **Skip
+  credits** button appears over the video. It fades after ten seconds and comes
+  back with the controls. Timestamps come from chapters named in the file
+  (Opening, Ending, Recap) and from
+  [IntroDB](https://introdb.app), addressed by the title's IMDb id. Each kind
+  can also be skipped automatically; when end credits lead into a post-credits
+  scene, the button becomes **Skip to post-credits** and stops before it.
 - **Video engine** — Settings → Playback → **Video engine** selects
   **Automatic**, **libVLC** or **mpv**. Automatic uses mpv when it is available
   and falls back to libVLC; picking libVLC explicitly overrides that. The

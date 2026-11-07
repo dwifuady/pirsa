@@ -166,6 +166,24 @@ public sealed partial class PlayerPage : Page
     private bool _advancing;
     private int _lastVolume = 80;
 
+    // ------------------------------------------------------- skip segments
+    private CancellationTokenSource? _skipCts;
+    private IReadOnlyList<SkipSegment> _apiSkipSegments = [];
+    private IReadOnlyList<SkipSegment> _chapterSkipSegments = [];
+    private IReadOnlyList<SkipSegment> _skipSegments = [];
+    private readonly HashSet<SkipSegment> _autoSkippedSegments = [];
+    private SkipSegment? _activeSkipSegment;
+    private bool _skipSegmentDismissed;
+    private bool _skipAutoHidden;
+    private bool _chaptersRead;
+    private int _chapterProbeAttempts;
+    private DateTime _lastChapterProbeUtc;
+    private DispatcherTimer? _skipHideTimer;
+    private DispatcherTimer? _skipHudTimer;
+
+    private static readonly TimeSpan SkipButtonLifetime = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan SkipHudLifetime = TimeSpan.FromSeconds(1.4);
+
     private readonly UISettings _uiSettings = new();
     private readonly AccessibilitySettings _accessibility = new();
     private Storyboard? _loadingBreath;
@@ -216,6 +234,23 @@ public sealed partial class PlayerPage : Page
         {
             _subtitleHudTimer?.Stop();
             SubtitleHudPanel.Visibility = Visibility.Collapsed;
+        };
+
+        // The skip button belongs to a moment, not to the chrome. It stays up
+        // for ten seconds, then disappears until the controls are shown again.
+        _skipHideTimer = new DispatcherTimer { Interval = SkipButtonLifetime };
+        _skipHideTimer.Tick += (_, _) =>
+        {
+            _skipHideTimer?.Stop();
+            _skipAutoHidden = true;
+            RefreshSkipVisibility();
+        };
+
+        _skipHudTimer = new DispatcherTimer { Interval = SkipHudLifetime };
+        _skipHudTimer.Tick += (_, _) =>
+        {
+            _skipHudTimer?.Stop();
+            SkipHudPanel.Visibility = Visibility.Collapsed;
         };
 
         // A press libvlc never answers would otherwise leave the button showing
@@ -407,6 +442,7 @@ public sealed partial class PlayerPage : Page
         _lengthMs = 0;
         _ended = false;
         _subtitleDelayMs = 0;
+        ResetSkipState();
         _selectedEmbeddedTrackId = -1;
         _selectedEmbeddedName = null;
         _selectedEmbeddedCode = null;
@@ -422,6 +458,7 @@ public sealed partial class PlayerPage : Page
         _ = LoadSourcesAsync(request);
         _ = LoadSubtitlesAsync(request);
         _ = LoadNextEpisodeAsync(request);
+        _ = LoadSkipSegmentsAsync(request);
     }
 
     protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -1113,7 +1150,21 @@ public sealed partial class PlayerPage : Page
             }
 
             var lead = Math.Clamp((long)(_lengthMs * 0.05), 15_000, 90_000);
-            if (_lengthMs - _positionMs > lead)
+            var showAtMs = _lengthMs - lead;
+
+            // When the credits start is known, the card follows them instead of
+            // an arbitrary percentage.
+            var outro = _skipSegments
+                .Where(segment => segment.Kind is SkipSegmentKind.Outro or SkipSegmentKind.MovieCredits)
+                .OrderByDescending(segment => segment.EndMs)
+                .FirstOrDefault();
+
+            if (outro is not null)
+            {
+                showAtMs = Math.Min(showAtMs, outro.StartMs);
+            }
+
+            if (_positionMs < showAtMs)
             {
                 HideUpNext();
                 return;
@@ -1263,6 +1314,7 @@ public sealed partial class PlayerPage : Page
             ViewModel.MarkCurrentEpisode(episode.Season, episode.EpisodeNumber);
             _ = LoadSubtitlesAsync(request);
             _ = LoadNextEpisodeAsync(request);
+            _ = LoadSkipSegmentsAsync(request);
             await LoadSourcesAsync(request, autoStart: true);
         }
         finally
@@ -1274,6 +1326,7 @@ public sealed partial class PlayerPage : Page
     /// <summary>Resets per-episode state before the next episode is loaded.</summary>
     private void PrepareNextEpisode()
     {
+        ResetSkipState();
         _cachedAttempt = null;
         _cachedWatchdog?.Stop();
         _sourceDiscovery = null;
@@ -1804,6 +1857,8 @@ public sealed partial class PlayerPage : Page
 
         _resumeMs = 0;
         _resumeFromHistoryMs = 0;
+        RefreshChapterSkipSegmentsIfNeeded();
+        UpdateSkipSegmentUi();
         _cachedAttempt = null;
         _cachedWatchdog?.Stop();
 
@@ -1901,6 +1956,8 @@ public sealed partial class PlayerPage : Page
         ClearPlayingIntent();
         _playing = false;
         _ended = true;
+        _skipSegmentDismissed = true;
+        RefreshSkipVisibility();
         _stallTimer.Stop();
         _positionMs = _lengthMs > 0 ? _lengthMs : _positionMs;
         PersistProgress(_positionMs, _lengthMs, completed: true);
@@ -1933,6 +1990,8 @@ public sealed partial class PlayerPage : Page
     private void HandleTimeChanged(long time)
     {
         _positionMs = Math.Max(0, time);
+        RefreshChapterSkipSegmentsIfNeeded();
+        UpdateSkipSegmentUi();
         UpdateUpNextVisibility();
         UpdateLyricSyncPosition(_positionMs);
 
@@ -1952,10 +2011,333 @@ public sealed partial class PlayerPage : Page
     private void HandleLengthChanged(long length)
     {
         _lengthMs = Math.Max(0, length);
+        RefreshChapterSkipSegmentsIfNeeded();
+        UpdateSkipSegmentUi();
         UpdateUpNextVisibility();
         SeekSlider.Maximum = Math.Max(1, length);
         SeekSlider.IsEnabled = length > 0 && _engine.IsSeekable;
         UpdateTimeText(_engine.PositionMs, length);
+    }
+
+    // ------------------------------------------------------- skip segments
+
+    /// <summary>
+    /// Looks up IntroDB timestamps and reads the file's chapters. Any of the
+    /// three can arrive first; merging waits for whichever is present.
+    /// </summary>
+    private async Task LoadSkipSegmentsAsync(PlaybackRequest request)
+    {
+        _skipCts?.Cancel();
+        _skipCts?.Dispose();
+        _skipCts = new CancellationTokenSource();
+        var token = _skipCts.Token;
+
+        try
+        {
+            await App.Settings.EnsureLoadedAsync(token);
+            if (!App.Settings.SkipSegmentsEnabled || IsLive(request))
+            {
+                return;
+            }
+
+            var segments = await SkipSegmentsService.GetAsync(request, token);
+            if (_disposed || token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _apiSkipSegments = segments;
+            MergeSkipSegments();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            // Skip data is an enhancement; playback never waits for it.
+        }
+    }
+
+    /// <summary>
+    /// Reads chapters once the engine has them. Titles named Opening, Ending or
+    /// Recap are the most reliable segments for a specific release.
+    /// </summary>
+    private void RefreshChapterSkipSegmentsIfNeeded()
+    {
+        if (_chaptersRead || _disposed || !_engine.IsReady || _lengthMs <= 0)
+        {
+            return;
+        }
+
+        // Chapter lists appear a moment after playback starts, so probe rather
+        // than giving up on the first empty answer.
+        var now = DateTime.UtcNow;
+        if ((now - _lastChapterProbeUtc).TotalMilliseconds < 1000)
+        {
+            return;
+        }
+
+        _lastChapterProbeUtc = now;
+        if (++_chapterProbeAttempts > 8)
+        {
+            _chaptersRead = true;
+            return;
+        }
+
+        var chapters = _engine.Chapters;
+        if (chapters.Count < 2)
+        {
+            return;
+        }
+
+        _chaptersRead = true;
+        _chapterSkipSegments = ChapterSkipSegments.FromChapters(chapters, _lengthMs);
+        MergeSkipSegments();
+    }
+
+    private void MergeSkipSegments()
+    {
+        var isMovie = ViewModel.Request is { } request && SkipSegmentsService.IsMovie(request);
+        _skipSegments = SkipSegmentRules.Merge(_apiSkipSegments, _chapterSkipSegments, isMovie);
+        UpdateSkipSegmentUi();
+    }
+
+    /// <summary>
+    /// Chooses the segment under the playhead, shows its button, and auto-skips
+    /// when the user has asked for that kind of segment.
+    /// </summary>
+    private void UpdateSkipSegmentUi()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (_skipSegments.Count == 0 || !App.Settings.SkipSegmentsEnabled)
+        {
+            if (_activeSkipSegment is not null)
+            {
+                _activeSkipSegment = null;
+                _skipSegmentDismissed = false;
+            }
+
+            RefreshSkipVisibility();
+            return;
+        }
+
+        var current = _skipSegments.FirstOrDefault(segment =>
+            segment.Contains(_positionMs) &&
+            SkipSegmentRules.FindTarget(segment, _skipSegments, _lengthMs) is not null);
+
+        if (!ReferenceEquals(current, _activeSkipSegment))
+        {
+            // Keep a dismissal while the same part of the title changes source,
+            // e.g. an API outro replaced by a chapter outro.
+            var keepDismissed = current is not null &&
+                                _activeSkipSegment is not null &&
+                                SkipSegmentRules.CategoryOf(current.Kind) ==
+                                SkipSegmentRules.CategoryOf(_activeSkipSegment.Kind);
+
+            _activeSkipSegment = current;
+            if (!keepDismissed)
+            {
+                _skipSegmentDismissed = false;
+            }
+
+            if (current is not null)
+            {
+                _skipAutoHidden = false;
+                RestartSkipHideTimer();
+            }
+        }
+
+        ApplySkipButtonLabel();
+        RefreshSkipVisibility();
+        MaybeAutoSkip(current);
+    }
+
+    private void MaybeAutoSkip(SkipSegment? segment)
+    {
+        if (segment is null ||
+            _disposed ||
+            !_playing ||
+            _draggingSeek ||
+            _switching ||
+            _skipSegmentDismissed ||
+            !App.Settings.SkipSegmentsEnabled ||
+            _autoSkippedSegments.Contains(segment) ||
+            !IsAutoSkipEnabled(segment.Kind))
+        {
+            return;
+        }
+
+        if (SkipSegmentRules.FindTarget(segment, _skipSegments, _lengthMs) is not { } target)
+        {
+            return;
+        }
+
+        // The engine may still be opening the file, in which case there is no
+        // transport to seek yet. Leave the button up for a later tick.
+        _skipSegmentDismissed = true;
+        if (!SkipTo(target.PositionMs))
+        {
+            _skipSegmentDismissed = false;
+            RefreshSkipVisibility();
+            return;
+        }
+
+        // Mark before the seek's position updates can arrive, so they cannot
+        // start the same skip again.
+        _autoSkippedSegments.Add(segment);
+        ShowSkipHud(segment, target);
+    }
+
+    private static bool IsAutoSkipEnabled(SkipSegmentKind kind) => kind switch
+    {
+        SkipSegmentKind.Intro => App.Settings.AutoSkipIntro,
+        SkipSegmentKind.Recap => App.Settings.AutoSkipRecap,
+        SkipSegmentKind.Outro or SkipSegmentKind.MovieCredits => App.Settings.AutoSkipOutro,
+        _ => false,
+    };
+
+    private void SkipSegment_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeSkipSegment is not { } segment ||
+            SkipSegmentRules.FindTarget(segment, _skipSegments, _lengthMs) is not { } target)
+        {
+            return;
+        }
+
+        _skipSegmentDismissed = true;
+        if (!SkipTo(target.PositionMs))
+        {
+            _skipSegmentDismissed = false;
+            RefreshSkipVisibility();
+            return;
+        }
+
+        _autoSkippedSegments.Add(segment);
+        ShowSkipHud(segment, target);
+    }
+
+    /// <summary>
+    /// Seeks to a segment's end. False when the engine cannot seek yet, so the
+    /// caller does not count the segment as handled.
+    /// </summary>
+    private bool SkipTo(long targetMs)
+    {
+        if (!_engine.IsReady || !_engine.IsSeekable)
+        {
+            return false;
+        }
+
+        var duration = _lengthMs > 0 ? _lengthMs : _engine.DurationMs;
+        var target = duration > 0
+            ? Math.Clamp(targetMs, 0, Math.Max(0, duration - 1))
+            : Math.Max(0, targetMs);
+
+        LogSeek(_engine.PositionMs, target, "skip segment");
+        _engine.PositionMs = target;
+        _positionMs = target;
+        RefreshSkipVisibility();
+        ShowChrome();
+        StartChromeTimer();
+        return true;
+    }
+
+    /// <summary>
+    /// Remembers that the viewer moved here on purpose, so auto-skip does not
+    /// immediately undo a rewind into an intro they want to watch.
+    /// </summary>
+    private void MarkSkipSegmentsAtPosition(long positionMs)
+    {
+        foreach (var segment in _skipSegments)
+        {
+            if (segment.Contains(positionMs))
+            {
+                _autoSkippedSegments.Add(segment);
+            }
+        }
+    }
+
+    private void ApplySkipButtonLabel()
+    {
+        if (_activeSkipSegment is not { } segment)
+        {
+            return;
+        }
+
+        var goesToPostCredits = SkipSegmentRules
+            .FindTarget(segment, _skipSegments, _lengthMs)?
+            .GoesToPostCredits == true;
+
+        var label = segment.Kind switch
+        {
+            SkipSegmentKind.Intro => "Skip intro",
+            SkipSegmentKind.Recap => "Skip recap",
+            SkipSegmentKind.MovieCredits => goesToPostCredits
+                ? "Skip to post-credits"
+                : "Skip credits",
+            SkipSegmentKind.Outro => goesToPostCredits
+                ? "Skip to post-credits"
+                : "Skip outro",
+            _ => "Skip",
+        };
+
+        SkipSegmentText.Text = label;
+        AutomationProperties.SetName(SkipSegmentButton, label);
+    }
+
+    private void RefreshSkipVisibility()
+    {
+        var visible = _activeSkipSegment is not null &&
+                      !_skipSegmentDismissed &&
+                      (!_skipAutoHidden || !_chromeHidden);
+        SkipSegmentPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RestartSkipHideTimer()
+    {
+        _skipHideTimer?.Stop();
+        _skipHideTimer?.Start();
+    }
+
+    private void ShowSkipHud(SkipSegment segment, SkipTarget target)
+    {
+        SkipHudText.Text = target.GoesToPostCredits
+            ? "Skipped to post-credits"
+            : segment.Kind switch
+            {
+                SkipSegmentKind.Intro => "Skipped intro",
+                SkipSegmentKind.Recap => "Skipped recap",
+                SkipSegmentKind.MovieCredits => "Skipped credits",
+                _ => "Skipped outro",
+            };
+
+        SkipHudPanel.Visibility = Visibility.Visible;
+        _skipHudTimer?.Stop();
+        _skipHudTimer?.Start();
+    }
+
+    private void ResetSkipState()
+    {
+        _skipCts?.Cancel();
+        _skipCts?.Dispose();
+        _skipCts = null;
+        _apiSkipSegments = [];
+        _chapterSkipSegments = [];
+        _skipSegments = [];
+        _autoSkippedSegments.Clear();
+        _activeSkipSegment = null;
+        _skipSegmentDismissed = false;
+        _skipAutoHidden = false;
+        _chaptersRead = false;
+        _chapterProbeAttempts = 0;
+        _lastChapterProbeUtc = default;
+        _skipHideTimer?.Stop();
+        _skipHudTimer?.Stop();
+        SkipSegmentPanel.Visibility = Visibility.Collapsed;
+        SkipHudPanel.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>Writes the position at most every ten seconds while playing.</summary>
@@ -2312,6 +2694,7 @@ public sealed partial class PlayerPage : Page
         }
 
         var target = Math.Clamp(_engine.PositionMs + deltaMs, 0, _engine.DurationMs);
+        MarkSkipSegmentsAtPosition(target);
         LogSeek(_engine.PositionMs, target, "skip");
         _engine.PositionMs = target;
         ShowChrome();
@@ -2344,6 +2727,7 @@ public sealed partial class PlayerPage : Page
 
         if (!_draggingSeek && _engine.IsSeekable)
         {
+            MarkSkipSegmentsAtPosition((long)e.NewValue);
             _engine.PositionMs = (long)e.NewValue;
         }
     }
@@ -2369,6 +2753,7 @@ public sealed partial class PlayerPage : Page
         _draggingSeek = false;
         if (_engine.IsSeekable)
         {
+            MarkSkipSegmentsAtPosition((long)SeekSlider.Value);
             LogSeek(_engine.PositionMs, (long)SeekSlider.Value, "scrub");
             _engine.PositionMs = (long)SeekSlider.Value;
         }
@@ -2661,6 +3046,8 @@ public sealed partial class PlayerPage : Page
         {
             RefreshSubtitleLift();
         }
+
+        RefreshSkipVisibility();
     }
 
     private void HideChrome()
@@ -2683,6 +3070,7 @@ public sealed partial class PlayerPage : Page
         Chrome.Opacity = 0;
         Chrome.IsHitTestVisible = false;
         RefreshSubtitleLift();
+        RefreshSkipVisibility();
     }
 
     /// <summary>
@@ -4091,6 +4479,8 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer?.Stop();
         _autoAdvanceTimer?.Stop();
         _subtitleHudTimer?.Stop();
+        _skipHideTimer?.Stop();
+        _skipHudTimer?.Stop();
         _cachedWatchdog?.Stop();
         _lyricSyncOpen = false;
         _lyricSyncToastTimer?.Stop();
@@ -4111,6 +4501,9 @@ public sealed partial class PlayerPage : Page
         _nextEpisodeCts?.Cancel();
         _nextEpisodeCts?.Dispose();
         _nextEpisodeCts = null;
+        _skipCts?.Cancel();
+        _skipCts?.Dispose();
+        _skipCts = null;
         _sourceCts?.Cancel();
         _sourceCts?.Dispose();
         _sourceCts = null;

@@ -34,16 +34,19 @@ public sealed class AppSettings
     public bool ResumePlayback { get; set; } = true;
 
     /// <summary>
-    /// Canonical language code for the audio track to prefer, or empty for the
-    /// track the release marks as default/original.
+    /// When true, the player looks up intro, recap and outro segments and shows
+    /// a skip button while one is playing.
     /// </summary>
-    public string PreferredAudioLanguage { get; set; } = "";
+    public bool SkipSegmentsEnabled { get; set; } = true;
 
-    /// <summary>1.0 is the player default; 0.85, 1.2 and 1.45 are the presets.</summary>
-    public double SubtitleTextScale { get; set; } = 1.0;
+    /// <summary>Seek past a detected opening without waiting for a press.</summary>
+    public bool AutoSkipIntro { get; set; }
 
-    /// <summary>None, Dim or Solid.</summary>
-    public string SubtitleBackground { get; set; } = "Dim";
+    /// <summary>Seek past a "previously on…" recap without waiting for a press.</summary>
+    public bool AutoSkipRecap { get; set; }
+
+    /// <summary>Seek past an episode ending or a film's end credits.</summary>
+    public bool AutoSkipOutro { get; set; }
 
     /// <summary>
     /// Playback backend id, or empty for Automatic (mpv when available, then
@@ -58,6 +61,18 @@ public sealed class AppSettings
     /// language in the player.
     /// </summary>
     public string PreferredSubtitleLanguage { get; set; } = "";
+
+    /// <summary>
+    /// Canonical language code for the audio track to prefer, or empty for the
+    /// track the release marks as default/original.
+    /// </summary>
+    public string PreferredAudioLanguage { get; set; } = "";
+
+    /// <summary>1.0 is the player default; 0.85, 1.2 and 1.45 are the presets.</summary>
+    public double SubtitleTextScale { get; set; } = 1.0;
+
+    /// <summary>None, Dim or Solid.</summary>
+    public string SubtitleBackground { get; set; } = "Dim";
 
     /// <summary>System, Light or Dark. System follows Windows.</summary>
     public string Theme { get; set; } = "System";
@@ -98,6 +113,10 @@ public sealed class AppSettings
                         AutoAdvance = record.AutoAdvance;
                         AutoAdvanceDelaySeconds = Math.Clamp(record.AutoAdvanceDelaySeconds, 0, 30);
                         ResumePlayback = record.ResumePlayback;
+                        SkipSegmentsEnabled = record.SkipSegmentsEnabled;
+                        AutoSkipIntro = record.AutoSkipIntro;
+                        AutoSkipRecap = record.AutoSkipRecap;
+                        AutoSkipOutro = record.AutoSkipOutro;
                         PlaybackEngine = record.PlaybackEngine ?? "";
                         PreferredSubtitleLanguage = record.PreferredSubtitleLanguage ?? "";
                         PreferredAudioLanguage = record.PreferredAudioLanguage ?? "";
@@ -137,6 +156,10 @@ public sealed class AppSettings
         AutoAdvance = true;
         AutoAdvanceDelaySeconds = 0;
         ResumePlayback = true;
+        SkipSegmentsEnabled = true;
+        AutoSkipIntro = false;
+        AutoSkipRecap = false;
+        AutoSkipOutro = false;
         PlaybackEngine = "";
         PreferredSubtitleLanguage = "";
         PreferredAudioLanguage = "";
@@ -168,6 +191,10 @@ public sealed class AppSettings
                 AutoAdvance = AutoAdvance,
                 AutoAdvanceDelaySeconds = Math.Clamp(AutoAdvanceDelaySeconds, 0, 30),
                 ResumePlayback = ResumePlayback,
+                SkipSegmentsEnabled = SkipSegmentsEnabled,
+                AutoSkipIntro = AutoSkipIntro,
+                AutoSkipRecap = AutoSkipRecap,
+                AutoSkipOutro = AutoSkipOutro,
                 PlaybackEngine = PlaybackEngine ?? "",
                 PreferredSubtitleLanguage = PreferredSubtitleLanguage ?? "",
                 PreferredAudioLanguage = PreferredAudioLanguage ?? "",
@@ -217,6 +244,14 @@ public sealed class AppSettings
         public int AutoAdvanceDelaySeconds { get; set; }
 
         public bool ResumePlayback { get; set; } = true;
+
+        public bool SkipSegmentsEnabled { get; set; } = true;
+
+        public bool AutoSkipIntro { get; set; }
+
+        public bool AutoSkipRecap { get; set; }
+
+        public bool AutoSkipOutro { get; set; }
 
         public string PlaybackEngine { get; set; } = "";
 

@@ -198,6 +198,39 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
         }
     }
 
+    public IReadOnlyList<PlaybackChapter> Chapters
+    {
+        get
+        {
+            try
+            {
+                if (_mediaPlayer is not { } player || player.ChapterCount <= 0)
+                {
+                    return [];
+                }
+
+                var descriptions = player.FullChapterDescriptions(-1);
+                if (descriptions is null)
+                {
+                    return [];
+                }
+
+                // LibVLC reports chapter times in microseconds.
+                return descriptions
+                    .Where(chapter => chapter.TimeOffset >= 0)
+                    .Select(chapter => new PlaybackChapter(
+                        chapter.TimeOffset / 1000,
+                        string.IsNullOrWhiteSpace(chapter.Name) ? null : chapter.Name))
+                    .OrderBy(chapter => chapter.StartMs)
+                    .ToList();
+            }
+            catch
+            {
+                return [];
+            }
+        }
+    }
+
     public IReadOnlyList<PlaybackTrack> AudioTracks
     {
         get

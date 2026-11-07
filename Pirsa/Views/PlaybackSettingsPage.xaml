@@ -150,6 +150,112 @@
                     </Border>
                 </StackPanel>
 
+                <!--  Skipping  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Skipping" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="SkipSegmentsRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip intro and outro" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="Shows a Skip button while an intro, recap or outro is playing. Timestamps come from IntroDB by IMDb id and from chapters named in the file." />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        x:Name="SkipSegmentsToggle"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Skip intro and outro"
+                                        IsOn="{x:Bind ViewModel.SkipSegmentsEnabled, Mode=TwoWay}"
+                                        OffContent="Off"
+                                        OnContent="On"
+                                        Toggled="SkipSegmentsToggle_Toggled" />
+                                </Grid>
+                            </Border>
+
+                            <StackPanel x:Name="SkipOptionsPanel">
+                                <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                                <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                    <Grid x:Name="AutoSkipIntroRow" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip intros automatically" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Jumps ahead as soon as the opening starts." />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Skip intros automatically"
+                                            IsOn="{x:Bind ViewModel.AutoSkipIntroEnabled, Mode=TwoWay}"
+                                            OffContent="Off"
+                                            OnContent="On" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                                <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                    <Grid x:Name="AutoSkipRecapRow" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip recaps automatically" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Jumps ahead as soon as a previously-on recap starts." />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Skip recaps automatically"
+                                            IsOn="{x:Bind ViewModel.AutoSkipRecapEnabled, Mode=TwoWay}"
+                                            OffContent="Off"
+                                            OnContent="On" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                                <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                    <Grid x:Name="AutoSkipOutroRow" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip outros and credits automatically" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Jumps ahead as soon as an ending or end credits start, stopping before a post-credits scene." />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Skip outros and credits automatically"
+                                            IsOn="{x:Bind ViewModel.AutoSkipOutroEnabled, Mode=TwoWay}"
+                                            OffContent="Off"
+                                            OnContent="On" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!--  Audio  -->
                 <StackPanel Spacing="10">
                     <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Audio" />
