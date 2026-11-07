@@ -196,7 +196,9 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
 - how long the video engine took to stop and be released when the player closed.
 
 It is reset when the player opens, capped at 1 MB, and never leaves the machine.
-The header names the data root in use.
+The header names the data root in use. Settings → About → Diagnostics opens the
+log and copies the version, Windows build, architecture and selected video
+engine for a bug report.
 
 Note that `--verbose=2` sends every libvlc debug message through managed code and
 `PlayerLog.Write` appends synchronously, so the log fills its 1 MB cap quickly on
@@ -223,6 +225,27 @@ Subtitle files are downloaded with .NET first and handed to VLC as local files.
 This avoids a libvlc 3.0.24 GnuTLS crash that can occur when remote subtitle
 downloads overlap with stream TLS sessions. Picker behavior is described in
 [FEATURES.md](FEATURES.md#subtitles).
+
+Subtitle appearance is best effort across renderers. libVLC receives
+`sub-text-scale` as an integer percentage (100 = default),
+`freetype-background-opacity` and `freetype-background-color`, both as media
+options and as live vout variables. mpv receives `sub-scale`, `sub-back-color`
+and `sub-border-style`; Dim and Solid switch the border style to
+`background-box`, because `sub-back-color` alone only colours the shadow under
+the default outline style. Embedded ASS tracks can carry their own font and
+background and may ignore the preference.
+
+Preferred audio language is applied once per source, after `TracksChanged`
+exposes the audio list. The preference matches a canonical language code; a
+manual pick in the player suppresses it for the rest of that source. libVLC
+derives the code from the bracketed tag in its track name; mpv exposes a
+language field directly.
+
+## Auto-advance wait
+
+When an episode ends, the Up next card remains visible for the configured
+delay (Immediately, 5, 10, 15 or 30 seconds). Dismissing the card or pressing
+Play next cancels the timer. Zero keeps the original immediate switch.
 
 The lift is VLC's `sub-margin` vout variable, set to the control bar's footprint
 in swap-chain pixels: bar height minus letterbox, plus a 12 DIP gap. The page

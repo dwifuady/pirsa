@@ -29,7 +29,7 @@ Indonesian *memirsa* ("to watch") and *pemirsa* ("viewer, audience").
   and addon subtitles with live timing, audio tracks, speed, fullscreen,
   autoplay, auto-advance and source switching, plus skip intro/outro buttons
   backed by chapter names and IntroDB timestamps.
-- **Addon manager** — add, enable, disable, reorder and remove Stremio addons.
+- **Add-on manager** - add, enable, disable, reorder and remove Stremio addons.
   Cinemeta and OpenSubtitles v3 are included; no stream addon ships by default.
 - **Sync** — mirror watched state and the watchlist across devices with Simkl,
   MDBList or a WebDAV folder you control. Simkl and MDBList also keep Continue

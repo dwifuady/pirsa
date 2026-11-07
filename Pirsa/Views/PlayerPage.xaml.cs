@@ -136,6 +136,7 @@ public sealed partial class PlayerPage : Page
     private IReadOnlyList<PlaybackTrack> _audioTracks = [];
     private long _selectedAudioTrackId = -1;
     private bool _audioListDirty = true;
+    private bool _audioPreferenceApplied;
     private bool _chromeHidden = true;
     private bool _infoPinned;
     private bool _infoSuppressed;
@@ -150,6 +151,8 @@ public sealed partial class PlayerPage : Page
     private long _lengthMs;
     private DateTime _lastProgressSaveUtc;
     private DispatcherTimer? _resumeHintTimer;
+    private DispatcherTimer? _autoAdvanceTimer;
+    private int _autoAdvanceSecondsLeft;
     private DispatcherTimer? _cachedWatchdog;
     private PlaybackSource? _cachedAttempt;
     private StreamCacheSession? _streamCache;
@@ -210,6 +213,9 @@ public sealed partial class PlayerPage : Page
 
         _resumeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
         _resumeHintTimer.Tick += (_, _) => HideResumeHint();
+
+        _autoAdvanceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _autoAdvanceTimer.Tick += (_, _) => TickAutoAdvanceCountdown();
 
         // A pause should last before the details cover the picture: a quick
         // pause to read a subtitle or check the time shouldn't make them flash.
@@ -444,6 +450,7 @@ public sealed partial class PlayerPage : Page
         UpdateSubtitleTimingUi();
         ResumePanel.Visibility = Visibility.Collapsed;
         HideUpNext();
+        StopAutoAdvanceCountdown();
         ResetInfoCard();
         _upNextDismissed = false;
         ViewModel.NextEpisode = null;
@@ -498,6 +505,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEngineFailed(PlaybackErrorEventArgs e)
     {
+        AbortLyricSync();
         PlayerLog.Write($"engine error, state {_engine.State}, url {_currentSource?.Url}");
 
         // A remembered source that fails before playing is replaced silently;
@@ -630,6 +638,7 @@ public sealed partial class PlayerPage : Page
         }
 
         await App.Settings.EnsureLoadedAsync();
+        _engine.SetSubtitleStyle(CurrentSubtitleStyle());
         await RestoreProgressAsync(request);
         await RestoreSubtitleDelayAsync(request);
 
@@ -859,6 +868,11 @@ public sealed partial class PlayerPage : Page
         try
         {
             await App.WatchProgress.EnsureLoadedAsync();
+            if (!App.Settings.ResumePlayback)
+            {
+                return;
+            }
+
             var saved = App.WatchProgress.Find(request.VideoId);
 
             if (saved is { Completed: false, PositionMs: > 0 })
@@ -879,6 +893,15 @@ public sealed partial class PlayerPage : Page
         _resumeHintTimer?.Stop();
         ResumePanel.Visibility = Visibility.Collapsed;
     }
+
+    private static SubtitleStyle CurrentSubtitleStyle() => new(
+        Math.Clamp(App.Settings.SubtitleTextScale, 0.5, 2.0),
+        App.Settings.SubtitleBackground switch
+        {
+            "None" => SubtitleBackground.None,
+            "Solid" => SubtitleBackground.Solid,
+            _ => SubtitleBackground.Dim,
+        });
 
     private void StartOver_Click(object sender, RoutedEventArgs e)
     {
@@ -1172,13 +1195,75 @@ public sealed partial class PlayerPage : Page
         }
     }
 
-    private void PlayNext_Click(object sender, RoutedEventArgs e) => _ = PlayNextEpisodeAsync();
+    private void PlayNext_Click(object sender, RoutedEventArgs e)
+    {
+        StopAutoAdvanceCountdown();
+        _ = PlayNextEpisodeAsync();
+    }
 
     private void DismissUpNext_Click(object sender, RoutedEventArgs e)
     {
         // Also cancels the automatic switch for this episode.
+        StopAutoAdvanceCountdown();
         _upNextDismissed = true;
         HideUpNext();
+        if (_ended)
+        {
+            EndedText.Visibility = Visibility.Visible;
+        }
+    }
+
+    /// <summary>
+    /// Starts the delay configured in Settings. Zero keeps the original
+    /// behavior and switches episodes immediately.
+    /// </summary>
+    private void StartAutoAdvanceCountdown()
+    {
+        StopAutoAdvanceCountdown();
+
+        var seconds = Math.Max(0, App.Settings.AutoAdvanceDelaySeconds);
+        if (seconds == 0)
+        {
+            _ = PlayNextEpisodeAsync();
+            return;
+        }
+
+        _autoAdvanceSecondsLeft = seconds;
+        UpdateAutoAdvanceCountdownText();
+        UpNextCountdownText.Visibility = Visibility.Visible;
+        _autoAdvanceTimer?.Start();
+    }
+
+    private void TickAutoAdvanceCountdown()
+    {
+        if (_disposed || _autoAdvanceTimer is null)
+        {
+            return;
+        }
+
+        _autoAdvanceSecondsLeft--;
+        if (_autoAdvanceSecondsLeft <= 0)
+        {
+            StopAutoAdvanceCountdown();
+            _ = PlayNextEpisodeAsync();
+            return;
+        }
+
+        UpdateAutoAdvanceCountdownText();
+    }
+
+    private void UpdateAutoAdvanceCountdownText()
+    {
+        UpNextCountdownText.Text = _autoAdvanceSecondsLeft == 1
+            ? "Playing next in 1 second"
+            : $"Playing next in {_autoAdvanceSecondsLeft} seconds";
+    }
+
+    private void StopAutoAdvanceCountdown()
+    {
+        _autoAdvanceTimer?.Stop();
+        UpNextCountdownText.Visibility = Visibility.Collapsed;
+        UpNextCountdownText.Text = "";
     }
 
     /// <summary>
@@ -1221,6 +1306,7 @@ public sealed partial class PlayerPage : Page
             _upNextDismissed = false;
             ViewModel.NextEpisode = null;
             HideUpNext();
+            StopAutoAdvanceCountdown();
 
             PrepareNextEpisode();
 
@@ -1410,6 +1496,7 @@ public sealed partial class PlayerPage : Page
         {
             ErrorPanel.Visibility = Visibility.Collapsed;
             _errorVisible = false;
+            AbortLyricSync();
 
             var resume = !_ended &&
                          _engine.State is PlaybackState.Playing
@@ -1448,6 +1535,7 @@ public sealed partial class PlayerPage : Page
             _audioTracks = [];
             _selectedAudioTrackId = -1;
             _audioListDirty = true;
+            _audioPreferenceApplied = false;
             UpdateAudioIndicator();
 
             // Embedded subtitle ids belong to the previous stream. The chosen
@@ -1582,7 +1670,54 @@ public sealed partial class PlayerPage : Page
         }
 
         _audioListDirty = false;
+        ApplyPreferredAudioTrack();
         UpdateAudioIndicator();
+    }
+
+    /// <summary>
+    /// Applies the preferred audio language once per source, after the stream
+    /// has exposed its tracks. A manual pick in the player wins for that source.
+    /// </summary>
+    private void ApplyPreferredAudioTrack()
+    {
+        if (_audioPreferenceApplied)
+        {
+            return;
+        }
+
+        var preferred = App.Settings.PreferredAudioLanguage;
+        if (string.IsNullOrWhiteSpace(preferred))
+        {
+            _audioPreferenceApplied = true;
+            return;
+        }
+
+        var match = _audioTracks.FirstOrDefault(track =>
+            track.Id >= 0 &&
+            !string.IsNullOrWhiteSpace(track.LanguageCode) &&
+            SubtitleLanguages.SameLanguage(track.LanguageCode, preferred));
+
+        if (match is null)
+        {
+            // Tracks can still be arriving; the next TracksChanged retries.
+            return;
+        }
+
+        _audioPreferenceApplied = true;
+        PlayerLog.Write(
+            $"preferred audio {preferred} matched '{match.DisplayName}' " +
+            $"({match.LanguageCode ?? "?"}) id={match.Id}");
+
+        if (match.Id == _engine.CurrentAudioTrackId)
+        {
+            _selectedAudioTrackId = match.Id;
+            return;
+        }
+
+        if (_engine.SelectAudioTrack(match.Id))
+        {
+            _selectedAudioTrackId = match.Id;
+        }
     }
 
     private void AudioMenu_Opened(object? sender, object e)
@@ -1631,6 +1766,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _selectedAudioTrackId = id;
+        _audioPreferenceApplied = true;
         foreach (var item in AudioMenu.Items.OfType<ToggleMenuFlyoutItem>())
         {
             item.IsChecked = item.Tag is long other && other == id;
@@ -1701,6 +1837,8 @@ public sealed partial class PlayerPage : Page
         ErrorPanel.Visibility = Visibility.Collapsed;
         EndedText.Visibility = Visibility.Collapsed;
         HideBuffer();
+        _engine.SetSubtitleStyle(CurrentSubtitleStyle());
+        RefreshAudioTracks();
         UpdatePlayPauseUi();
         SeekSlider.IsEnabled = _engine.IsSeekable;
         ShowChrome();
@@ -1764,6 +1902,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleStopped()
     {
+        AbortLyricSync();
         if (_disposed)
         {
             return;
@@ -1799,6 +1938,7 @@ public sealed partial class PlayerPage : Page
 
     private void HandleEndReached()
     {
+        AbortLyricSync();
         // A source that never reached "playing" is a failed attempt, not a
         // finished title. Marking it completed would hide it from Continue
         // watching and lose the resume position.
@@ -1824,20 +1964,27 @@ public sealed partial class PlayerPage : Page
         ReportScrobble(PlaybackSignal.Completed);
         _stopReported = true;
 
-        if (_nextEpisode is not null && !_upNextDismissed && App.Settings.AutoAdvance)
-        {
-            _ = PlayNextEpisodeAsync();
-            return;
-        }
+        var autoAdvance =
+            _nextEpisode is not null &&
+            !_upNextDismissed &&
+            App.Settings.AutoAdvance;
 
         UpdateUpNextVisibility();
         HideResumeHint();
         HideBuffer();
         HideInfoCard();
-        EndedText.Visibility = Visibility.Visible;
         UpdatePlayPauseUi();
         ShowChrome();
         _chromeTimer.Stop();
+
+        if (autoAdvance)
+        {
+            ShowUpNext();
+            StartAutoAdvanceCountdown();
+            return;
+        }
+
+        EndedText.Visibility = Visibility.Visible;
     }
 
     private void HandleTimeChanged(long time)
@@ -1846,6 +1993,7 @@ public sealed partial class PlayerPage : Page
         RefreshChapterSkipSegmentsIfNeeded();
         UpdateSkipSegmentUi();
         UpdateUpNextVisibility();
+        UpdateLyricSyncPosition(_positionMs);
 
         if (_draggingSeek)
         {
@@ -2386,6 +2534,12 @@ public sealed partial class PlayerPage : Page
     {
         _engine.FocusSurface(FocusState.Pointer);
 
+        if (_lyricSyncOpen)
+        {
+            // The lyric panel is the only thing taking input while it is open.
+            return;
+        }
+
         if (_sourcesFlyoutOpen)
         {
             CloseSources();
@@ -2877,7 +3031,7 @@ public sealed partial class PlayerPage : Page
 
     private void ShowChrome()
     {
-        if (_disposed)
+        if (_disposed || _lyricSyncOpen)
         {
             return;
         }
@@ -3085,6 +3239,11 @@ public sealed partial class PlayerPage : Page
 
     private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_lyricSyncOpen)
+        {
+            return;
+        }
+
         _keyboardActive = true;
         ShowChrome();
         StartChromeTimer();
@@ -3097,6 +3256,12 @@ public sealed partial class PlayerPage : Page
     /// </summary>
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        if (_lyricSyncOpen)
+        {
+            HandleLyricSyncKey(e);
+            return;
+        }
+
         if (_sourcesFlyoutOpen || _subtitlesFlyoutOpen || _episodesFlyoutOpen)
         {
             return;
@@ -3485,6 +3650,13 @@ public sealed partial class PlayerPage : Page
         SubtitleResetButton.Visibility = _subtitleDelayMs == 0
             ? Visibility.Collapsed
             : Visibility.Visible;
+
+        // Lyric sync needs cue times from a text file, so embedded tracks keep
+        // the Earlier/Later controls instead.
+        LyricSyncButton.Visibility = HasActiveSubtitle &&
+                                   !string.IsNullOrWhiteSpace(_selectedSubtitlePath)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private static string FormatSubtitleDelaySeconds(long delayMs) =>
@@ -3633,6 +3805,8 @@ public sealed partial class PlayerPage : Page
             return false;
         }
 
+        AbortLyricSync();
+
         if (!_engine.SelectSubtitleTrack(track.EmbeddedTrackId))
         {
             return false;
@@ -3737,6 +3911,7 @@ public sealed partial class PlayerPage : Page
         bool applyNow = true,
         bool remember = true)
     {
+        AbortLyricSync();
         _selectedSubtitle = version;
         ViewModel.SelectSubtitle(version);
         UpdateSubtitleIndicator();
@@ -4006,7 +4181,12 @@ public sealed partial class PlayerPage : Page
 
     private void EscapeAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (_isFullScreen)
+        if (_lyricSyncOpen)
+        {
+            CloseLyricSync();
+            args.Handled = true;
+        }
+        else if (_isFullScreen)
         {
             SetFullscreen(false);
             args.Handled = true;
@@ -4297,10 +4477,13 @@ public sealed partial class PlayerPage : Page
         _infoTimer.Stop();
         _pauseMuteClearTimer?.Stop();
         _resumeHintTimer?.Stop();
+        _autoAdvanceTimer?.Stop();
         _subtitleHudTimer?.Stop();
         _skipHideTimer?.Stop();
         _skipHudTimer?.Stop();
         _cachedWatchdog?.Stop();
+        _lyricSyncOpen = false;
+        _lyricSyncToastTimer?.Stop();
         ClearPlayingIntent();
         _stallTimer.Stop();
         _streamCacheCts.Cancel();

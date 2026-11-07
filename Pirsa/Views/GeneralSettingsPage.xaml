@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.GeneralSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:Pirsa.Helpers"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            Margin="32,26,32,64"
+            HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="General" />
+                    <TextBlock
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="Make Pirsa feel at home on this PC." />
+                </StackPanel>
+
+                <!--  Appearance  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Appearance" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="ThemeRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Theme" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Follow Windows, or keep Pirsa light or dark." />
+                                </StackPanel>
+                                <ComboBox
+                                    Grid.Column="1"
+                                    MinWidth="168"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Theme"
+                                    SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}">
+                                    <ComboBoxItem Content="System" />
+                                    <ComboBoxItem Content="Light" />
+                                    <ComboBoxItem Content="Dark" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  Startup  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Startup" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="StartPageRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Open Pirsa on" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Used next time Pirsa starts." />
+                                </StackPanel>
+                                <ComboBox
+                                    Grid.Column="1"
+                                    MinWidth="168"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Open Pirsa on"
+                                    SelectedIndex="{x:Bind ViewModel.StartPageIndex, Mode=TwoWay}">
+                                    <ComboBoxItem Content="Home" />
+                                    <ComboBoxItem Content="Discover" />
+                                    <ComboBoxItem Content="Watchlist" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  Updates  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Updates" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="UpdateRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Check for updates automatically" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="Pirsa checks GitHub Releases at launch. No account or viewing data is sent." />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Check for updates automatically"
+                                        IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}"
+                                        OffContent="Off"
+                                        OnContent="On" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="VersionRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="{x:Bind ViewModel.AppVersion, Mode=OneTime}" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="You are running the latest version unless an update notice appears." />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                            Text="{x:Bind ViewModel.UpdateStatus, Mode=OneWay}"
+                                            TextWrapping="Wrap"
+                                            Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(ViewModel.UpdateStatus), Mode=OneWay}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Check for updates now"
+                                        Click="CheckNow_Click"
+                                        Content="Check now" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock
+                    Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                    Text="Pirsa has no account and no cloud. Settings, add-ons and history stay on this device." />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

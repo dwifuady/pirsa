@@ -433,6 +433,35 @@ public sealed class AddonRegistry
     }
 
     /// <summary>
+    /// Moves an addon to an absolute position after a drag. The target is
+    /// clamped so a drop past the end lands at the end.
+    /// </summary>
+    public async Task<bool> MoveToAsync(
+        AddonEntry entry,
+        int targetIndex,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureLoadedAsync(cancellationToken);
+
+        var index = Entries.IndexOf(entry);
+        if (index < 0 || Entries.Count == 0)
+        {
+            return false;
+        }
+
+        targetIndex = Math.Clamp(targetIndex, 0, Entries.Count - 1);
+        if (targetIndex == index)
+        {
+            return false;
+        }
+
+        Entries.Move(index, targetIndex);
+        Revision++;
+        await RaiseChangedAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>
     /// The pinned Home feed in display order, across all addons. A flat list
     /// is what makes interleaving rows from different addons possible. An
     /// empty list with <see cref="HomeConfigured"/> false means unconfigured:
@@ -699,6 +728,10 @@ public sealed class AddonRegistry
             Entries.Add(entry);
             Attach(entry);
         }
+
+        // Order is 1-based and drives the row badges and move buttons. It must
+        // be filled once here, not only after the first user edit.
+        RefreshOrder();
 
         // New format: a flat ordered pin list. Previous format: per-addon pin
         // configs, migrated here in addon order. Either way the presence of

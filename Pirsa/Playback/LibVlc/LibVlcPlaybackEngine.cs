@@ -46,6 +46,7 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
     private Media? _media;
     private bool _ready;
     private bool _disposed;
+    private SubtitleStyle _subtitleStyle = new(1.0, SubtitleBackground.Dim);
 
     public LibVlcPlaybackEngine()
     {
@@ -240,7 +241,8 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
                            .Where(track => track is { Name.Length: > 0 })
                            .Select(track => new PlaybackTrack(
                                track.Id,
-                               NameAudioTrack(track.Id, track.Name)))
+                               NameAudioTrack(track.Id, track.Name),
+                               AudioLanguageCode(track.Name)))
                            .ToList()
                        ?? [];
             }
@@ -318,6 +320,17 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
         vlcMedia.AddOption(":no-video-title-show");
         vlcMedia.AddOption(":no-osd");
         vlcMedia.AddOption($":network-caching={NetworkCachingFor(media)}");
+
+        // VLC's freetype text renderer reads these at media start. Embedded ASS
+        // tracks can still carry their own styling, which is expected.
+        vlcMedia.AddOption($":sub-text-scale={SubtitleTextScalePercent()}");
+        vlcMedia.AddOption(
+            $":freetype-background-opacity={SubtitleBackgroundOpacity()}");
+
+        PlayerLog.Write(
+            $"vlc subtitle style scale={SubtitleTextScalePercent()}% " +
+            $"background={_subtitleStyle.Background} " +
+            $"opacity={SubtitleBackgroundOpacity()}");
 
         if (media.StartPositionMs > 0)
         {
@@ -455,6 +468,29 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
 
     public void SetSubtitleLift(int devicePixels) =>
         SubtitleLift.Set(_mediaPlayer, devicePixels);
+
+    public void SetSubtitleStyle(SubtitleStyle style)
+    {
+        _subtitleStyle = style;
+
+        // Media options cover the next input; the vout variables also update
+        // the live text renderer when the player is already running.
+        SubtitleLift.SetStyle(
+            _mediaPlayer,
+            SubtitleTextScalePercent(),
+            SubtitleBackgroundOpacity());
+    }
+
+    /// <summary>VLC's sub-text-scale is an integer percentage; 100 is default.</summary>
+    private int SubtitleTextScalePercent() =>
+        Math.Clamp((int)Math.Round(_subtitleStyle.TextScale * 100), 50, 200);
+
+    private int SubtitleBackgroundOpacity() => _subtitleStyle.Background switch
+    {
+        SubtitleBackground.None => 0,
+        SubtitleBackground.Solid => 255,
+        _ => 128,
+    };
 
     public bool TryGetVideoSize(out uint width, out uint height)
     {
@@ -818,6 +854,32 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
         }
 
         return string.IsNullOrWhiteSpace(cleaned) ? raw : cleaned;
+    }
+
+    /// <summary>
+    /// VLC names audio tracks like "Track 1 - [eng]". The tag is the only
+    /// reliable language signal, so expose it as the canonical code used by the
+    /// preferred-audio setting.
+    /// </summary>
+    private static string? AudioLanguageCode(string raw)
+    {
+        var bracketStart = raw.IndexOf('[', StringComparison.Ordinal);
+        var bracketEnd = raw.IndexOf(']', StringComparison.Ordinal);
+        if (bracketStart < 0 || bracketEnd <= bracketStart)
+        {
+            return null;
+        }
+
+        var tag = raw[(bracketStart + 1)..bracketEnd].Trim();
+        if (tag.Length is 0 or > 8 ||
+            tag.StartsWith("au", StringComparison.OrdinalIgnoreCase) ||
+            tag.Equals("und", StringComparison.OrdinalIgnoreCase) ||
+            tag.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return SubtitleLanguages.CanonicalCode(tag);
     }
 
     /// <summary>

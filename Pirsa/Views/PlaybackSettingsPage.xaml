@@ -1,0 +1,356 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.PlaybackSettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:Pirsa.ViewModels"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            Margin="32,26,32,64"
+            HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Playback" />
+                    <TextBlock
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="The defaults are designed to stay out of the way. Change them only if you need to." />
+                </StackPanel>
+
+                <!--  When you press Play  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="When you press Play" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="AutoplayRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Start playing automatically" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="When this is off, Pirsa opens the source picker every time." />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Start playing automatically"
+                                        IsOn="{x:Bind ViewModel.AutoplayEnabled, Mode=TwoWay}"
+                                        OffContent="Off"
+                                        OnContent="On" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="QualityRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Preferred quality" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="Falls back to the best available source when your choice is missing." />
+                                    </StackPanel>
+                                    <ComboBox
+                                        Grid.Column="1"
+                                        MinWidth="168"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Preferred quality"
+                                        IsEnabled="{x:Bind ViewModel.AutoplayEnabled, Mode=OneWay}"
+                                        SelectedIndex="{x:Bind ViewModel.QualityIndex, Mode=TwoWay}">
+                                        <ComboBoxItem Content="Best available" />
+                                        <ComboBoxItem Content="4K" />
+                                        <ComboBoxItem Content="1440p" />
+                                        <ComboBoxItem Content="1080p" />
+                                        <ComboBoxItem Content="720p" />
+                                        <ComboBoxItem Content="480p" />
+                                    </ComboBox>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  Between episodes  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Between episodes" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="AutoAdvanceRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Play next episode automatically" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="An Up next card appears before the credits so you can skip them." />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Play next episode automatically"
+                                        IsOn="{x:Bind ViewModel.AutoAdvanceEnabled, Mode=TwoWay}"
+                                        OffContent="Off"
+                                        OnContent="On" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="AutoAdvanceDelayRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Wait before the next episode" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="How long the Up next card waits after an episode ends, when a next episode exists." />
+                                    </StackPanel>
+                                    <ComboBox
+                                        Grid.Column="1"
+                                        MinWidth="168"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Wait before the next episode"
+                                        IsEnabled="{x:Bind ViewModel.AutoAdvanceEnabled, Mode=OneWay}"
+                                        SelectedIndex="{x:Bind ViewModel.AutoAdvanceDelayIndex, Mode=TwoWay}">
+                                        <ComboBoxItem Content="Immediately" />
+                                        <ComboBoxItem Content="5 seconds" />
+                                        <ComboBoxItem Content="10 seconds" />
+                                        <ComboBoxItem Content="15 seconds" />
+                                        <ComboBoxItem Content="30 seconds" />
+                                    </ComboBox>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  Skipping  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Skipping" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="SkipSegmentsRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip intro and outro" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="Shows a Skip button while an intro, recap or outro is playing. Timestamps come from IntroDB by IMDb id and from chapters named in the file." />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        x:Name="SkipSegmentsToggle"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Skip intro and outro"
+                                        IsOn="{x:Bind ViewModel.SkipSegmentsEnabled, Mode=TwoWay}"
+                                        OffContent="Off"
+                                        OnContent="On"
+                                        Toggled="SkipSegmentsToggle_Toggled" />
+                                </Grid>
+                            </Border>
+
+                            <StackPanel x:Name="SkipOptionsPanel">
+                                <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                                <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                    <Grid x:Name="AutoSkipIntroRow" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip intros automatically" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Jumps ahead as soon as the opening starts." />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Skip intros automatically"
+                                            IsOn="{x:Bind ViewModel.AutoSkipIntroEnabled, Mode=TwoWay}"
+                                            OffContent="Off"
+                                            OnContent="On" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                                <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                    <Grid x:Name="AutoSkipRecapRow" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip recaps automatically" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Jumps ahead as soon as a previously-on recap starts." />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Skip recaps automatically"
+                                            IsOn="{x:Bind ViewModel.AutoSkipRecapEnabled, Mode=TwoWay}"
+                                            OffContent="Off"
+                                            OnContent="On" />
+                                    </Grid>
+                                </Border>
+
+                                <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                                <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                    <Grid x:Name="AutoSkipOutroRow" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Skip outros and credits automatically" />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Jumps ahead as soon as an ending or end credits start, stopping before a post-credits scene." />
+                                        </StackPanel>
+                                        <ToggleSwitch
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Skip outros and credits automatically"
+                                            IsOn="{x:Bind ViewModel.AutoSkipOutroEnabled, Mode=TwoWay}"
+                                            OffContent="Off"
+                                            OnContent="On" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  Audio  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Audio" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="AudioLanguageRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Preferred audio language" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Pirsa picks this track when a release exposes language tags for its audio, and keeps the release's original audio otherwise." />
+                                </StackPanel>
+                                <ComboBox
+                                    Grid.Column="1"
+                                    MinWidth="168"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Preferred audio language"
+                                    ItemsSource="{x:Bind ViewModel.AudioLanguageOptions}"
+                                    SelectedItem="{x:Bind ViewModel.SelectedAudioLanguage, Mode=TwoWay}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:AudioLanguageOption">
+                                            <TextBlock Text="{x:Bind Name, Mode=OneTime}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  Resume  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Resume" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="ResumeRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Resume where you stopped" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Continue movies and episodes from your last position. When off, playback starts from the beginning." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Resume where you stopped"
+                                    IsOn="{x:Bind ViewModel.ResumeEnabled, Mode=TwoWay}"
+                                    OffContent="Off"
+                                    OnContent="On" />
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  Advanced  -->
+                <Expander
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Header="Advanced">
+                    <Border
+                        Margin="0,4,0,0"
+                        Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="EngineRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Video engine" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Automatic uses mpv when it is available, otherwise libVLC." />
+                                </StackPanel>
+                                <ComboBox
+                                    Grid.Column="1"
+                                    MinWidth="168"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Video engine"
+                                    DisplayMemberPath="Name"
+                                    ItemsSource="{x:Bind ViewModel.PlaybackEngineOptions}"
+                                    SelectedItem="{x:Bind ViewModel.SelectedPlaybackEngine, Mode=TwoWay}" />
+                            </Grid>
+                        </Border>
+                    </Border>
+                </Expander>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

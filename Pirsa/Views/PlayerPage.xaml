@@ -104,6 +104,66 @@
             <Setter Property="Delay" Value="400" />
             <Setter Property="Interval" Value="80" />
         </Style>
+
+        <!--  A row that opens lyric sync; it explains itself without a tooltip.  -->
+        <Style x:Key="SubtitleSyncEntryStyle" TargetType="Button">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Background" Value="{ThemeResource PlayerControlBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+
+        <!--  A clickable lyric row: quiet by default, bright on hover.  -->
+        <Style x:Key="LyricLineButtonStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+
+        <!--  Lyric rows are built in code; the styles keep their colours theme-aware.  -->
+        <Style x:Key="LyricCurrentTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="MaxLines" Value="3" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="LyricLineTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource PlayerForegroundBrush}" />
+            <Setter Property="MaxLines" Value="2" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LyricAlignHintStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource BrandPrimaryBrush}" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!--
+            The lyric view fades out of the picture rather than sitting in a
+            card, so the scene and the actors stay visible behind the text.
+        -->
+        <LinearGradientBrush x:Key="LyricSyncScrimBrush" StartPoint="0.5,1" EndPoint="0.5,0">
+            <GradientStop Offset="0" Color="#FA000000" />
+            <GradientStop Offset="0.55" Color="#E0000000" />
+            <GradientStop Offset="1" Color="#00000000" />
+        </LinearGradientBrush>
         <DataTemplate x:Key="SubtitleLanguageTemplate" x:DataType="vm:SubtitleLanguageChoice">
             <StackPanel Spacing="1">
                 <TextBlock
@@ -896,6 +956,52 @@
                                                             <TextBlock x:Name="SubtitleTimingHint" VerticalAlignment="Center" FontSize="11" Foreground="{ThemeResource PlayerSecondaryForegroundBrush}" Text="Subtitles are in sync" TextWrapping="Wrap" />
                                                             <HyperlinkButton x:Name="SubtitleResetButton" Grid.Column="1" Padding="6,0" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.AutomationId="SubtitleResetButton" AutomationProperties.Name="Reset subtitle timing" Click="SubtitleReset_Click" Content="Reset" FontSize="11" MinHeight="0" Visibility="Collapsed" />
                                                         </Grid>
+
+                                                        <!--
+                                                            Timing by ear: the lines around the
+                                                            playhead appear like lyrics, and
+                                                            clicking the one you hear aligns it.
+                                                            Hidden for embedded tracks, which
+                                                            have no cue file to read.
+                                                        -->
+                                                        <Button
+                                                            x:Name="LyricSyncButton"
+                                                            AutomationProperties.AutomationId="LyricSyncButton"
+                                                            AutomationProperties.Name="Sync subtitle timing by ear"
+                                                            Click="LyricSync_Click"
+                                                            Style="{StaticResource SubtitleSyncEntryStyle}"
+                                                            Visibility="Collapsed">
+                                                            <Grid ColumnSpacing="10">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <FontIcon
+                                                                    VerticalAlignment="Center"
+                                                                    FontSize="15"
+                                                                    Foreground="{ThemeResource BrandPrimaryBrush}"
+                                                                    Glyph="&#xE895;" />
+                                                                <StackPanel Grid.Column="1" Spacing="1">
+                                                                    <TextBlock
+                                                                        FontSize="12"
+                                                                        FontWeight="SemiBold"
+                                                                        Foreground="{ThemeResource PlayerForegroundBrush}"
+                                                                        Text="Sync by ear" />
+                                                                    <TextBlock
+                                                                        FontSize="11"
+                                                                        Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                                                                        Text="Click the line you hear"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                                <FontIcon
+                                                                    Grid.Column="2"
+                                                                    VerticalAlignment="Center"
+                                                                    FontSize="10"
+                                                                    Foreground="{ThemeResource PlayerTertiaryForegroundBrush}"
+                                                                    Glyph="&#xE76C;" />
+                                                            </Grid>
+                                                        </Button>
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
@@ -982,6 +1088,146 @@
                     FontSize="12"
                     Foreground="{ThemeResource PlayerForegroundBrush}"
                     Text="Skipped intro" />
+            </StackPanel>
+        </Border>
+
+        <!--
+            Lyric-style subtitle sync. The lines around the playhead sit over the
+            bottom of the picture like a lyrics view; clicking a line aligns it
+            to the moment it was clicked. The video keeps playing underneath.
+        -->
+        <Border
+            x:Name="LyricSyncPanel"
+            Padding="0,44,0,0"
+            VerticalAlignment="Bottom"
+            Background="{StaticResource LyricSyncScrimBrush}"
+            Visibility="Collapsed">
+            <Grid
+                MaxWidth="880"
+                Margin="24,0,24,20"
+                HorizontalAlignment="Stretch">
+                <StackPanel Spacing="6">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Spacing="1">
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                CharacterSpacing="110"
+                                Foreground="{ThemeResource BrandPrimaryBrush}"
+                                Text="SYNC BY EAR" />
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                                Text="Click a line the moment it begins" />
+                        </StackPanel>
+                        <Border
+                            Grid.Column="1"
+                            Padding="10,4"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource PlayerBadgeBackgroundBrush}"
+                            CornerRadius="999">
+                            <TextBlock
+                                x:Name="LyricSyncValueText"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource PlayerForegroundBrush}"
+                                Text="0.0 s" />
+                        </Border>
+                        <Button
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Finish subtitle sync"
+                            Click="LyricSyncClose_Click"
+                            Content="Done"
+                            Style="{StaticResource PlayerTextButtonStyle}" />
+                    </Grid>
+
+                    <StackPanel
+                        x:Name="LyricLinesPanel"
+                        Margin="0,4,0,4"
+                        Spacing="2" />
+
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="10"
+                            Foreground="{ThemeResource PlayerTertiaryForegroundBrush}"
+                            Text="The bright line is where the subtitles are now · Space pauses · ← → fine-tune"
+                            TextWrapping="Wrap" />
+                        <StackPanel
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                            <Button
+                                x:Name="LyricSyncEarlierButton"
+                                AutomationProperties.Name="Show subtitles 50 milliseconds earlier"
+                                Click="LyricSyncEarlier_Click"
+                                Content="− 50 ms"
+                                Style="{StaticResource PlayerTextButtonStyle}" />
+                            <Button
+                                x:Name="LyricSyncLaterButton"
+                                AutomationProperties.Name="Show subtitles 50 milliseconds later"
+                                Click="LyricSyncLater_Click"
+                                Content="+ 50 ms"
+                                Style="{StaticResource PlayerTextButtonStyle}" />
+                            <HyperlinkButton
+                                x:Name="LyricSyncUndoButton"
+                                Padding="8,0"
+                                AutomationProperties.Name="Undo the last timing change"
+                                Click="LyricSyncUndo_Click"
+                                Content="Undo"
+                                FontSize="11"
+                                MinHeight="0"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!--  Timing confirmation, clear of the video and the lyrics  -->
+        <Border
+            x:Name="LyricSyncToast"
+            Margin="0,84,0,0"
+            Padding="10,6,6,6"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Background="{ThemeResource PlayerPanelBackgroundBrush}"
+            BorderBrush="{ThemeResource PlayerPanelBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                    Text="Timing" />
+                <TextBlock
+                    x:Name="LyricSyncToastValue"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource PlayerForegroundBrush}"
+                    AutomationProperties.LiveSetting="Polite"
+                    Text="0.0 s" />
+                <HyperlinkButton
+                    Padding="6,2"
+                    AutomationProperties.Name="Undo the last timing change"
+                    Click="LyricSyncUndo_Click"
+                    Content="Undo"
+                    FontSize="12"
+                    MinHeight="0" />
             </StackPanel>
         </Border>
 
@@ -1118,6 +1364,12 @@
                         Text="{x:Bind ViewModel.NextEpisodeLine}"
                         TextTrimming="CharacterEllipsis"
                         TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="UpNextCountdownText"
+                        FontSize="11"
+                        Foreground="{ThemeResource PlayerSecondaryForegroundBrush}"
+                        Text="Playing next in 10 seconds"
+                        Visibility="Collapsed" />
                 </StackPanel>
 
                 <StackPanel

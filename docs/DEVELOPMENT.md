@@ -53,7 +53,8 @@ addon shows the confirmation with its manifest details once they arrive.
 
 An unpackaged build has no package identity, so it uses the per-user
 `HKCU\Software\Classes\stremio` keys. The installer writes them, or for a
-portable copy use Settings → Addons → **Open stremio:// links in Pirsa**.
+portable copy use Settings → Add-ons → Advanced → **Open stremio:// links in
+Pirsa**.
 A direct command-line launch exercises the same path:
 
 ```powershell
@@ -134,6 +135,7 @@ Pirsa/
   Services/Sync/SyncState.cs       sync.json plus DPAPI-encrypted credentials
   Services/Sync/Providers/         one class per provider (Simkl, MDBList, WebDAV)
   Helpers/SubtitleLanguages.cs    ISO 639 language names for the CC picker
+  Helpers/SubtitleCueFile.cs      SRT/VTT/ASS cue parsing for lyric sync
   Helpers/AddonLinkPrompt.cs      confirmation + install for an activated link
   ViewModels/HomeViewModel.cs     hero + rails across addons
   ViewModels/DiscoverViewModel.cs type/catalog/genre filters, search and paging
@@ -145,6 +147,7 @@ Pirsa/
   Views/DiscoverPage.xaml         catalog browser filters, search and poster grid
   Views/DetailsPage.xaml          backdrop hero + facts + episodes
   Views/PlayerPage.xaml           LibVLC surface + transport chrome
+  Views/PlayerPage.LyricSync.cs   lyric-style line list, click-to-align and undo
   Views/SettingsPage.xaml         addons, Home, Sync, playback and about
   Views/SyncSettingsPage.xaml     provider cards, connect form, last sync state
   MainWindow.xaml                 title bar + NavigationView shell

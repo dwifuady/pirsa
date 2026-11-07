@@ -6,898 +6,186 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:helpers="using:Pirsa.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:services="using:Pirsa.Services"
-    xmlns:vm="using:Pirsa.ViewModels"
     x:DefaultBindMode="OneWay"
     Background="{ThemeResource AppBackgroundBrush}"
     mc:Ignorable="d">
 
-    <ScrollViewer
-        HorizontalScrollBarVisibility="Disabled"
-        HorizontalScrollMode="Disabled"
-        VerticalScrollBarVisibility="Auto">
-        <Grid
-            MaxWidth="1000"
-            Margin="40,26,40,64"
-            HorizontalAlignment="Stretch">
-            <StackPanel Spacing="22">
-                <StackPanel Spacing="6">
+    <NavigationView
+        x:Name="SettingsNav"
+        AlwaysShowHeader="False"
+        Background="{ThemeResource AppBackgroundBrush}"
+        CompactPaneLength="48"
+        IsBackButtonVisible="Collapsed"
+        IsPaneOpen="True"
+        IsPaneToggleButtonVisible="False"
+        IsSettingsVisible="False"
+        OpenPaneLength="248"
+        PaneDisplayMode="Left"
+        SelectionChanged="SettingsNav_SelectionChanged"
+        SelectionFollowsFocus="Disabled">
+
+        <NavigationView.PaneHeader>
+            <StackPanel
+                Padding="0,6,0,10"
+                Spacing="10">
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button
+                        x:Name="BackButton"
+                        Width="32"
+                        Height="32"
+                        Padding="0"
+                        AutomationProperties.Name="Back"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="Back_Click"
+                        Visibility="Collapsed">
+                        <FontIcon FontSize="14" Glyph="&#xE72B;" />
+                    </Button>
                     <TextBlock
-                        FontSize="32"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        FontFamily="Segoe UI Variable Display"
+                        FontSize="24"
                         FontWeight="SemiBold"
-                        Style="{StaticResource TitleTextBlockStyle}"
                         Text="Settings" />
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Control where Pirsa discovers catalogs and playable streams."
-                        TextWrapping="Wrap" />
-                </StackPanel>
+                </Grid>
 
-                <!--  Addons  -->
-                <StackPanel Spacing="10">
-                    <Grid>
-                        <StackPanel
-                            Orientation="Horizontal"
-                            Spacing="10"
-                            VerticalAlignment="Center">
-                            <Border
-                                Width="4"
-                                Height="20"
-                                VerticalAlignment="Center"
-                                Background="{ThemeResource BrandPrimaryBrush}"
-                                CornerRadius="2" />
-                            <TextBlock
-                                Style="{StaticResource SubtitleTextBlockStyle}"
-                                Text="Addons" />
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="{x:Bind ViewModel.AddonCountText, Mode=OneWay}" />
-                        </StackPanel>
-                        <Button
-                            HorizontalAlignment="Right"
-                            AutomationProperties.Name="Restore default addon"
-                            Click="RestoreDefaults_Click"
-                            Content="Restore default"
-                            IsEnabled="{x:Bind helpers:XamlHelpers.Not(ViewModel.IsBusy), Mode=OneWay}" />
-                    </Grid>
+                <AutoSuggestBox
+                    x:Name="SettingsSearch"
+                    MinWidth="196"
+                    Margin="12,0"
+                    AutomationProperties.Name="Search settings"
+                    KeyDown="SettingsSearch_KeyDown"
+                    PlaceholderText="Search settings"
+                    QueryIcon="Find"
+                    QuerySubmitted="SettingsSearch_QuerySubmitted"
+                    TextChanged="SettingsSearch_TextChanged" />
+            </StackPanel>
+        </NavigationView.PaneHeader>
 
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource BodyTextBlockStyle}"
-                        Text="Add a Stremio addon manifest URL or a stremio:// addon link. Catalog resources appear on Home and Discover; stream resources power the player. Pirsa ships with Cinemeta and OpenSubtitles v3 only — no stream addon is bundled, so add one you trust to play."
-                        TextWrapping="Wrap" />
+        <NavigationView.MenuItems>
+            <NavigationViewItem Content="General" Tag="general">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Setting" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Playback" Tag="playback">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Play" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Subtitles" Tag="subtitles">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Caption" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Library &amp; data" Tag="library">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Library" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Add-ons" Tag="addons">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="ViewAll" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Sync" Tag="sync">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Sync" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="About" Tag="about">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Help" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+        </NavigationView.MenuItems>
 
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="10">
-                            <Grid ColumnSpacing="10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox
-                                    x:Name="UrlBox"
-                                    AutomationProperties.AutomationId="AddonUrlBox"
-                                    Header="Manifest URL or addon link"
-                                    PlaceholderText="https://example.com/manifest.json or stremio://example.com/manifest.json"
-                                    Text="{x:Bind ViewModel.NewManifestUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    KeyDown="UrlBox_KeyDown" />
-                                <Button
-                                    Grid.Column="1"
-                                    MinWidth="110"
-                                    VerticalAlignment="Bottom"
-                                    AutomationProperties.AutomationId="AddAddonButton"
-                                    AutomationProperties.Name="Add addon"
-                                    Click="Add_Click"
-                                    Content="Add addon"
-                                    IsEnabled="{x:Bind helpers:XamlHelpers.Not(ViewModel.IsBusy), Mode=OneWay}"
-                                    Style="{StaticResource AccentButtonStyle}" />
-                            </Grid>
+        <Grid>
+            <Frame x:Name="SettingsFrame" Navigated="SettingsFrame_Navigated" />
 
-                            <InfoBar
-                                Title="Couldn't add addon"
-                                IsClosable="True"
-                                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
-                                Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
-                                Severity="Error" />
-
-                            <StackPanel
-                                Orientation="Horizontal"
-                                Spacing="8"
-                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsBusy), Mode=OneWay}">
-                                <ProgressRing
-                                    Width="16"
-                                    Height="16"
-                                    IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+            <!--  Search results replace the page without moving the category pane.  -->
+            <Grid
+                x:Name="SearchOverlay"
+                Background="{ThemeResource AppBackgroundBrush}"
+                KeyDown="SettingsSearch_KeyDown"
+                Visibility="Collapsed">
+                <ScrollViewer
+                    HorizontalContentAlignment="Center"
+                    HorizontalScrollBarVisibility="Disabled"
+                    HorizontalScrollMode="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <Grid
+                        Margin="32,26,32,64"
+                        HorizontalAlignment="Stretch">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MaxWidth="820" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="18">
+                            <StackPanel Spacing="4">
+                                <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Search" />
                                 <TextBlock
-                                    VerticalAlignment="Center"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                    Text="Checking the manifest…" />
+                                    x:Name="SearchSummary"
+                                    Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                                    Text="Type to find a setting." />
                             </StackPanel>
-                        </StackPanel>
-                    </Border>
 
-                    <Border
-                        Padding="20"
-                        AutomationProperties.Name="Addon link settings"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Addon links" />
-
-                            <ToggleSwitch
-                                AutomationProperties.AutomationId="LinkHandlingToggle"
-                                AutomationProperties.Name="Open stremio:// links in Pirsa"
-                                Header="Open stremio:// links in Pirsa"
-                                IsOn="{x:Bind ViewModel.HandlesStremioLinks, Mode=TwoWay}"
-                                OffContent="Off"
-                                OnContent="On"
-                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanManageLinkRegistration), Mode=OneWay}" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Windows opens Stremio addon links in the app registered for the stremio:// protocol. The installer registers Pirsa for you; use this switch for portable copies, or turn it off to let another app handle links. Pirsa always asks before adding an addon from a link."
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.CanManageLinkRegistration), Mode=OneWay}" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="This build handles stremio:// links through its app package. Another app can take over in Windows Settings → Apps → Default apps. Pirsa always asks before adding an addon from a link."
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsPackagedBuild), Mode=OneWay}" />
-                        </StackPanel>
-                    </Border>
-
-                    <InfoBar
-                        Title="Addons updated"
-                        Closed="Notice_Closed"
-                        IsClosable="True"
-                        IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
-                        Message="{x:Bind ViewModel.NoticeMessage, Mode=OneWay}"
-                        Severity="Informational" />
-
-                    <StackPanel
-                        Spacing="8"
-                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasManyAddons), Mode=OneWay}">
-                        <TextBox
-                            MaxWidth="420"
-                            HorizontalAlignment="Stretch"
-                            AutomationProperties.AutomationId="AddonSearchBox"
-                            AutomationProperties.Name="Search addons"
-                            PlaceholderText="Search by name or host"
-                            Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <SelectorBar
-                                x:Name="AddonFilterBar"
-                                AutomationProperties.Name="Filter addons"
-                                SelectionChanged="AddonFilter_SelectionChanged">
-                                <SelectorBarItem
-                                    IsSelected="True"
-                                    Tag="0"
-                                    Text="All" />
-                                <SelectorBarItem Tag="1" Text="Streams" />
-                                <SelectorBarItem Tag="2" Text="Metadata" />
-                                <SelectorBarItem Tag="3" Text="Catalogs" />
-                                <SelectorBarItem Tag="4" Text="Issues" />
-                            </SelectorBar>
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Text="{x:Bind ViewModel.VisibleCountText, Mode=OneWay}" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.VisibleAddons}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="10" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="services:AddonEntry">
-                                <Border
-                                    Padding="18"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="12">
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Spacing="7">
-                                            <StackPanel
-                                                Orientation="Horizontal"
-                                                Spacing="8">
-                                                <Border
-                                                    Padding="7,2"
+                            <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                                <ListView
+                                    x:Name="SearchResults"
+                                    HorizontalContentAlignment="Stretch"
+                                    IsItemClickEnabled="True"
+                                    ItemClick="SearchResults_ItemClick"
+                                    SelectionMode="None">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="MinHeight" Value="0" />
+                                            <Setter Property="Padding" Value="0" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="helpers:SettingsSearchEntry">
+                                            <Grid
+                                                Padding="16,12"
+                                                ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="{x:Bind Title, Mode=OneTime}" />
+                                                    <TextBlock Style="{StaticResource SettingsRowDescriptionTextBlockStyle}" Text="{x:Bind Detail, Mode=OneTime}" />
+                                                </StackPanel>
+                                                <FontIcon
+                                                    Grid.Column="1"
                                                     VerticalAlignment="Center"
-                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                    CornerRadius="4">
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="{x:Bind Order, Mode=OneWay}" />
-                                                </Border>
-                                                <TextBlock
-                                                    FontSize="16"
-                                                    FontWeight="SemiBold"
-                                                    Text="{x:Bind Name, Mode=OneWay}" />
-                                                <Border
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                    CornerRadius="4"
-                                                    Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(VersionText)}">
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="{x:Bind VersionText, Mode=OneWay}" />
-                                                </Border>
-                                                <Border
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    Background="{ThemeResource BrandSubtleBrush}"
-                                                    CornerRadius="4"
-                                                    Visibility="{x:Bind helpers:XamlHelpers.Visible(IsDefault)}">
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="{ThemeResource BrandPrimaryBrush}"
-                                                        Text="Default" />
-                                                </Border>
-                                                <Border
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                    CornerRadius="4"
-                                                    Visibility="{x:Bind helpers:XamlHelpers.Collapsed(IsEnabled), Mode=OneWay}">
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        FontWeight="SemiBold"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="Disabled" />
-                                                </Border>
-                                            </StackPanel>
-
-                                            <TextBlock
-                                                MaxLines="2"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Style="{StaticResource BodyTextBlockStyle}"
-                                                Text="{x:Bind DescriptionText, Mode=OneWay}"
-                                                TextTrimming="CharacterEllipsis"
-                                                TextWrapping="Wrap"
-                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(HasDescription)}" />
-
-                                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                                <TextBlock
-                                                    FontSize="12"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Text="{x:Bind CapabilitiesText, Mode=OneWay}"
-                                                    Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(CapabilitiesText)}" />
-                                                <TextBlock
                                                     FontSize="12"
                                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                    Text="{x:Bind TypesText, Mode=OneWay}"
-                                                    Visibility="{x:Bind helpers:XamlHelpers.VisibleIfText(TypesText)}" />
-                                            </StackPanel>
+                                                    Glyph="&#xE76C;" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
 
-                                            <TextBlock
-                                                FontSize="11"
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                Text="{x:Bind Host}"
-                                                TextTrimming="CharacterEllipsis"
-                                                ToolTipService.ToolTip="Manifest URL is stored locally and hidden here." />
-
-                                            <StackPanel
-                                                Orientation="Horizontal"
-                                                Spacing="8"
-                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(IsLoading), Mode=OneWay}">
-                                                <ProgressRing
-                                                    Width="14"
-                                                    Height="14"
-                                                    IsActive="{x:Bind IsLoading, Mode=OneWay}" />
-                                                <TextBlock
-                                                    FontSize="12"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Text="Loading manifest…" />
-                                            </StackPanel>
-
-                                            <StackPanel
-                                                Orientation="Horizontal"
-                                                Spacing="6"
-                                                Visibility="{x:Bind helpers:XamlHelpers.Visible(HasError), Mode=OneWay}">
-                                                <FontIcon
-                                                    FontSize="12"
-                                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                                    Glyph="&#xE7BA;" />
-                                                <TextBlock
-                                                    MaxWidth="620"
-                                                    FontSize="12"
-                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                    Text="{x:Bind LoadError, Mode=OneWay}"
-                                                    TextTrimming="CharacterEllipsis"
-                                                    TextWrapping="Wrap" />
-                                                <HyperlinkButton
-                                                    Padding="4,0"
-                                                    Click="RetryAddon_Click"
-                                                    Content="Retry" />
-                                            </StackPanel>
-                                        </StackPanel>
-
-                                        <StackPanel
-                                            Grid.Column="1"
-                                            HorizontalAlignment="Right"
-                                            Spacing="4">
-                                            <ToggleSwitch
-                                                HorizontalAlignment="Right"
-                                                AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
-                                                AutomationProperties.Name="Enable addon"
-                                                IsOn="{x:Bind IsEnabled, Mode=OneWay}"
-                                                MinWidth="0"
-                                                OffContent=""
-                                                OnContent=""
-                                                Toggled="AddonEnabled_Toggled" />
-                                            <StackPanel
-                                                HorizontalAlignment="Right"
-                                                Orientation="Horizontal"
-                                                Spacing="2">
-                                                <Button
-                                                    Width="34"
-                                                    Height="32"
-                                                    MinWidth="0"
-                                                    Padding="0"
-                                                    AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
-                                                    AutomationProperties.Name="Move addon up"
-                                                    Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Click="MoveAddonUp_Click"
-                                                    CornerRadius="6"
-                                                    IsEnabled="{x:Bind CanMoveUp, Mode=OneWay}"
-                                                    ToolTipService.ToolTip="Move up">
-                                                    <FontIcon
-                                                        FontSize="13"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Glyph="&#xE70E;" />
-                                                </Button>
-                                                <Button
-                                                    Width="34"
-                                                    Height="32"
-                                                    MinWidth="0"
-                                                    Padding="0"
-                                                    AutomationProperties.HelpText="{x:Bind Name, Mode=OneWay}"
-                                                    AutomationProperties.Name="Move addon down"
-                                                    Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Click="MoveAddonDown_Click"
-                                                    CornerRadius="6"
-                                                    IsEnabled="{x:Bind CanMoveDown, Mode=OneWay}"
-                                                    ToolTipService.ToolTip="Move down">
-                                                    <FontIcon
-                                                        FontSize="13"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Glyph="&#xE70D;" />
-                                                </Button>
-                                                <Button
-                                                    Width="34"
-                                                    Height="32"
-                                                    MinWidth="0"
-                                                    Padding="0"
-                                                    AutomationProperties.Name="Remove addon"
-                                                    Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Click="RemoveAddon_Click"
-                                                    CornerRadius="6"
-                                                    ToolTipService.ToolTip="Remove addon">
-                                                    <FontIcon
-                                                        FontSize="15"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Glyph="&#xE74D;" />
-                                                </Button>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Text="The first enabled addon wins for metadata; stream sources are listed in this order."
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasAddons), Mode=OneWay}" />
-
-                    <Border
-                        Padding="24"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12"
-                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.HasNoMatches), Mode=OneWay}">
-                        <StackPanel
-                            HorizontalAlignment="Center"
-                            Spacing="8">
                             <TextBlock
-                                HorizontalAlignment="Center"
-                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                Text="No addons match" />
-                            <TextBlock
-                                MaxWidth="420"
+                                x:Name="NoResults"
                                 HorizontalAlignment="Center"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Style="{StaticResource BodyTextBlockStyle}"
-                                Text="Try a different name or host, or clear the search and filter."
+                                Text="No settings match. Try a shorter word, like “quality” or “subtitle”."
                                 TextAlignment="Center"
-                                TextWrapping="Wrap" />
-                            <Button
-                                HorizontalAlignment="Center"
-                                Click="ClearAddonFilters_Click"
-                                Content="Clear filters" />
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
                         </StackPanel>
-                    </Border>
-
-                    <Border
-                        Padding="28"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12"
-                        Visibility="{x:Bind helpers:XamlHelpers.Visible(ViewModel.IsEmpty), Mode=OneWay}">
-                        <StackPanel
-                            HorizontalAlignment="Center"
-                            Spacing="10">
-                            <FontIcon
-                                FontSize="28"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Glyph="&#xE8FD;"
-                                HorizontalAlignment="Center" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                HorizontalTextAlignment="Center"
-                                Style="{StaticResource SubtitleTextBlockStyle}"
-                                Text="No addons configured" />
-                            <TextBlock
-                                MaxWidth="460"
-                                HorizontalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource BodyTextBlockStyle}"
-                                Text="Add a manifest URL above, or restore Cinemeta to browse movies and series again."
-                                TextAlignment="Center"
-                                TextWrapping="Wrap" />
-                            <Button
-                                HorizontalAlignment="Center"
-                                Click="RestoreDefaults_Click"
-                                Content="Restore Cinemeta" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!--  Home  -->
-                <StackPanel Spacing="10">
-                    <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="10"
-                        VerticalAlignment="Center">
-                        <Border
-                            Width="4"
-                            Height="20"
-                            Background="{ThemeResource BrandPrimaryBrush}"
-                            CornerRadius="2" />
-                        <TextBlock
-                            Style="{StaticResource SubtitleTextBlockStyle}"
-                            Text="Home" />
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{x:Bind ViewModel.HomeSummary, Mode=OneWay}" />
-                    </StackPanel>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="6">
-                                <TextBlock
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    Text="Home catalog rows" />
-                                <TextBlock
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource BodyTextBlockStyle}"
-                                    Text="Choose which addon catalogs appear on the Home screen as poster rows, and in what order — from any addon, in any mix."
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <Button
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="Open Home catalog settings"
-                                Click="HomeSettings_Click"
-                                Content="Manage" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
-
-                <!--  Sync  -->
-                <StackPanel Spacing="10">
-                    <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="10"
-                        VerticalAlignment="Center">
-                        <Border
-                            Width="4"
-                            Height="20"
-                            Background="{ThemeResource BrandPrimaryBrush}"
-                            CornerRadius="2" />
-                        <TextBlock
-                            Style="{StaticResource SubtitleTextBlockStyle}"
-                            Text="Sync" />
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{x:Bind ViewModel.SyncSummary, Mode=OneWay}" />
-                    </StackPanel>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="6">
-                                <TextBlock
-                                    Style="{StaticResource BodyStrongTextBlockStyle}"
-                                    Text="Watched state and watchlist" />
-                                <TextBlock
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Style="{StaticResource BodyTextBlockStyle}"
-                                    Text="Keep watched titles and saved titles in step across devices with Simkl, MDBList or a WebDAV folder you control. Simkl and MDBList also keep Continue watching in step across your clients."
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                            <Button
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                AutomationProperties.Name="Open sync settings"
-                                Click="SyncSettings_Click"
-                                Content="Manage" />
-                        </Grid>
-                    </Border>
-                </StackPanel>
-
-                <!--  Playback  -->
-                <StackPanel Spacing="10">
-
-                    <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="10"
-                        VerticalAlignment="Center">
-                        <Border
-                            Width="4"
-                            Height="20"
-                            Background="{ThemeResource BrandPrimaryBrush}"
-                            CornerRadius="2" />
-                        <TextBlock
-                            Style="{StaticResource SubtitleTextBlockStyle}"
-                            Text="Playback" />
-                    </StackPanel>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="12">
-                            <ToggleSwitch
-                                x:Name="AutoplayToggle"
-                                Header="Start playing automatically"
-                                IsOn="{x:Bind ViewModel.AutoplayEnabled, Mode=TwoWay}"
-                                OffContent="Off"
-                                OnContent="On"
-                                Toggled="AutoplayToggle_Toggled" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="When this is off, Pirsa shows the source picker every time."
-                                TextWrapping="Wrap" />
-
-                            <StackPanel
-                                x:Name="QualityPanel"
-                                Spacing="8"
-                                Visibility="Collapsed">
-                                <ComboBox
-                                    Header="Preferred quality"
-                                    SelectedIndex="{x:Bind ViewModel.QualityIndex, Mode=TwoWay}">
-                                    <ComboBoxItem Content="Best available" />
-                                    <ComboBoxItem Content="4K" />
-                                    <ComboBoxItem Content="1440p" />
-                                    <ComboBoxItem Content="1080p" />
-                                    <ComboBoxItem Content="720p" />
-                                    <ComboBoxItem Content="480p" />
-                                </ComboBox>
-
-                                <TextBlock
-                                    FontSize="12"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="Quality comes from each addon's source metadata. Sources that don't declare a resolution are shown as Unknown and won't match; Pirsa then falls back to the best available source."
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <ToggleSwitch
-                                x:Name="AutoAdvanceToggle"
-                                Header="Play next episode automatically"
-                                IsOn="{x:Bind ViewModel.AutoAdvanceEnabled, Mode=TwoWay}"
-                                OffContent="Off"
-                                OnContent="On" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="When an episode ends, the next one starts in the same player, using its saved source when it is still available. An Up next card appears shortly before the end so you can skip the credits, and its close button cancels the automatic switch for that episode."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="12">
-                            <ToggleSwitch
-                                x:Name="SkipSegmentsToggle"
-                                Header="Skip intro and outro"
-                                IsOn="{x:Bind ViewModel.SkipSegmentsEnabled, Mode=TwoWay}"
-                                OffContent="Off"
-                                OnContent="On"
-                                Toggled="SkipSegmentsToggle_Toggled" />
-
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Shows a Skip button while an intro, recap or outro is playing. Timestamps come from IntroDB, addressed by IMDb id, and from chapters named in the file itself."
-                                TextWrapping="Wrap" />
-
-                            <StackPanel
-                                x:Name="SkipOptionsPanel"
-                                Spacing="8">
-                                <ToggleSwitch
-                                    Header="Skip intros automatically"
-                                    IsOn="{x:Bind ViewModel.AutoSkipIntroEnabled, Mode=TwoWay}"
-                                    OffContent="Off"
-                                    OnContent="On" />
-
-                                <ToggleSwitch
-                                    Header="Skip recaps automatically"
-                                    IsOn="{x:Bind ViewModel.AutoSkipRecapEnabled, Mode=TwoWay}"
-                                    OffContent="Off"
-                                    OnContent="On" />
-
-                                <ToggleSwitch
-                                    Header="Skip outros and credits automatically"
-                                    IsOn="{x:Bind ViewModel.AutoSkipOutroEnabled, Mode=TwoWay}"
-                                    OffContent="Off"
-                                    OnContent="On" />
-
-                                <TextBlock
-                                    FontSize="12"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="Auto-skip jumps ahead as soon as a segment starts. With it off, the Skip button stays available for ten seconds, then reappears whenever the controls are shown."
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Video engine" />
-                            <ComboBox
-                                MinWidth="240"
-                                AutomationProperties.AutomationId="PlaybackEngineBox"
-                                AutomationProperties.Name="Video engine"
-                                DisplayMemberPath="Name"
-                                Header="Video engine"
-                                ItemsSource="{x:Bind ViewModel.PlaybackEngineOptions}"
-                                SelectedItem="{x:Bind ViewModel.SelectedPlaybackEngine, Mode=TwoWay}" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Automatic uses mpv when it is available, otherwise libVLC. Pick an engine only if you want to override that."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Subtitles" />
-                            <ComboBox
-                                MinWidth="240"
-                                AutomationProperties.AutomationId="SubtitleLanguageBox"
-                                AutomationProperties.Name="Preferred subtitle language"
-                                Header="Preferred subtitle language"
-                                ItemsSource="{x:Bind ViewModel.SubtitleLanguageOptions}"
-                                SelectedItem="{x:Bind ViewModel.SelectedSubtitleLanguage, Mode=TwoWay}">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="helpers:SubtitleLanguageOption">
-                                        <TextBlock Text="{x:Bind Name, Mode=OneTime}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Pirsa turns on the first matching track automatically for every title and episode, and pins it to the top of the player's subtitle picker. Picking another language in the player applies to that title only, while choosing Off there only affects the title you are watching. Pick Off here to keep subtitles off everywhere."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Watch history" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Pirsa remembers where you stopped in each movie and episode, which titles you marked watched, the last stream source that worked for them, and any subtitle timing you adjusted, so Continue watching can start instantly. All of it is stored on this device only."
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="{x:Bind ViewModel.WatchHistoryText, Mode=OneWay}"
-                                TextWrapping="Wrap" />
-                            <Button
-                                HorizontalAlignment="Left"
-                                Click="ClearWatchHistory_Click"
-                                Content="Clear watch history"
-                                IsEnabled="{x:Bind ViewModel.HasWatchHistory, Mode=OneWay}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!--  Search  -->
-                <StackPanel Spacing="10">
-                    <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="10"
-                        VerticalAlignment="Center">
-                        <Border
-                            Width="4"
-                            Height="20"
-                            Background="{ThemeResource BrandPrimaryBrush}"
-                            CornerRadius="2" />
-                        <TextBlock
-                            Style="{StaticResource SubtitleTextBlockStyle}"
-                            Text="Search" />
-                    </StackPanel>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="8">
-                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Search history" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="Queries you submit, and searches that led you to open a result, appear as suggestions when you click the title-bar search box. Suggestions are filtered as you type. Stored on this device only."
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="{x:Bind ViewModel.SearchHistoryText, Mode=OneWay}"
-                                TextWrapping="Wrap" />
-                            <Button
-                                HorizontalAlignment="Left"
-                                Click="ClearSearchHistory_Click"
-                                Content="Clear search history"
-                                IsEnabled="{x:Bind ViewModel.HasSearchHistory, Mode=OneWay}" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!--  About  -->
-                <StackPanel Spacing="10">
-                    <StackPanel
-                        Orientation="Horizontal"
-                        Spacing="10"
-                        VerticalAlignment="Center">
-                        <Border
-                            Width="4"
-                            Height="20"
-                            Background="{ThemeResource BrandPrimaryBrush}"
-                            CornerRadius="2" />
-                        <TextBlock
-                            Style="{StaticResource SubtitleTextBlockStyle}"
-                            Text="About" />
-                    </StackPanel>
-
-                    <Border
-                        Padding="20"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeBrush}"
-                        BorderThickness="1"
-                        CornerRadius="12">
-                        <StackPanel Spacing="6">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Pirsa" />
-                                <TextBlock
-                                    FontSize="12"
-                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    Text="{x:Bind AppVersion, Mode=OneTime}"
-                                    VerticalAlignment="Center" />
-                            </StackPanel>
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource BodyTextBlockStyle}"
-                                Text="An unofficial, Stremio-compatible addon client for Windows. Not affiliated with Stremio."
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource BodyTextBlockStyle}"
-                                Text="Pirsa hosts no content and ships without a stream addon. Catalogs, metadata, subtitles, and sources come from third-party addons you add yourself — only add addons you trust and are allowed to use. Playback is buffered in a temporary file on this device and deleted when it stops; nothing is uploaded anywhere."
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="Video engine: mpv 0.41.0 by default, with libVLC 3.0.24 as the alternative (both LGPL-2.1). Defaults: Cinemeta + OpenSubtitles v3."
-                                TextWrapping="Wrap" />
-                            <TextBlock
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Text="Pirsa is free software under the GNU GPL v3.0. Third-party notices ship with the app."
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
         </Grid>
-    </ScrollViewer>
+    </NavigationView>
 </Page>

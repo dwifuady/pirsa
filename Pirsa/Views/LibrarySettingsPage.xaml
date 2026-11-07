@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Pirsa.Views.LibrarySettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DefaultBindMode="OneWay"
+    Background="{ThemeResource AppBackgroundBrush}"
+    NavigationCacheMode="Disabled"
+    mc:Ignorable="d">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <Grid
+            Margin="32,26,32,64"
+            HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="820" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="22">
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Library &amp; data" />
+                    <TextBlock
+                        Style="{StaticResource SettingsPageSubtitleTextBlockStyle}"
+                        Text="Everything here stays on this PC. Pirsa has no account and no cloud." />
+                </StackPanel>
+
+                <InfoBar
+                    Title="Done"
+                    Closed="Notice_Closed"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.NoticeMessage, Mode=OneWay}"
+                    Severity="Informational" />
+
+                <InfoBar
+                    Title="Something went wrong"
+                    IsClosable="True"
+                    IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                    Severity="Error" />
+
+                <!--  Home  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Home" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="HomeRowsRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Home catalog rows" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="{x:Bind ViewModel.HomeSummary, Mode=OneWay}" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Manage Home catalog rows"
+                                    Click="ManageHome_Click"
+                                    Content="Manage" />
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  History  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="History" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="WatchHistoryRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Watch history" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="{x:Bind ViewModel.WatchHistoryText, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Clear watch history"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="ClearWatchHistory_Click"
+                                        Content="Clear"
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        IsEnabled="{x:Bind ViewModel.HasWatchHistory, Mode=OneWay}" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="SearchHistoryRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Search history" />
+                                        <TextBlock
+                                            Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                            Text="{x:Bind ViewModel.SearchHistoryText, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Clear search history"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="ClearSearchHistory_Click"
+                                        Content="Clear"
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        IsEnabled="{x:Bind ViewModel.HasSearchHistory, Mode=OneWay}" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!--  This PC  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="This PC" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="DataFolderRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Data folder" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Settings, add-ons, history, logs and the temporary stream cache." />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Open the Pirsa data folder"
+                                    Click="OpenDataFolder_Click"
+                                    Content="Open folder" />
+                            </Grid>
+                        </Border>
+                    </Border>
+                </StackPanel>
+
+                <!--  Storage  -->
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SettingsSectionLabelTextBlockStyle}" Text="Storage" />
+                    <Border Style="{StaticResource SettingsGroupBorderStyle}">
+                        <StackPanel>
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="CacheSizeRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Stream cache" />
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Temporary read-ahead files." />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="{x:Bind ViewModel.CacheSizeText, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Clear stream cache"
+                                        Click="ClearCache_Click"
+                                        Content="Clear cache"
+                                        IsEnabled="{x:Bind ViewModel.CanClearCache, Mode=OneWay}" />
+                                </Grid>
+                            </Border>
+
+                            <Border Style="{StaticResource SettingsRowSeparatorStyle}" />
+
+                            <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                                <Grid x:Name="LogSizeRow" ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Player log" />
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="Diagnostics from the last playback." />
+                                            <TextBlock
+                                                Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                                Text="{x:Bind ViewModel.LogSizeText, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Open player log"
+                                        Click="OpenLog_Click"
+                                        Content="Open log" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock
+                    Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                    Text="Positions are written while you watch, and the stream cache is deleted when playback stops. Nothing is uploaded unless you connect a sync service." />
+
+                <Expander
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Header="Advanced">
+                    <Border
+                        Margin="0,4,0,0"
+                        Style="{StaticResource SettingsGroupBorderStyle}">
+                        <Border Style="{StaticResource SettingsRowPaddingBorderStyle}">
+                            <Grid x:Name="ResetSettingsRow" ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="3" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource SettingsRowTitleTextBlockStyle}" Text="Reset all settings" />
+                                    <TextBlock
+                                        Style="{StaticResource SettingsRowDescriptionTextBlockStyle}"
+                                        Text="Restores every preference on the Settings pages. Add-ons, history and the watchlist stay." />
+                                </StackPanel>
+                                <Button
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Reset all settings"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="ResetAll_Click"
+                                    Content="Reset"
+                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+                            </Grid>
+                        </Border>
+                    </Border>
+                </Expander>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>
