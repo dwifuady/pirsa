@@ -26,7 +26,7 @@
     <MpvWindowsArm64Enabled Condition="'$(RuntimeIdentifier)' != 'win-arm64'">false</MpvWindowsArm64Enabled>
 
     <!--  Version is overridden from the git tag by the release workflow.  -->
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Product>Pirsa</Product>
     <Company>Pirsa</Company>
   </PropertyGroup>
