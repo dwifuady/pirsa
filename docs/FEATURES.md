@@ -152,6 +152,10 @@ Everything Pirsa does, in detail. For install and build steps see
 - libVLC or mpv in a WinUI SwapChainPanel, with Windows 11-style chrome:
   seek bar, 10-second skips, volume, speed, fullscreen, auto-hiding controls, a
   **source** picker next to the **CC** and **audio track** buttons.
+- **Playback keeps the display awake.** The player holds a Windows execution-state
+  lock while a picture is playing, so the display timeout - a few minutes on a
+  battery - cannot turn the screen off mid-episode. Pausing, ending or leaving
+  the player releases it.
 - Keyboard: **Space** play/pause, **Left/Right** seek ±10 seconds, **F**
   fullscreen, **M** mute, **E** opens the episode list, **I** toggles the title
   details card, **Esc** exits fullscreen or closes the
