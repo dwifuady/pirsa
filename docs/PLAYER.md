@@ -157,6 +157,19 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
   in the log. It is the same order VLC picks on its own (mmdevice 150,
   directsound 100, waveout 50), so this only removes the guesswork.
 
+## Display sleep
+
+- Windows only resets its power idle timers for Media Foundation players. Both
+  backends here are native (libVLC and mpv), so nothing in the playback path
+  stopped the display timeout, and an episode went dark after a few minutes on
+  battery, where the timeout is shortest. On AC the timeout is usually long
+  enough that it went unnoticed.
+- The page therefore holds `SetThreadExecutionState(ES_CONTINUOUS |
+  ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED)` while a picture is playing
+  (`Services/ScreenWakeLock.cs`) and releases it on pause, stop, end, error or
+  leaving the player. The state is per-thread, so both sides run on the UI
+  thread.
+
 ## Skip segments
 
 - Two sources feed the skip button. The engine exposes container chapters

@@ -475,6 +475,13 @@ public sealed partial class PlayerPage : Page
 
     // -------------------------------------------------------------- engine events
 
+    /// <summary>
+    /// Keeps the display and the machine awake while a picture is playing and
+    /// releases them otherwise. Without this, Windows' own display timeout
+    /// turns the screen off mid-episode; on battery that timeout is minutes.
+    /// </summary>
+    private void SyncWakeLock() => ScreenWakeLock.SetHeld(_playing && !_disposed);
+
     private void HookEngineEvents()
     {
         _engine.Ready += Engine_Ready;
@@ -780,6 +787,7 @@ public sealed partial class PlayerPage : Page
         _currentSource = null;
         ClearPlayingIntent();
         _playing = false;
+        SyncWakeLock();
 
         var request = ViewModel.Request;
         if (request is not null)
@@ -1349,6 +1357,7 @@ public sealed partial class PlayerPage : Page
 
         ClearPlayingIntent();
         _playing = false;
+        SyncWakeLock();
         _ended = false;
         _errorVisible = false;
         _positionMs = 0;
@@ -1832,6 +1841,7 @@ public sealed partial class PlayerPage : Page
         _stopReported = false;
         ReportScrobble(PlaybackSignal.Started);
         _errorVisible = false;
+        SyncWakeLock();
 
         ClearStalePauseMute();
         ResetInfoCard();
@@ -1895,6 +1905,7 @@ public sealed partial class PlayerPage : Page
         LogPlayPauseReached("paused");
         _playingIntent = null;
         _playing = false;
+        SyncWakeLock();
         _stallTimer.Stop();
         HideBuffer();
         PersistProgress(_positionMs, _lengthMs);
@@ -1934,6 +1945,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _playing = false;
+        SyncWakeLock();
         _stallTimer.Stop();
         HideBuffer();
         HideInfoCard();
@@ -1962,6 +1974,7 @@ public sealed partial class PlayerPage : Page
         _playing = false;
         _ended = true;
         _skipSegmentDismissed = true;
+        SyncWakeLock();
         RefreshSkipVisibility();
         _stallTimer.Stop();
         _positionMs = _lengthMs > 0 ? _lengthMs : _positionMs;
@@ -4438,6 +4451,7 @@ public sealed partial class PlayerPage : Page
         _errorVisible = true;
         ClearPlayingIntent();
         _playing = false;
+        SyncWakeLock();
         _switching = false;
         _stallTimer.Stop();
         HideBuffer();
@@ -4478,6 +4492,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _disposed = true;
+        SyncWakeLock();
         _chromeTimer.Stop();
         _infoTimer.Stop();
         _pauseMuteClearTimer?.Stop();
