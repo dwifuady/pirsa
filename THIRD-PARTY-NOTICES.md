@@ -77,6 +77,7 @@ configure yourself. No data is sent anywhere else.
 | Service | Default? | Purpose |
 | --- | --- | --- |
 | Cinemeta (`v3-cinemeta.strem.io`) | Yes | Catalogs and metadata |
+| Stremio image CDN (`images.metahub.space`) | Yes | Poster fallback for titles a sync provider imported without artwork |
 | OpenSubtitles v3 (`opensubtitles-v3.strem.io`) | Yes | Subtitle search |
 | Stremio addons you add | No | Catalogs, metadata, streams, subtitles |
 | IMDb (`www.imdb.com`) | No | "Open on IMDb" link only |

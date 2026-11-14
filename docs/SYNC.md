@@ -113,7 +113,8 @@ the engine, so adding a provider is one file under `Services/Sync/Providers`.
 - **Pull** reads `/sync/watched` (movies and per-episode rows), paginated
   `/watchlist/items`, and `/sync/playback`. MDBList's playback rows already
   carry `runtime`, so no detail lookup is needed to turn the percentage into a
-  position.
+  position. The watchlist read asks for `append_to_response=poster`, because
+  the default payload carries ids and titles but no artwork.
 - **Push** uses `/sync/watched`, `/sync/watched/remove`, the watchlist
   add/remove endpoints, and `/scrobble/start|pause|stop`. Removing a resume row
   clears it with `/scrobble/clear`.
@@ -150,6 +151,10 @@ which performs the same newest-wins check against the local position.
 - Applying a remote watched mark for a title with no local row creates a
   watched-only row (no position), which is what an explicit "mark as watched"
   already writes.
+- Artwork and title text are not timestamped facts, so they never replace a row.
+  They only fill a gap: a watchlist row imported without a poster takes the next
+  provider's poster, and the card falls back to the Metahub CDN image for the
+  title's IMDb id when no provider has one.
 
 `SyncEngine` runs **pull → merge → push** for every provider, one at a time.
 What push sends is the provider's choice: WebDAV rewrites the whole document,

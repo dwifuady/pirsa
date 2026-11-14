@@ -371,7 +371,21 @@ public sealed class SyncEngine
 
             if (plan.ApplyWatched.Count > 0 || plan.ApplyWatchlist.Count > 0 || resumes.Count > 0)
             {
-                await ApplyPlanAsync(plan, resumes, cancellationToken);
+                await ApplyPlanAsync(plan, remote.Watchlist, resumes, cancellationToken);
+            }
+            else
+            {
+                // Even when no timestamped fact moved, a provider may have
+                // gained artwork for a row another provider created.
+                _applyingRemote = true;
+                try
+                {
+                    await ApplyRemoteArtworkAsync(remote.Watchlist, cancellationToken);
+                }
+                finally
+                {
+                    _applyingRemote = false;
+                }
             }
 
             var merged = BuildLocalSnapshot();
@@ -405,6 +419,7 @@ public sealed class SyncEngine
 
     private async Task ApplyPlanAsync(
         SyncPlan plan,
+        IReadOnlyList<WatchlistChange> remoteWatchlist,
         IReadOnlyList<RemoteResume> resumes,
         CancellationToken cancellationToken)
     {
@@ -472,6 +487,8 @@ public sealed class SyncEngine
                 }
             }
 
+            await ApplyRemoteArtworkAsync(remoteWatchlist, cancellationToken);
+
             foreach (var tombstone in plan.AddUnwatched)
             {
                 _stateStore.RecordUnwatched(tombstone);
@@ -486,6 +503,23 @@ public sealed class SyncEngine
         {
             _applyingRemote = false;
         }
+    }
+
+    /// <summary>
+    /// Fills missing artwork on rows another provider created. The merge only
+    /// compares timestamps, so a poster that arrives after the row would never
+    /// reach the local entry on its own.
+    /// </summary>
+    private async Task ApplyRemoteArtworkAsync(
+        IReadOnlyList<WatchlistChange> remoteWatchlist,
+        CancellationToken cancellationToken)
+    {
+        var artwork = remoteWatchlist
+            .Where(item => item.Added)
+            .Select(item => new RemoteArtwork(item.ImdbId, item.Name, item.Poster, item.Type))
+            .ToList();
+
+        await _watchlist.ApplyRemoteArtworkAsync(artwork, cancellationToken);
     }
 
     /// <summary>

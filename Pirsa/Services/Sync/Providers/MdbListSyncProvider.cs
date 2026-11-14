@@ -132,7 +132,11 @@ internal sealed class MdbListSyncSession : ISyncSession
 
         for (var page = 0; page < 20; page++)
         {
-            var query = new Dictionary<string, string> { ["limit"] = PageSize.ToString(CultureInfo.InvariantCulture) };
+            var query = new Dictionary<string, string>
+            {
+                ["limit"] = PageSize.ToString(CultureInfo.InvariantCulture),
+                ["append_to_response"] = "poster",
+            };
             if (cursor is not null)
             {
                 query["cursor"] = cursor;
@@ -209,7 +213,7 @@ internal sealed class MdbListSyncSession : ISyncSession
             WatchEventKind.Watched,
             at,
             ReadString(movie, "title"),
-            null,
+            ReadPoster(movie) ?? ReadPoster(item),
             "movie"));
     }
 
@@ -233,7 +237,7 @@ internal sealed class MdbListSyncSession : ISyncSession
             WatchEventKind.Watched,
             at,
             ReadString(show, "title"),
-            null,
+            ReadPoster(show) ?? ReadPoster(episode),
             "series"));
     }
 
@@ -245,7 +249,13 @@ internal sealed class MdbListSyncSession : ISyncSession
 
         for (var page = 0; page < 20; page++)
         {
-            var query = new Dictionary<string, string> { ["limit"] = PageSize.ToString(CultureInfo.InvariantCulture) };
+            var query = new Dictionary<string, string>
+            {
+                ["limit"] = PageSize.ToString(CultureInfo.InvariantCulture),
+                // Without this the API answers with ids and titles only, so
+                // every imported row lands in the grid without artwork.
+                ["append_to_response"] = "poster",
+            };
             if (cursor is not null)
             {
                 query["cursor"] = cursor;
@@ -331,8 +341,26 @@ internal sealed class MdbListSyncSession : ISyncSession
             true,
             default,
             ReadString(item, "title"),
-            null,
+            ReadPoster(item),
             type));
+    }
+
+    /// <summary>
+    /// Reads the poster appended by <c>append_to_response=poster</c>. MDBList
+    /// normally answers with a full TMDb URL, but a bare file path is resolved
+    /// against the image CDN at the card size.
+    /// </summary>
+    private static string? ReadPoster(JsonElement item)
+    {
+        var poster = ReadString(item, "poster");
+        if (string.IsNullOrWhiteSpace(poster))
+        {
+            return null;
+        }
+
+        return poster.StartsWith('/')
+            ? $"https://image.tmdb.org/t/p/w500{poster}"
+            : poster;
     }
 
     private async Task<IReadOnlyList<RemoteResume>> PullPlaybackAsync(
