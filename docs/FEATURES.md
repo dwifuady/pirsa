@@ -21,6 +21,8 @@ Everything Pirsa does, in detail. For install and build steps see
   series, which episode).
 - Selecting a card resumes playback where you stopped; right-click a card to
   remove a title from the rail.
+- Finishing an episode keeps the show on the rail with the next one labelled
+  **Next episode**, so S01E02 moves on to S01E03 even with auto-advance off.
 
 ## Resume and watch history
 
@@ -32,7 +34,8 @@ Everything Pirsa does, in detail. For install and build steps see
   **Resume 12:34** with a thin progress bar.
 - With **Resume where you stopped** off, the Play button stays **Play**,
   episode rows drop the Resume label, and playback starts at 0.
-- A title counts as **Watched** at 95% and leaves Continue watching.
+- A title counts as **Watched** at 95%. A finished movie leaves Continue
+  watching; a finished episode is replaced by the next one.
 - Positions are written every 10 seconds while playing, on pause, on source
   switches, when you leave the player, and when a title finishes. Opening a
   title for a few seconds is ignored, and a small bit of playback never rewinds

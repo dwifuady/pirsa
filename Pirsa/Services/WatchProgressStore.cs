@@ -569,6 +569,25 @@ public sealed class WatchProgressStore
         }
 
         Entries.Insert(0, entry);
+
+        // Finishing an episode keeps the rail moving: offer the next one right
+        // away. It only works when the request carried the episode list (the
+        // details page); the player re-runs this with fetched metadata for a
+        // Continue watching card that only carries a stub meta.
+        if (finished && request.Season > 0 && request.Episode > 0 &&
+            request.Meta.Videos is { Count: > 0 } videos)
+        {
+            InsertNextUp(
+                metaId,
+                request.Type,
+                videos,
+                request.Season,
+                request.Episode,
+                request.Title,
+                request.Meta.Poster,
+                request.Meta.Background);
+        }
+
         Trim();
 
         await SaveCoreAsync(cancellationToken);
@@ -1000,6 +1019,164 @@ public sealed class WatchProgressStore
         Trim();
         await SaveCoreAsync(cancellationToken);
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Offers the episode after the one that just finished in Continue
+    /// watching. The player calls this when playback ends, because a request
+    /// that started from a Continue watching card only carries a stub meta and
+    /// no episode list. An in-progress episode always wins over the
+    /// placeholder, and the end of a series leaves none.
+    /// </summary>
+    public async Task ReconcileNextUpAfterAsync(
+        MetaItem series,
+        int season,
+        int episode,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsSeriesType(series.Type) ||
+            series.Videos is not { Count: > 0 } videos ||
+            season <= 0 ||
+            episode <= 0 ||
+            string.IsNullOrWhiteSpace(series.Id))
+        {
+            return;
+        }
+
+        await EnsureLoadedAsync(cancellationToken);
+
+        var metaId = series.Id;
+        var entries = Entries
+            .Where(entry => entry.MetaId.Equals(metaId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var existingNext = entries.FirstOrDefault(entry => entry.NextUp);
+        var hasInProgress = entries.Any(entry =>
+            !entry.NextUp && !entry.IsWatched && entry.PositionMs > 0);
+
+        var next = hasInProgress
+            ? null
+            : FindNextUpEpisode(metaId, videos, season, episode);
+        var nextKey = next is null ? null : EpisodeKey(next.Season, next.EpisodeNumber);
+        var existingKey = existingNext is null
+            ? null
+            : EpisodeKey(existingNext.Season, existingNext.Episode);
+
+        if (string.Equals(nextKey, existingKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (existingNext is not null)
+        {
+            Entries.Remove(existingNext);
+        }
+
+        if (next is not null)
+        {
+            InsertNextUp(
+                metaId,
+                string.IsNullOrWhiteSpace(series.Type) ? "series" : series.Type,
+                videos,
+                season,
+                episode,
+                series.Name,
+                series.Poster,
+                series.Background);
+        }
+
+        Trim();
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Removes the old placeholder and inserts one for the episode after
+    /// <paramref name="season"/>/<paramref name="episode"/>. Order follows the
+    /// addon's list, so a season boundary rolls into the next season and the
+    /// last episode leaves nothing behind.
+    /// </summary>
+    private void InsertNextUp(
+        string metaId,
+        string type,
+        IReadOnlyList<MetaVideo> videos,
+        int season,
+        int episode,
+        string? name,
+        string? poster,
+        string? background)
+    {
+        RemoveNextUpEntries(metaId);
+
+        var next = FindNextUpEpisode(metaId, videos, season, episode);
+        if (next is null)
+        {
+            return;
+        }
+
+        Entries.Insert(0, new WatchProgressEntry
+        {
+            MetaId = metaId,
+            Type = string.IsNullOrWhiteSpace(type) ? "series" : type,
+            VideoId = $"{metaId}:{next.Season}:{next.EpisodeNumber}",
+            Name = name ?? "",
+            Poster = poster,
+            Background = background,
+            EpisodeTitle = next.Title,
+            Season = next.Season,
+            Episode = next.EpisodeNumber,
+            PositionMs = 0,
+            DurationMs = 0,
+            Completed = false,
+            NextUp = true,
+            ImdbId = WatchProgressEntry.DeriveImdbId(metaId),
+            EpisodeCount = videos.Count(video => video.EpisodeNumber > 0),
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+    }
+
+    /// <summary>
+    /// The first episode after <paramref name="season"/>/<paramref name="episode"/>
+    /// that has not been watched yet. Skipping finished episodes matters on a
+    /// rewatch, which must not offer an episode the user already saw.
+    /// </summary>
+    private MetaVideo? FindNextUpEpisode(
+        string metaId,
+        IReadOnlyList<MetaVideo> videos,
+        int season,
+        int episode)
+    {
+        var watchedKeys = Entries
+            .Where(entry =>
+                entry.MetaId.Equals(metaId, StringComparison.OrdinalIgnoreCase) &&
+                entry.IsWatched &&
+                entry.IsSeries)
+            .Select(entry => EpisodeKey(entry.Season, entry.Episode))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var ordered = videos
+            .Where(video => video.EpisodeNumber > 0)
+            .OrderBy(video => video.Season == 0 ? int.MaxValue : video.Season)
+            .ThenBy(video => video.EpisodeNumber)
+            .ToList();
+
+        var index = ordered.FindIndex(video =>
+            video.Season == season && video.EpisodeNumber == episode);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        for (var i = index + 1; i < ordered.Count; i++)
+        {
+            var candidate = ordered[i];
+            if (!watchedKeys.Contains(EpisodeKey(candidate.Season, candidate.EpisodeNumber)))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     private void RemoveNextUpEntries(string metaId, string? exceptVideoId = null)
