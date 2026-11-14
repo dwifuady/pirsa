@@ -2391,6 +2391,7 @@ public sealed partial class PlayerPage : Page
         }
 
         _lastProgressSaveUtc = DateTime.UtcNow;
+        var seriesMeta = _seriesMeta;
 
         try
         {
@@ -2400,6 +2401,20 @@ public sealed partial class PlayerPage : Page
                 durationMs,
                 completed,
                 ToSourceInfo(_currentSource));
+
+            // A Continue watching card carries only a stub meta, so the
+            // fetched series metadata is the only place the following episode
+            // is known. Keep the rail on it as soon as this one finishes.
+            var finished = completed ||
+                           (durationMs > 0 &&
+                            positionMs >= durationMs * WatchProgressEntry.CompletedFraction);
+            if (finished && IsEpisodic(request) && seriesMeta is not null)
+            {
+                await App.WatchProgress.ReconcileNextUpAfterAsync(
+                    seriesMeta,
+                    request.Season,
+                    request.Episode);
+            }
         }
         catch
         {
