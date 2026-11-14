@@ -110,14 +110,15 @@
                         BorderThickness="1"
                         CornerRadius="10">
                         <Grid>
+                            <!--  Stays behind the poster: visible while it loads,
+                                  and still there if the image URL fails.  -->
                             <FontIcon
                                 AutomationProperties.AccessibilityView="Raw"
                                 FontSize="28"
                                 Foreground="{ThemeResource PosterPlaceholderForegroundBrush}"
                                 Glyph="&#xE8B2;"
                                 HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Visibility="{x:Bind helpers:XamlHelpers.Collapsed(HasPoster)}" />
+                                VerticalAlignment="Center" />
 
                             <Image
                                 AutomationProperties.AccessibilityView="Raw"

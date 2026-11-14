@@ -177,7 +177,15 @@ public sealed class WatchProgressEntry : ObservableObject
         HasSource && SourceSavedAt > DateTimeOffset.UtcNow - SourceMaxAge;
 
     [JsonIgnore]
-    public BitmapImage? PosterImage => _posterImage ??= ImageLoader.Load(Poster, 360);
+    public BitmapImage? PosterImage => _posterImage ??= ImageLoader.Load(DisplayPoster, 360);
+
+    /// <summary>
+    /// The stored poster, or the Metahub poster for the title's IMDb id when
+    /// the provider that supplied the row had no artwork.
+    /// </summary>
+    [JsonIgnore]
+    public string? DisplayPoster =>
+        !string.IsNullOrWhiteSpace(Poster) ? Poster : ImageLoader.PosterForId(ImdbId ?? MetaId);
 
     [JsonIgnore]
     public bool HasPoster => PosterImage is not null;

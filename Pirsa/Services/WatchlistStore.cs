@@ -22,6 +22,13 @@ public sealed class WatchlistEntry : ObservableObject
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
 
+    /// <summary>
+    /// Poster supplied by the addon or sync provider. Rows imported from a
+    /// provider that doesn't send artwork fall back to Stremio's image CDN,
+    /// which serves a poster for any IMDb id. Kept as a plain property because
+    /// sync fills it in from a background thread; the page rebuilds its cards
+    /// on the next visit instead of being notified mid-sync.
+    /// </summary>
     [JsonPropertyName("poster")]
     public string? Poster { get; set; }
 
@@ -88,10 +95,20 @@ public sealed class WatchlistEntry : ObservableObject
 
     [JsonIgnore]
     public BitmapImage? PosterImage =>
-        _posterImage ??= ImageLoader.Load(ImageLoader.UpgradePoster(Poster), 360);
+        _posterImage ??= ImageLoader.Load(ImageLoader.UpgradePoster(DisplayPoster), 360);
 
     [JsonIgnore]
-    public bool HasPoster => !string.IsNullOrWhiteSpace(Poster);
+    public bool HasPoster => !string.IsNullOrWhiteSpace(DisplayPoster);
+
+    /// <summary>
+    /// The stored poster, or the Metahub CDN URL built from the IMDb id. Sync
+    /// providers do not always return artwork (MDBList's watchlist used to omit
+    /// it entirely), and a card should never show a placeholder for a title the
+    /// app can still resolve.
+    /// </summary>
+    [JsonIgnore]
+    public string? DisplayPoster =>
+        !string.IsNullOrWhiteSpace(Poster) ? Poster : ImageLoader.PosterForId(MetaId);
 
     [JsonIgnore]
     public string TypeLabel => Type.ToLowerInvariant() switch
@@ -130,7 +147,7 @@ public sealed class WatchlistEntry : ObservableObject
         Id = MetaId,
         Type = Type,
         Name = Name,
-        Poster = Poster,
+        Poster = DisplayPoster,
         Background = Background,
         Logo = Logo,
         ReleaseInfo = ReleaseInfo,
@@ -140,6 +157,12 @@ public sealed class WatchlistEntry : ObservableObject
 
     public override string ToString() => Name;
 }
+
+/// <summary>
+/// Presentation fields a sync provider can add to a title that is already on
+/// the watchlist. They never carry a timestamp, so they only fill gaps.
+/// </summary>
+public sealed record RemoteArtwork(string MetaId, string? Name, string? Poster, string? Type);
 
 /// <summary>
 /// The local watchlist: one row per saved movie, series or other title.
@@ -334,7 +357,7 @@ public sealed class WatchlistStore
         };
 
         var index = 0;
-        while (index < Entries.Count && Entries[index].AddedAt > addedAt)
+        while (index < Entries.Count && Entries[index].AddedAt > entry.AddedAt)
         {
             index++;
         }
@@ -344,6 +367,67 @@ public sealed class WatchlistStore
         while (Entries.Count > MaxEntries)
         {
             Entries.RemoveAt(Entries.Count - 1);
+        }
+
+        await SaveCoreAsync(cancellationToken);
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// Fills in presentation fields on titles that are already saved. Artwork is
+    /// not a timestamped fact, so the merge never replaces a row just because a
+    /// provider started sending a poster; without this, a title imported by one
+    /// provider keeps its placeholder even after another provider knows it.
+    /// Saves once for the whole batch.
+    /// </summary>
+    public async Task<bool> ApplyRemoteArtworkAsync(
+        IReadOnlyList<RemoteArtwork> items,
+        CancellationToken cancellationToken = default)
+    {
+        if (items.Count == 0)
+        {
+            return false;
+        }
+
+        await EnsureLoadedAsync(cancellationToken);
+
+        var changed = false;
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.MetaId) ||
+                Find(item.MetaId) is not { } entry)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.Poster) &&
+                !string.IsNullOrWhiteSpace(item.Poster))
+            {
+                entry.Poster = item.Poster;
+                changed = true;
+            }
+
+            // A provider that only had an id when the row was created can also
+            // supply the real title and type later.
+            if (entry.Name.Equals(item.MetaId, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(item.Name))
+            {
+                entry.Name = item.Name;
+                changed = true;
+            }
+
+            if (string.IsNullOrWhiteSpace(entry.Type) && !string.IsNullOrWhiteSpace(item.Type))
+            {
+                entry.Type = item.Type;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+        {
+            return false;
         }
 
         await SaveCoreAsync(cancellationToken);

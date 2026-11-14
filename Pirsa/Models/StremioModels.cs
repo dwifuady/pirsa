@@ -858,6 +858,16 @@ internal static class ImageLoader
     /// </summary>
     public static string? UpgradePoster(string? url) =>
         url?.Replace("/poster/small/", "/poster/medium/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Artwork for a title that arrived without any. Stremio's Metahub CDN
+    /// answers for any IMDb id, so a row imported by a sync provider that sends
+    /// no posters still gets a card image instead of a placeholder.
+    /// </summary>
+    public static string? PosterForId(string? id) =>
+        id is { Length: > 2 } value && value.StartsWith("tt", StringComparison.OrdinalIgnoreCase)
+            ? $"https://images.metahub.space/poster/small/{value}/img"
+            : null;
 }
 
 /// <summary>
