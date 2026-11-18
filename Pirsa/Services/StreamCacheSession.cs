@@ -115,7 +115,7 @@ public sealed class StreamCacheSession : IAsyncDisposable
             return null;
         }
 
-        CleanupStaleFiles();
+        PruneStaleFiles();
 
         try
         {
@@ -766,8 +766,13 @@ public sealed class StreamCacheSession : IAsyncDisposable
             directory.FullName, $"{Guid.NewGuid():N}{ExtensionFor(source)}");
     }
 
-    /// <summary>Removes files a crashed or killed session left behind.</summary>
-    private static void CleanupStaleFiles()
+    /// <summary>
+    /// Removes files a crashed or killed session left behind. Runs once per
+    /// process, from the player opening rather than from the cache itself: mpv
+    /// never creates these files but can still find ones an earlier libVLC
+    /// session left behind.
+    /// </summary>
+    public static void PruneStaleFiles()
     {
         lock (CleanupGate)
         {

@@ -66,6 +66,11 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     // the picture, so letterbox bars do not already move subtitles up.
     public bool SubtitlesArePictureRelative => false;
 
+    // mpv's demuxer cache is seekable: a short seek is served from packets it
+    // already has, and demuxer-max-back-bytes keeps played packets for a
+    // backward skip. It needs no localhost proxy in front of it.
+    public bool ManagesSeekCache => true;
+
     public bool IsSeekable => GetFlag("seekable", out var seekable) && seekable;
 
     public int Volume
@@ -211,10 +216,7 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
         SetPropertyString("http-header-fields", BuildHeaderFields(media.Headers));
         ApplySubtitleStyle();
-
-        var cacheSeconds = media.IsLive ? "2.5" : "3";
-        SetPropertyString("cache-secs", cacheSeconds);
-        SetPropertyString("demuxer-readahead-secs", cacheSeconds);
+        ApplyCacheWindow(media.IsLive);
 
         _fileLoaded = false;
         SetState(PlaybackState.Opening);
@@ -340,6 +342,59 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
     }
 
     /// <summary>
+    /// Sizes mpv's demuxer cache. Unlike libVLC's network-caching, this is a real
+    /// seek window: demuxer-max-bytes is how far ahead mpv may read, and
+    /// demuxer-max-back-bytes keeps packets it has already played so a backward
+    /// skip is answered without touching the network. cache-secs is deliberately
+    /// pushed out of the way for on-demand titles — its default is "very large",
+    /// so the byte limit is what applies; the 3-second value this backend used to
+    /// inherit from VLC's jitter buffer capped the window at a few seconds and
+    /// sent every skip back to the network.
+    ///
+    /// The window lives in memory rather than in a temp file: it is bounded by
+    /// construction, it leaves nothing behind if the process is killed, and it
+    /// needs no cleanup pass. (mpv's --cache-on-disk is the alternative when a
+    /// longer window than RAM allows is wanted; its cache file is append-only and
+    /// grows with everything that was streamed, not with the window.)
+    ///
+    /// Live TV keeps a short window: every cached second is a second further
+    /// behind the live edge.
+    /// </summary>
+    private void ApplyCacheWindow(bool isLive)
+    {
+        // Byte counts are written out rather than "256MiB": mpv's option parser
+        // accepts the suffix, but the property setter is the more conservative
+        // path and a plain integer is unambiguous there.
+        SetOrLog("demuxer-max-bytes", isLive ? "33554432" : "268435456");   // 32 MiB / 256 MiB
+        SetOrLog("demuxer-max-back-bytes", isLive ? "8388608" : "134217728"); // 8 MiB / 128 MiB
+
+        // Only live needs a time cap: there is no file length to measure a byte
+        // budget against, and drifting behind the edge is the thing to avoid.
+        // On-demand still sets one so a previous live title cannot leave its
+        // 3-second cap behind — 3600 s is far beyond any byte-budget window.
+        SetOrLog("cache-secs", isLive ? "3" : "3600");
+        SetOrLog("demuxer-readahead-secs", isLive ? "3" : "1");
+
+        PlayerLog.Write(
+            $"mpv cache window {(isLive ? "live" : "on-demand")}: " +
+            $"max={GetString("demuxer-max-bytes")} back={GetString("demuxer-max-back-bytes")} " +
+            $"secs={GetString("cache-secs")}");
+    }
+
+    /// <summary>
+    /// Sets an option at runtime and says so in the log when mpv refuses it: a
+    /// silently ignored cache size would look like a seek that is still slow for
+    /// no reason.
+    /// </summary>
+    private void SetOrLog(string name, string value)
+    {
+        if (!SetPropertyString(name, value))
+        {
+            PlayerLog.Write($"mpv refused {name}={value} at runtime");
+        }
+    }
+
+    /// <summary>
     /// Sets the bottom margin above mpv's default padding. sub-margin-y is in
     /// scaled pixels at a 720p window height, so the page's device-pixel lift is
     /// converted before it is added to the default. Setting it to the lift alone
@@ -461,8 +516,13 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
             Option("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Pirsa/1.0");
             Option("sub-auto", "no");
             Option("cache", "yes");
-            Option("cache-secs", "3");
-            Option("demuxer-readahead-secs", "3");
+
+            // Bound the seek window before any media loads; ApplyCacheWindow
+            // resizes it per title. The window is in memory, so nothing is left
+            // behind if the process is killed.
+            Option("demuxer-max-bytes", "256MiB");
+            Option("demuxer-max-back-bytes", "128MiB");
+
             Option("volume", "80");
 
             _ = LibMpv.mpv_request_log_messages(_handle, "info");
@@ -1075,6 +1135,11 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
         }
     }
 
+    /// <summary>
+    /// mpv's http-header-fields is a comma-separated list, so a value containing
+    /// a comma has to be escaped with mpv's backslash list syntax. Provider
+    /// tokens (cookies, bearer credentials) are opaque and can contain one.
+    /// </summary>
     private static string BuildHeaderFields(IReadOnlyDictionary<string, string>? headers)
     {
         if (headers is null || headers.Count == 0)
@@ -1084,8 +1149,12 @@ public sealed class MpvPlaybackEngine : IPlaybackEngine
 
         return string.Join(
             ",",
-            headers.Select(header => $"{header.Key}: {header.Value}"));
+            headers.Select(header =>
+                $"{EscapeListValue(header.Key)}: {EscapeListValue(header.Value)}"));
     }
+
+    private static string EscapeListValue(string value) =>
+        value.Replace("\\", "\\\\").Replace(",", "\\,");
 
     // ---------------------------------------------------------------- tracks
 

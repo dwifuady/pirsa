@@ -95,6 +95,10 @@ public sealed class LibVlcPlaybackEngine : IPlaybackEngine
 
     public bool SubtitlesArePictureRelative => true;
 
+    // Every seek in libvlc 3 is a new range request to the provider, so this
+    // backend plays on-demand sources through StreamCacheSession instead.
+    public bool ManagesSeekCache => false;
+
     public bool IsSeekable
     {
         get
