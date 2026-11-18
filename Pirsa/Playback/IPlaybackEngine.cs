@@ -40,6 +40,14 @@ public interface IPlaybackEngine : IDisposable
     /// </summary>
     bool SubtitlesArePictureRelative { get; }
 
+    /// <summary>
+    /// True when the backend keeps a seekable cache of its own (mpv's demuxer
+    /// cache), so an on-demand source can play straight from the addon. False
+    /// when a seek always means a new request to the provider (libvlc 3), which
+    /// is what the localhost read-ahead proxy exists to hide.
+    /// </summary>
+    bool ManagesSeekCache { get; }
+
     /// <summary>0–100, matching the transport slider.</summary>
     int Volume { get; set; }
 

@@ -22,8 +22,10 @@ controls see [FEATURES.md](FEATURES.md).
   available; choose a source to start. The flyout opens over the title artwork,
   not a blank video surface, so the title stays recognisable while you choose.
 - Sources are deduplicated by URL and ranked 1080p HLS first.
-- Headers from `behaviorHints.proxyHeaders` are forwarded to VLC as media
-  options when needed.
+- Headers from `behaviorHints.proxyHeaders` are forwarded to the engine as media
+  options when the source plays direct (`http-header-fields` on mpv, media
+  options on libVLC); when the libVLC proxy is in use it attaches them upstream
+  instead.
 - Source discovery queries every configured addon that declares a `stream`
   resource for the media type and id prefix.
 - Discovery can take 10–20 seconds depending on the addon/provider; the loading
@@ -61,13 +63,37 @@ controls see [FEATURES.md](FEATURES.md).
   stalled in a socket read can hold that for a second or more, so it runs on a
   worker thread while the page (and its swap chain) stays up — the frame only
   leaves once the engine has released the surface, with a 2-second safety
-  timeout. The local stream cache closes the engine's connections first, so
-  that pending read ends immediately.
+  timeout. When the local stream cache is in use it closes the engine's
+  connections first, so that pending read ends immediately.
 
-## Local stream cache
+## Cache and seeks
 
-An on-demand HTTP source plays through a small localhost server
-(`StreamCacheSession`) instead of straight from the addon:
+Two different mechanisms, chosen per backend through
+`IPlaybackEngine.ManagesSeekCache`.
+
+### mpv
+
+- mpv's demuxer cache **is** a seek window, so mpv plays straight from the addon
+  URL. No localhost proxy, no probe request: a start is one connection to the
+  provider, which is why it comes up faster than libVLC's path.
+- `demuxer-max-bytes=256MiB` and `demuxer-max-back-bytes=128MiB` for on-demand
+  titles: forward read-ahead plus the already-played packets that make a
+  backward skip free. The window is in memory — bounded by construction, and
+  nothing is left behind if the process is killed.
+- `cache-secs` is **not** inherited from VLC's 3-second jitter buffer. It is left
+  effectively unlimited (3600 s, far beyond the byte cap) so the byte limit is
+  the real bound; the small value this backend used to carry at start-up shrank
+  the seek window to a few seconds and sent every skip back to the network.
+- Live TV keeps a short window (`32MiB`, `cache-secs=3`, `demuxer-readahead-secs=3`),
+  because every cached second is a second further behind the live edge.
+- A seek outside the buffered window is one real network seek, and mpv resumes
+  after `cache-pause-wait` (1 s) rather than a full refill.
+
+### libVLC
+
+libvlc 3 has no seekable demuxer cache — every seek is a fresh range request to
+the provider — so an on-demand HTTP source plays through a small localhost
+server (`StreamCacheSession`) instead of straight from the addon:
 
 - Two download slots pull the file into a temporary file in the `cache` folder of
   the data root (see [ADDONS.md](ADDONS.md#where-data-lives)), up to 128 MB
@@ -80,20 +106,20 @@ An on-demand HTTP source plays through a small localhost server
 - Live TV, HLS, and servers that ignore byte ranges skip the cache and play
   direct.
 - Temp files are deleted when playback stops or the source changes, and
-  leftovers older than six hours are removed on the next run.
+  leftovers older than six hours are removed the next time this path runs.
 - Only the newest connection that is waiting may redirect a downloader: VLC
   opens a fresh connection for every seek and can leave the previous one open,
   and without that rule two readers in different places send the same
   downloaders back and forth and neither ever gets its data.
+- The cost is a slower start: the probe waits for the provider's headers, and
+  then the first read wakes a download slot that opens a second upstream
+  connection and waits for headers again.
 
-## Seek cache
-
-- VLC's own demuxer cache is set to **3 seconds** for on-demand titles and
-  **2.5 seconds** for live TV (kept shorter so it stays near the live edge).
-- It is a jitter buffer, not a seek window: VLC answers every seek with a fresh
-  range request, and the buffering percentage is measured against this target,
-  so a bigger value means a *longer* wait after each skip.
-- The local stream cache above is what makes skips instant.
+VLC's own `network-caching` stays at **3 seconds** for on-demand titles and
+**2.5 seconds** for live TV. It is a jitter buffer, not a seek window: the
+buffering percentage is measured against this target, so a bigger value means a
+*longer* wait after each skip. The local stream cache above is what makes VLC's
+skips instant.
 
 ## Buffering overlay
 
@@ -199,6 +225,10 @@ seconds, and keeps reporting low percentages after a seek that cost nothing.
 `player.log` in the data root records:
 
 - every seek and how long the playhead stayed frozen afterwards,
+- how long a start took end to end: from choosing a source to the first
+  `playing` line, including the localhost cache probe when one runs, and whether
+  the source played direct,
+- which cache window was applied (mpv) and where the source played from,
 - every play/pause press next to how long libvlc took to report the change, and
   a timeout line when it never did,
 - the elapsed time of the pause mute, and whether it went through the session or

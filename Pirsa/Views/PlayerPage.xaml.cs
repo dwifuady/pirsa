@@ -73,6 +73,13 @@ public sealed partial class PlayerPage : Page
     private readonly DispatcherTimer _infoTimer;
     private readonly Stopwatch _seekWatch = new();
     private readonly Stopwatch _playPauseWatch = new();
+
+    /// <summary>
+    /// Runs from the moment a source is chosen to the moment frames arrive, so
+    /// the log shows what a start actually costs end to end — including the
+    /// localhost cache probe when one runs.
+    /// </summary>
+    private readonly Stopwatch _startWatch = new();
     private bool _bufferingLogged;
     private bool _stallOverlayVisible;
     private long _advancePositionMs = -1;
@@ -437,6 +444,11 @@ public sealed partial class PlayerPage : Page
         PlayerLog.Write(
             $"open {request.Type} id={request.VideoId} S{request.Season:00}E{request.Episode:00} " +
             $"title={request.Title}");
+
+        // Sweep leftovers from an interrupted session for either backend: mpv no
+        // longer goes through the proxy that used to do this on creation.
+        StreamCacheSession.PruneStaleFiles();
+
         _selectedSubtitle = null;
         _resumeFromHistoryMs = 0;
         _positionMs = 0;
@@ -1421,10 +1433,12 @@ public sealed partial class PlayerPage : Page
 
     /// <summary>
     /// Resolves where the source should actually play from, then hands it to
-    /// the engine. On-demand files go through a local read-ahead cache so a seek
-    /// is a disk read instead of another trip to the provider; anything the
-    /// cache can't help with (live TV, HLS, servers without range support)
-    /// plays straight from the addon URL.
+    /// the engine. A backend without a seek cache of its own (libVLC) plays
+    /// on-demand files through the localhost read-ahead proxy so a seek is a
+    /// disk read instead of another trip to the provider; mpv seeks from its own
+    /// demuxer cache, so it takes the addon URL directly and starts sooner.
+    /// Anything the proxy can't help with (live TV, HLS, servers without range
+    /// support) plays straight from the addon on either backend.
     /// </summary>
     private async Task PlaySourceAsync(PlaybackSource source)
     {
@@ -1442,6 +1456,7 @@ public sealed partial class PlayerPage : Page
         var attempt = ++_playAttempt;
         var url = source.Url;
         StreamCacheSession? cache = null;
+        _startWatch.Restart();
 
         if (ShouldCacheSource(source))
         {
@@ -1475,14 +1490,26 @@ public sealed partial class PlayerPage : Page
                 url = cache.Url;
             }
         }
+        else if (_engine.ManagesSeekCache)
+        {
+            PlayerLog.Write($"playing direct: {_engine.Id} seeks from its own cache");
+        }
 
         PlaySourceCore(source, url, cache);
     }
 
-    /// <summary>Only plain on-demand HTTP files benefit from the local cache.</summary>
+    /// <summary>
+    /// Only plain on-demand HTTP files can be helped by the local proxy, and only
+    /// on a backend that needs it: mpv's demuxer cache is seekable on its own, so
+    /// putting the proxy in front of it would add a probe round-trip and a second
+    /// upstream connection to every start and buy nothing.
+    /// </summary>
     private bool ShouldCacheSource(PlaybackSource source)
     {
-        if (ViewModel.Request is null || IsLive(ViewModel.Request) || source.IsHls)
+        if (_engine.ManagesSeekCache ||
+            ViewModel.Request is null ||
+            IsLive(ViewModel.Request) ||
+            source.IsHls)
         {
             return false;
         }
@@ -1830,8 +1857,15 @@ public sealed partial class PlayerPage : Page
 
     private void HandlePlaying()
     {
+        // Only the first playing event after a source was chosen is a start; a
+        // resume has nothing to time against and must not report the whole watch
+        // session as start-up cost.
+        var startCost = _startWatch.IsRunning
+            ? $", {_startWatch.ElapsedMilliseconds}ms after the source was chosen"
+            : "";
+        _startWatch.Stop();
         PlayerLog.Write(
-            $"playing at {_engine.PositionMs}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start");
+            $"playing at {_engine.PositionMs}ms {_seekWatch.ElapsedMilliseconds}ms after the last seek/start{startCost}");
         LogPlayPauseReached("playing");
         _playingIntent = null;
         RestorePausedOutput();
@@ -2684,6 +2718,10 @@ public sealed partial class PlayerPage : Page
     /// HLS source would fetch and stall for longer than the silence it saves. The
     /// seek is to the position captured before Play, so the picture picks up from
     /// the frozen frame.
+    ///
+    /// This is a libVLC fix, and the <c>_streamCache</c> test says so as well:
+    /// the proxy is only attached to a backend that needs it, and mpv (which
+    /// keeps its own audio in step and never sets that field) is unaffected.
     /// </summary>
     private void ResyncAfterResume(long frozen)
     {
